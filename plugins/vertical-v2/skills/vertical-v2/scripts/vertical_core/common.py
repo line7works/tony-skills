@@ -3,8 +3,10 @@ import datetime
 import json
 import os
 import re
+import stat
 
 from station_core import driver, fsio, validate
+from back_core import trace
 
 STATION = "vertical-v2"
 PREFIX = "VERTICAL_V2"
@@ -55,15 +57,55 @@ def path_of(run, name):
     return os.path.join(run.run_dir, name)
 
 
+def present(path):
+    """Whether anything is at `path`, a link (even a dangling one) included."""
+    return os.path.lexists(path)
+
+
+def irregular(run, path):
+    """Why the run file at `path` must not be opened, or None (A12, C1A7-2; contract section 3, "The run files"):
+    checked with `os.lstat` before anything opens the path, so a named pipe never hangs a phase. A path with
+    nothing at it is None here; each caller says what its absence means."""
+    try:
+        mode = os.lstat(path).st_mode
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return "cannot be examined (%s)" % exc
+    if stat.S_ISLNK(mode):
+        return "is a link, not a regular file in the run directory"
+    if not stat.S_ISREG(mode):
+        return "is not a regular file (a named pipe, a socket, a device or a folder)"
+    if not fsio.inside(path, run.run_dir):
+        return "is not a regular file in the run directory (its real path lies outside it)"
+    return None
+
+
+def check_file(run, path, name):
+    """The run's refusal for a damaged run directory (exit 1), before anything opens `path`, when it is irregular."""
+    why = irregular(run, path)
+    if why is not None:
+        raise driver.Defect("the run artifact %s %s: the run directory has been changed by hand, and the run "
+                            "refuses; nothing was opened and nothing was written" % (name, why))
+
+
 def has(run, name):
-    return os.path.isfile(path_of(run, name))
+    """Whether the run holds the artifact; anything at its path counts, so a planted pipe or link is refused by
+    `read`, never read as absent."""
+    return present(path_of(run, name))
 
 
 def read(run, name):
+    check_file(run, path_of(run, name), name)
     try:
         return fsio.read_json(path_of(run, name))
     except (OSError, ValueError) as exc:
         raise driver.Defect("the run artifact %s cannot be read: %s" % (name, exc))
+
+
+def check_trace(run):
+    """`trace.jsonl` checked before the trace module (a back-frame file) reads it or appends to it."""
+    check_file(run, trace.path_of(run.run_dir), trace.FILE)
 
 
 def write(run, name, doc):

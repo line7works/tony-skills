@@ -28,7 +28,8 @@ skills/vertical-v2/SKILL.md       the portable procedure
 skills/vertical-v2/agents/        the Codex sidecar (no invocation policy: owner pick P5)
 skills/vertical-v2/assets/        v1's outside mandate, byte for byte
 skills/vertical-v2/references/    the contract, the back loop, the schemas, the examples, the lens briefs
-skills/vertical-v2/scripts/       vertical.py (the driver), vertical_core/, back_core/, station_core/, tests/
+skills/vertical-v2/scripts/       vertical.py (the driver), vertical_core/, back_core/, station_core/, tests/,
+                                  vendor/ (the CommonMark reader, pinned by vendor/VENDOR.json)
 skills/vertical-v2/adapters/      Claude Code and Codex
 setups/                           install, verify, negative tests, launch, both harnesses
 evals/seeded-cases/               families V1 to V5 and T1

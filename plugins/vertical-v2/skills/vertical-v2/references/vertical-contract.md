@@ -2,7 +2,7 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a
 state. Written for E15 slice 1 of the skills v2 rebuild, against the E15 lane contract (sections 6 and
-8, amendments A1 to A11) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
+8, amendments A1 to A13) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
 slice 1a fix round applied A3 (C1A-1 to C1A-9), the design round applied A4 (the one packet builder,
 the local receipt, B5, C1A2-1 to C1A2-5), and fix round 3 applied A5 (the readers root by allowlist
 identity, this core's own fence reader, C1A3-3 to C1A3-6) and A7 (the gate reads with that fence reader),
@@ -10,7 +10,9 @@ fix round 4 applied A8 (strict plain code blocks, C1A4-1; `readers.py --version`
 removal of copies never follows a link, C1A4-3), and fix round 5 applied A9 (no raw HTML lines, C1A5-1 and
 C1A5-2; a `summons` folder that is a link refuses, C1A5-3; a `packets` link is removed as a link, C1A5-4), and
 fix round 6 applied A10 and A11 (exact labels with A11's six values, C1A6-1; a `packets` entry that is not a
-real folder is removed unopened, C1A6-2). Where this
+real folder is removed unopened, C1A6-2), fix round 7 applied A12 (plain structure only, C1A7-1; the run files,
+C1A7-2), and fix round 8 applied A13 (two readings: the line rules and a vendored CommonMark reader must take every
+decision from the doc the same way). Where this
 document and that contract differ, the contract is the authority and this document is the defect.
 `references/back-loop.md` is the discipline the three back cores share; this document is this core's own.
 
@@ -55,12 +57,25 @@ every summons, under one allow rule (A4; section 5), its spec has the ledger and
 records removed, and it carries a hashed file list and a withheld list (ruling E15-8, widened by A3); the
 local verdict is fixed by a receipt that `request --outside` holds the run to (A4; sections 3.5, 3.6); the cards come
 from the records component as well as the `Status:` lines (ruling E15-9); every reader summons is a
-trace line (ruling E15-7).
+trace line (ruling E15-7); the build doc is read twice, by this core's line rules and by a vendored CommonMark
+reader, and a decision the two take differently stops the run (A13; section 5, "Two readings").
 
 ## 3. The phases
 
 A phase command against a run at the wrong phase is exit 2 naming the command to run instead. Every
 phase reads and writes only the run directory, except `verdict`'s one write.
+
+**The run files** (A12, C1A7-2). Every run file this core reads or opens itself (`gate.json`, `ask.json`,
+`scope.json`, `requests-local.json`, `requests-outside.json`, `local.json`, `local-receipt.json`,
+`outside.json`, `verdict.json`, `selection-build.json`, each readers sidecar and capture, a recorded raw file,
+`trace.jsonl` before the trace module reads it or appends to it) is checked before anything opens the path:
+a link, anything that is not a regular file (a named pipe, a socket, a folder) or a path whose real location
+lies outside the run directory is refused, named, with the run's existing refusal for a damaged run directory:
+exit 1 where an artifact the phase needs cannot be read (the run artifact named, nothing written), exit 5 where
+the local review's record is held to its receipt (`record-local`, `request --outside`, `verdict`). A present
+artifact is never read as absent, and a planted pipe never hangs a phase. The frame's own reads of
+`checkpoint.json` and `input.json` (`station_core/driver.py`, a back-frame copy) are not covered here: they join
+the E15 punch list.
 
 ### 3.1 `gate --run-dir D [--doc PATH | --name NAME] [--records-root DIR]`
 
@@ -78,8 +93,13 @@ inside a fence is content, never a slice or a card. A build doc holding any fenc
 accept, any raw HTML line (A9; section 5, "No raw HTML lines": a label inside an HTML comment is never a
 card), or any `Status:` line in a slice or `Base:` line in the header that the label rule does not take (A10,
 C1A6-1: not exact, not the last line of its paragraph, or a second one; a label held hidden in a link title, a
-link reference definition or an inline comment is never a card) stops the gate (`doc-unreadable`, naming the
-line, both lines for a second label) before the ask; when the records component's importer reads a
+link reference definition or an inline comment is never a card), or any heading or label line off the plain
+form (A12, C1A7-1; section 5, "Plain structure": indented, after a list-item or block-quote marker, or a
+heading whose `#`s are not followed by exactly one space) stops the gate (`doc-unreadable`, naming the
+line, both lines for a second label) before the ask; so does a doc whose slices, cards, recorded base or withheld
+sections a CommonMark reader takes differently from those line rules, and, once the workspace is known to be a git
+work tree, another Markdown file of HEAD whose builder's-notes declaration the two readings decide differently
+(A13; section 5, "Two readings": the first line where they differ is named, with the decision); when the records component's importer reads a
 card from a fenced literal, the card-and-line comparison below stops the run (`card-disagrees`). Zero
 slices, or a slice with no `Status:` line, stops (`gate-malformed`); a collapse never passes either.
 
@@ -136,8 +156,10 @@ local row's profile (C1A-9): under `repo-with-tools` the lens may run the projec
 under `repo` it says the lens runs nothing, reads the code, and reports a check it would have run as not
 executed, and it promises no test run. A reviewed commit's build doc holding any fence line the fence
 rule does not accept (section 5, "The fence rule"), any raw HTML line (section 5, "No raw HTML lines"), or any
-label line the label rule does not take (section 5, "Exact labels") stops the run here (`doc-unreadable`,
-naming the line) before any packet is built. A `packets` entry that is not a real folder (a link, a plain
+label line the label rule does not take (section 5, "Exact labels"), or any heading or label line off the plain
+form (section 5, "Plain structure"), or any decision a CommonMark reader takes differently from those line rules,
+the builder's-notes declaration of another Markdown file of the commit included (section 5, "Two readings"),
+stops the run here (`doc-unreadable`, naming the line) before any packet is built. A `packets` entry that is not a real folder (a link, a plain
 file, a named pipe, a socket) is removed as itself with `os.unlink`, never followed and never opened, before
 the previews are cut (C1A5-4, C1A6-2). Writes `scope.json` and `packets/`.
 
@@ -318,7 +340,8 @@ before the first fence line it does not accept or raw HTML line (past such a lin
 C1A4-1, A9), with no line opening with `<` before it and past any front matter; that heading counts too, and nothing after it.
 Reading wide only ever withholds more, and what it withholds is named with the heading that declared it. A
 notes file is not the build doc: a fence line the rule does not accept, or a raw HTML line, there never stops
-the run.
+the run. Since A13 each such file is also read by the CommonMark reader ("Two readings" below), and a file the two
+readings decide differently stops the run, named with its line.
 
 **The fence rule: strict plain code blocks** (A8, C1A4-1; the code's statement is
 `scripts/vertical_core/fences.py`; the frame's `templates.py` stays frozen and is not used for it). A fence
@@ -333,7 +356,8 @@ whatever it looks like. ANY other fence line anywhere in the build doc (one off 
 whose info string holds a backtick, an opening line never closed) stops the run `doc-unreadable` with its
 line number, before any ask, request or packet: the plan's author edits the doc. The reader follows no list,
 block-quote or lazy-continuation rule. Every reader of the build doc goes through this one rule and the next
-two: the gate's slices and `Status:` lines, the `Base:` line, the spec and its sections.
+three, and then through the second reading ("Two readings" below): the gate's slices and `Status:` lines, the
+`Base:` line, the spec and its sections.
 
 **No raw HTML lines** (A9, C1A5-1 and C1A5-2; the code's statement is `scripts/vertical_core/fences.py`). A
 raw HTML line is any line outside an accepted fence whose first characters, after any indent (spaces or tabs)
@@ -367,14 +391,60 @@ the label line and the paragraph's end leaves no later line. A slice whose only 
 way; a slice with no `Status:` line at all stops `gate-malformed`. A `Status:` line outside every slice and a
 `Base:` line outside the header are no label (the spec still removes every `Status:` line, below).
 
+**Plain structure** (A12, C1A7-1; the code's statement is `scripts/vertical_core/fences.py`, "THE PLAIN-STRUCTURE
+RULE", read through `fences.read` by every reader of the build doc). Outside accepted fences, a line that, after
+any indent and any list-item or block-quote markers (the fence rule's prefix), opens like an ATX heading (one to
+six `#`, then a space, a tab or the line's end) or like a `Status:` or `Base:` label is read only when it is
+plain: at column 0 with no marker, a heading being one to six `#` then exactly one space, a label then read as
+"Exact labels" rules. Every other such line stops the run `doc-unreadable` with its line number, anywhere in the
+doc (inside a slice, in the header, between sections), before any ask, request or packet, and the plan's author
+edits the doc: a heading or a label indented by spaces or a tab, after a list-item marker or one or more `>`;
+`##` then a tab, a bare `##`, `##` then two spaces. CommonMark renders a heading indented one to three spaces,
+with a tab after its `#`s or with nothing after them, and a label indented one to three spaces, just as their
+plain forms, so a slice heading the reader never took could carry a rendered `Status: built`, or a real slice
+could show an indented `Status: built` while its one exact label sat in a lazy quote or list line or under an
+empty `##`; the reader takes structure only in the plain form and refuses the rest. A problem line is never read
+as structure. A `#` with no space after it (`#hashtag`), seven or more `#`, and a `Status:` or `Base:` later in
+a line are text; a line inside an accepted fence is content.
+
+**Two readings** (A13; the code's statement is `scripts/vertical_core/readings.py`, "THE TWO-READINGS RULE", read
+through `spec.read` by every reader of the build doc and through `packet.declared_notes` for every other Markdown
+file). The build doc is read twice: by the line rules above (the fence rule, no raw HTML lines, exact labels and
+plain structure, kept as they are and applied first, so a doc they refuse is refused naming their line), and by a
+pinned CommonMark reader (`scripts/vertical_core/commonmark.py`, the one module that imports it: `markdown-it-py`
+3.0.0 with `mdurl` 0.1.2, vendored, the `commonmark` preset; section 15, "Runtime"). The CommonMark reading takes
+its headings from the token stream (the level, the rendered name, the first line from the token's map) and its
+labels from the rendered paragraph lines (split at soft and hard line breaks); a rendered name or line is the inline
+text with character references and backslash escapes decoded, inline markup removed (emphasis, links, images and
+code spans keep their text; inline HTML is dropped) and whitespace runs collapsed, Unicode spaces included. Then the
+decisions are compared, never the text: (1) the slices, each one's name and heading line (a level 2 heading, ATX or
+Setext, wherever it stands, whose rendered name matches the build-doc form's slice pattern); (2) each slice's card
+(the rendered paragraph lines starting with `Status:` from its heading to the next heading of level 1 or 2: none is
+no card, one exact label is its value, anything else is a card the line rules never take); (3) the recorded base
+(the rendered paragraph lines starting with `Base:` before the first slice heading, decided the same way); (4) the
+withheld sections, each one's name (the five, compared as the line reader compares them) and its first and last
+line; and (5) for every other Markdown file of the reviewed commit, its builder's-notes declaration (the line
+reading's wide first heading against the reader's first heading). Any difference stops the run `doc-unreadable`,
+naming the first line where the two readings take a decision differently and which decision, before any ask,
+request or packet, at every reader: the gate's slices and base and its notes check of HEAD, the spec, the packet
+snapshot. The plan's author edits the doc (a plain slice heading, a plain label, an ATX heading for a withheld
+section, no character reference where a decision is read). A doc both readings take the same way runs exactly as
+the line rules alone run it; a heading whose markup leaves every decision equal (a code span or bold in a slice's
+short title) still runs. Why it holds: each family the line rules missed (a Setext heading, a character reference,
+inline markup in a heading, extra spaces in a slice heading, an escaped, bold or character-coded `Base:` line) is a
+place where what a Markdown reader renders differs from the source line; the second reading renders it, so the
+difference is seen instead of modelled. What neither reading takes (a heading both read as no slice) is outside
+this rule.
+
 **The spec** (reading CR-4; ruling E15-8 as A3 widened it and A4 and A5 amended it) is the commit's build doc
 with five sections and every `Status:` label removed outside fences, what is fenced decided by the fence rule
-above (A5 (2), A8); a build doc holding a fence line the rule does not accept, a raw HTML line (A9), or a label
-line the label rule does not take (A10), stops the run at `scope` (`doc-unreadable`, naming the line) before any packet is built. The sections removed: `## Punch list` and `## Handoffs` (the ledger) and `## Build
+above (A5 (2), A8); a build doc holding a fence line the rule does not accept, a raw HTML line (A9), a label
+line the label rule does not take (A10), or a heading or label line off the plain form (A12), stops the run at
+`scope` (`doc-unreadable`, naming the line) before any packet is built. The sections removed: `## Punch list` and `## Handoffs` (the ledger) and `## Build
 assumptions`, `## Deviations` and `## Discovered` (the builder's working records, which the slice review
-withholds too), each found by heading level and name, whitespace-tolerant (a heading of level 1 or 2, up to
-three leading spaces, one or more spaces or tabs after the hashes, its name compared with its whitespace
-runs collapsed, any closing hashes dropped and without regard to case, C1A2-5) and running to the line
+withholds too), each found by heading level and name (a heading of level 1 or 2 on the plain form, A12, its
+name compared with its whitespace runs collapsed, any closing hashes dropped and without regard to case,
+C1A2-5; a heading off the plain form has already stopped the run) and running to the line
 before the next heading of level 1 or 2 outside a fence; and every `Status:` label (a line outside fences
 that starts with `Status:`, the build-doc form's label test), in a slice's section or out of one, the
 header's included (M6). Everything else stays byte for byte.
@@ -463,7 +533,7 @@ The exit codes are `references/back-loop.md` section 2's. Every stop writes `res
 | `not-git` | the workspace is not a git work tree root with a commit |
 | `base-unresolved` | no base: none recorded, no merge base, none from the owner; an exact recorded `Base:` line that resolves to nothing or names HEAD itself, with no owner's base to take over it; or an owner's base that resolves to nothing or names HEAD itself |
 | `dirty-boundary` | dirt touches the boundary or the build doc and the owner gave no committed-state-only order |
-| `doc-unreadable` | at `gate`, before the ask (the working tree's build doc), or at `scope`, before any packet (the reviewed commit's build doc): it holds a fence line the fence rule (section 5) does not accept (off column 0, in a list item or block quote, a backtick info string holding a backtick, never closed), a raw HTML line (section 5, "No raw HTML lines"), or a slice `Status:` line or header `Base:` line the label rule does not take (section 5, "Exact labels": not exact, not the last line of its paragraph, or a second one); the line is named, both lines for a second label |
+| `doc-unreadable` | at `gate`, before the ask (the working tree's build doc), or at `scope`, before any packet (the reviewed commit's build doc): it holds a fence line the fence rule (section 5) does not accept (off column 0, in a list item or block quote, a backtick info string holding a backtick, never closed), a raw HTML line (section 5, "No raw HTML lines"), a slice `Status:` line or header `Base:` line the label rule does not take (section 5, "Exact labels": not exact, not the last line of its paragraph, or a second one), or a heading or label line off the plain form (section 5, "Plain structure": indented, after a list-item or block-quote marker, or a heading whose `#`s are not followed by exactly one space), or a decision the line rules and a CommonMark reader take differently (section 5, "Two readings": the slices, a card, the recorded base, the withheld sections); or, at `gate` once the workspace is a git work tree and at `scope`, another Markdown file of the commit whose builder's-notes declaration the two readings decide differently; the line is named (the file too, for a notes file), both lines for a second label |
 | `station-refused` | a readers root that is not the expected readers plugin by identity, or a file of it that resolves outside it, or one named for a v1 plugin folder (each refused before any of its files is opened or run), or readers' identity breaks the trace's refusal rule; a `refused` trace line is written |
 | `floor-refused` | a local lens came back below the floor; no verdict is emitted |
 | `local-incomplete` | a local lens failed after its re-send, or refused deterministically |
@@ -582,6 +652,21 @@ a Claude row or on a row the owner's answer in this run did not name.
 | `verdict` | `recorded-outside`, or `recorded-local` with no outside row named | `verdict-written` |
 | `report` | `verdict-written` | `done` |
 | `identity`, `skill-identity` | any time | (none) |
+
+### Runtime
+
+`/usr/bin/python3` 3.9 or later, standard library only, with two declared exceptions (the E15 lane contract section
+3 and A13). (1) `jsonschema==4.25.1` through `uv run` (PEP 723, `references/back-loop.md` section 2): a command run
+without it exits 3, and `--help` and every argument check work without it. (2) The CommonMark reader of the second
+reading (section 5, "Two readings"): `markdown-it-py` 3.0.0 and `mdurl` 0.1.2, both MIT, pure Python, vendored
+inside this core under `scripts/vendor/` (each package unpacked from its wheel unmodified, its license files kept in
+its `.dist-info` folder; the wheel's other metadata left out and named), pinned by `scripts/vendor/VENDOR.json` (each
+wheel's file name and sha256, equal to PyPI's published digests, and every vendored file's path and sha256) and held
+there by `scripts/tests/test_vendor.py`. Nothing is installed and nothing is fetched at run time:
+`vertical_core/commonmark.py` is the only module that imports it, putting `scripts/vendor/` first on `sys.path` for
+that one import and restoring the path at once, with the reader's optional `linkify_it` import blocked; a reader
+that does not load from `scripts/vendor/` at the pinned versions is a damaged package (exit 1). It runs the same
+under `/usr/bin/python3` and under `uv run`.
 
 ### Run-directory artifacts
 

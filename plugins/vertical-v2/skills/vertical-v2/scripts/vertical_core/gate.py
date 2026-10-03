@@ -8,11 +8,18 @@ doc's `Status:` line; a disagreement is a stop naming both. The component's deri
 A3, C1A-2): a slice whose derived card differs is named, with both cards, in the verdict's Method line.
 A slice the log names nothing about falls back to its `Status:` line, and the result says so. The slices
 and their `Status:` lines are read with vertical-v2's own reading rule (the E15 lane contract A7 and A8,
-`fences.py`: strict plain code blocks, no raw HTML lines, A9, and exact labels, A10), so a heading or a label
-inside a fence is never a slice or a card, and a doc holding any fence line the rule does not accept, any raw
-HTML line outside an accepted fence, or any `Status:` line in a slice or `Base:` line in the header that is not
-exact and the last line of its paragraph (or is a second one), stops the gate (`doc-unreadable`, naming the
-line) before the ask. Zero slices, or a slice with no `Status:` line, is malformed input and never passes,
+`fences.py`: strict plain code blocks, no raw HTML lines, A9, exact labels, A10, and plain structure, A12), so a
+heading or a label inside a fence is never a slice or a card, and a doc holding any fence line the rule does not
+accept, any raw HTML line outside an accepted fence, any heading or label line off the plain form (indented,
+after a list-item or block-quote marker, or a heading whose `#`s are not followed by exactly one space), or any
+`Status:` line in a slice or `Base:` line in the header that is not exact and the last line of its paragraph (or
+is a second one), stops the gate (`doc-unreadable`, naming the
+line) before the ask. A doc the rule accepts is read a second time by a CommonMark reader (the E15 lane contract
+A13, `spec.read`, `readings.py`): a decision the two readings take differently (the slices, a card, the recorded
+base, the withheld sections) stops the gate `doc-unreadable` naming the first line where they differ, and so does,
+once the workspace is known to be a git work tree, another Markdown file of HEAD whose builder's-notes declaration
+the two readings decide differently (`packet.commit_notes`), before the ask. Zero slices, or a slice with no
+`Status:` line, is malformed input and never passes,
 collapsed or not. A collapse
 comes only from `station.owner_words.collapse_gate` and passes short slices only.
 
@@ -31,7 +38,7 @@ import os
 
 from station_core import driver, hunt as huntmod, records_link, templates
 
-from . import common, fences, gitio, report, spec as specmod
+from . import common, gitio, packet, report, spec as specmod
 
 D = templates.D
 HUNTS = {
@@ -56,11 +63,10 @@ def _named(run, path):
 
 def read(text):
     """The build doc read whole with vertical-v2's one reading rule (`fences.read`: strict plain code blocks, A8; no
-    raw HTML lines, A9; exact labels, A10), or spec.SpecUnreadable naming the first line the rule refuses."""
-    doc = fences.read(text)
-    if doc.problems:
-        raise specmod.SpecUnreadable(*doc.problems[0])
-    return doc
+    raw HTML lines, A9; exact labels, A10; plain structure, A12) and then a second time by a CommonMark reader (A13,
+    `spec.read`), or spec.SpecUnreadable naming the first line the rule refuses or the first line where the two
+    readings take a decision differently."""
+    return specmod.read(text)
 
 
 def slices_of(text):
@@ -70,7 +76,8 @@ def slices_of(text):
     opens a slice, any other `## ` heading closes it, and the slice's one exact `Status:` label inside it is its
     line (A10: exact, the last line of its paragraph, at most one). A heading or a label inside a fence is
     content, never a slice or a card. Any fence line the rule does not accept, any raw HTML line outside an
-    accepted fence, and any `Status:` or header `Base:` line the label rule does not take raises
+    accepted fence, any heading or label line off the plain form (A12), and any `Status:` or header `Base:` line
+    the label rule does not take raises
     spec.SpecUnreadable naming the line (both lines for a second label)."""
     return read(text).slices
 
@@ -156,6 +163,14 @@ def handler(ctx, args):
         report.finish(ctx, run, "stopped", "not-git",
                       "the workspace is not a git work tree root with a commit: no base, no export and no boundary, "
                       "so vertical-v2 cannot run here", selection=selection, gate=gate)
+    try:
+        packet.commit_notes(ws, gitio.head(ws), doc)
+    except specmod.SpecUnreadable as exc:
+        gate["malformed"].append(str(exc))
+        common.write(run, "gate.json", gate)
+        report.finish(ctx, run, "stopped", specmod.STOP_TAG,
+                      "the gate cannot read a Markdown file of the reviewed commit cleanly, so it never passes: %s"
+                      % exc, selection=selection, gate=gate)
     cards, log_exists = _cards(run, ctx, doc, slices, args.records_root)
     for item in slices:
         row = cards.get(item["name"])

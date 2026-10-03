@@ -1,6 +1,6 @@
 """vertical-v2's one reading rule for the build doc: strict plain code blocks (the E15 lane contract A8; C1A4-1),
-no raw HTML lines (A9; C1A5-1, C1A5-2) and exact labels (A10; C1A6-1); contract section 5, "The fence rule", "No
-raw HTML lines" and "Exact labels".
+no raw HTML lines (A9; C1A5-1, C1A5-2), exact labels (A10; C1A6-1) and plain structure only (A12; C1A7-1);
+contract section 5, "The fence rule", "No raw HTML lines", "Exact labels" and "Plain structure".
 
     split_lines(text) -> [line with its ending]: CommonMark's line endings only (LF, CRLF, CR)
     bare(line, number) -> the line without its ending (and, on line 1, without a byte order mark)
@@ -9,9 +9,11 @@ raw HTML lines" and "Exact labels".
     scan(lines) -> Scan: `fenced`, the 1-based numbers of every line an accepted fence holds (its opening and
         closing lines included); `problems`, [(line number, what)] for every fence line the rule does not
         accept and every raw HTML line, in line order
+    plain_problem(line) -> the words of the plain-structure problem a line outside an accepted fence holds, or
+        None (below)
     read(text) -> Doc: the build doc read whole: `lines`, `fenced`, `slices` ([{"name", "short", "status",
-        "line", "status_at"}] in document order), `base` ({"line", "commit"} or None), and `problems`: the
-        scan's and the label rule's (below), in line order. Every reader of a build doc reads through `read`
+        "line", "status_at"}] in document order), `base` ({"line", "commit", "at"} or None), and `problems`: the
+        scan's, the plain-structure rule's and the label rule's (below), in line order. Every reader of a build doc reads through `read`
         and stops on its first problem; `scan` alone serves the notes rule (`notes.py`), which never stops
 
 THE PREFIX. A line's prefix is any indent (spaces or tabs) and any block-quote markers (`>`) or list-item
@@ -63,9 +65,24 @@ and each needs a closing mark after the held line in the same paragraph; the exa
 one on the label line, and the paragraph's end leaves no later line. A `Status:` line outside every slice and
 a `Base:` line outside the header are no label (the spec still removes every `Status:` line, `spec.py`).
 
+THE PLAIN-STRUCTURE RULE (A12, C1A7-1; stated once here and once in the contract). Outside accepted fences, a
+line that, after its prefix (above), opens like an ATX heading (one to six `#`, then a space, a tab or the
+line's end) or like a `Status:` or `Base:` label is read only when it is PLAIN: its prefix is empty (column 0,
+no indent, no marker), and a heading is one to six `#` then exactly one space (the next character is neither a
+space nor a tab); a plain label is then read by the label rule above. EVERY other such line is a problem
+named with its line number, anywhere in the doc (inside a slice, in the header, between sections): a heading or
+a label indented by any spaces or a tab, after a list-item marker or one or more `>`; `##` then a tab, a bare
+`##`, `##` then two spaces. Why it holds: CommonMark renders a heading indented one to three spaces, a heading
+whose `#`s are followed by a tab or by the line's end, and a label indented one to three spaces just as their
+plain forms, and a marker puts a heading or a label inside a container the reader does not follow; the reader
+takes structure only where nothing but the plain form can be meant, and refuses the rest instead of modelling
+more Markdown. A problem line is never read as structure. A `#` with no space after it (`#hashtag`), seven or
+more `#`, and a `Status:` or `Base:` later in a line are text; a line inside an accepted fence is content.
+
 Every reader of the build doc (the spec and its sections, the gate's slices and `Status:` lines, the `Base:`
 line) stops the run `doc-unreadable` on the first problem, before any ask, request or packet; the plan's
-author edits the doc.
+author edits the doc. A doc these rules accept is then read a second time by a CommonMark reader and the two
+readings' decisions compared (A13, `readings.py`, "THE TWO-READINGS RULE"; `spec.read`).
 """
 import re
 
@@ -89,6 +106,15 @@ STATUS_EXACT = re.compile(r"Status: (%s)[ \t]*\Z" % "|".join(re.escape(v) for v 
 BASE_EXACT = re.compile(r"Base: ([0-9a-f]{7,40})[ \t]*\Z")
 BLANK = re.compile(r"[ \t]*\Z")
 ATX_HEADING = re.compile(r" {0,3}#{1,6}(?:[ \t]|\Z)")
+STRUCTURE = re.compile(PREFIX + r"(?:(#{1,6})(?:[ \t]|\Z)|(Status:|Base:))")
+PLAIN_HEADING = re.compile(r"#{1,6} (?![ \t])")
+OFF_PLAIN_HEADING = ("a line that opens like a heading off the plain form (indented, after a list-item or "
+                     "block-quote marker, or its `#`s not followed by exactly one space), which CommonMark may "
+                     "render as a heading the reader does not take: vertical-v2 reads a heading only when it is "
+                     "plain, at column 0, one to six `#` then one space")
+OFF_PLAIN_LABEL = ("a line that opens like a `%s` label off the plain form (indented, or after a list-item or "
+                   "block-quote marker), which CommonMark may render as the label the reader does not take: "
+                   "vertical-v2 reads a label only when it is plain, at column 0")
 LABELS = {
     STATUS_LABEL: ("one of %s" % ", ".join("`%s`" % v for v in STATUS_VALUES), STATUS_EXACT, "a slice holds one"),
     BASE_LABEL: ("7 to 40 lower-case hex digits", BASE_EXACT, "the header holds one"),
@@ -122,6 +148,17 @@ def fence_line(line):
 
 def html_line(line):
     return bool(HTML_LINE.match(line))
+
+
+def plain_problem(line):
+    """The plain-structure rule (module docstring) for one line outside an accepted fence: the problem's words, or
+    None when the line opens like no heading and no label, or is plain."""
+    match = STRUCTURE.match(line)
+    if match is None:
+        return None
+    if match.group(2) is not None:
+        return None if match.start(2) == 0 else OFF_PLAIN_LABEL % match.group(2)
+    return None if match.start(1) == 0 and PLAIN_HEADING.match(line) else OFF_PLAIN_HEADING
 
 
 def scan(lines):
@@ -191,7 +228,8 @@ def _label(lines, fenced, number, line, label, where, first):
 
 
 def read(text):
-    """The build doc read whole under the fence rule, the raw HTML rule and the label rule (module docstring)."""
+    """The build doc read whole under the fence rule, the raw HTML rule, the plain-structure rule and the label rule
+    (module docstring)."""
     lines = split_lines(text)
     found = scan(lines)
     problems = list(found.problems)
@@ -200,6 +238,10 @@ def read(text):
         if number in found.fenced:
             continue
         line = bare(raw, number)
+        off = plain_problem(line)
+        if off is not None:
+            problems.append((number, off))
+            continue
         if line.startswith(SECTION):
             header = False
             match = templates.BUILD["slice"].match(line)
@@ -219,6 +261,6 @@ def read(text):
             if problem is not None:
                 problems.append((number, problem))
             if base_at is None:
-                base, base_at = {"line": line.strip(), "commit": value}, number
+                base, base_at = {"line": line.strip(), "commit": value, "at": number}, number
     problems.sort()
     return Doc(lines, found.fenced, problems, slices, base)

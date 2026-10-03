@@ -22,7 +22,8 @@ leave it out:
 3. any one of its components, lower-cased with `-`, `_`, `.` and spaces removed, holds `buildernotes` or
    `buildnotes` (the builder's notes: a file or a folder of them, B4); or it is a `.md` regular file whose
    first heading declares it the builder's notes (`notes.py`, C1A3-3, the slice review's rule; read from the
-   commit's bytes, since the declaration is in the file, not its path);
+   commit's bytes, since the declaration is in the file, not its path; read a second time by a CommonMark reader,
+   and a file the two readings decide differently stops the run, A13, `declared_notes`);
 4. it is `REVIEW.md` at the root (the inspection sheet: never in a workspace; a local lens receives the
    commit's bytes as a document when it is the kit sheet, and no outside packet ever carries it).
 
@@ -44,7 +45,7 @@ import re
 
 from station_core import driver, fsio, validate
 
-from . import gitio, notes as notesmod, sheet as sheetmod, spec as specmod
+from . import gitio, notes as notesmod, readings, sheet as sheetmod, spec as specmod
 
 SHEET = "REVIEW.md"
 RECORD_FOLDERS = (("docs", "reviews", "a prior verdict (docs/reviews/)"),
@@ -78,6 +79,37 @@ def left_out_by_rule(path):
     if path == SHEET:
         return SHEET_WHY
     return None
+
+
+def notes_candidate(mode, path, doc):
+    """True for a `.md` regular file of the commit, other than the build doc, the allow rule lets through: the
+    files whose first heading is read for the builder's-notes declaration (the allow rule's (3))."""
+    return path != doc and mode in REGULAR and path.lower().endswith(".md") and left_out_by_rule(path) is None
+
+
+def declared_notes(files):
+    """[(path, declaring heading)] for [(path, bytes)] in the order given: each file read twice for its
+    builder's-notes declaration (`notes.declaration`, then a CommonMark reader, the E15 lane contract A13); the
+    first file the two readings decide differently raises spec.NotesUnreadable naming it and the line."""
+    out = []
+    for path, data in files:
+        text = data.decode("utf-8", "replace")
+        found = readings.notes_difference(text)
+        if found is not None:
+            raise specmod.NotesUnreadable(path, *found)
+        heading = notesmod.declares(text)
+        if heading is not None:
+            out.append((path, heading))
+    return out
+
+
+def commit_notes(workspace, commit, doc):
+    """declared_notes over every notes candidate of `commit`, read from its objects (the gate's check, before the
+    ask; the snapshot reads the same files again)."""
+    entries = [(oid, path) for mode, kind, oid, path in gitio.tree_entries(workspace, commit)
+               if kind == "blob" and notes_candidate(mode, path, doc)]
+    contents = gitio.blobs(workspace, [oid for oid, path in entries]) if entries else {}
+    return declared_notes([(path, contents[oid]) for oid, path in entries])
 
 
 def staged_names(rels):
@@ -137,14 +169,10 @@ class Snapshot(object):
         except UnicodeDecodeError:
             raise driver.Usage("the build doc %s in the reviewed commit is not UTF-8 text" % doc)
         self.spec, self.removed = specmod.clean(doc_text)
-        declared = []
-        for mode, oid, path in kept:
-            if path != doc and mode in REGULAR and path.lower().endswith(".md"):
-                heading = notesmod.declares(contents[oid].decode("utf-8", "replace"))
-                if heading is not None:
-                    declared.append(path)
-                    self.left.append({"what": path, "why": "%s (its first heading, %r, declares it)"
-                                                          % (NOTES_WHY, heading)})
+        declared = declared_notes([(path, contents[oid]) for mode, oid, path in kept if notes_candidate(mode, path, doc)])
+        for path, heading in declared:
+            self.left.append({"what": path, "why": "%s (its first heading, %r, declares it)" % (NOTES_WHY, heading)})
+        declared = set(path for path, heading in declared)
         kept = [entry for entry in kept if entry[2] not in declared]
         self.tree, self.modes = {}, {}
         for mode, oid, path in kept:

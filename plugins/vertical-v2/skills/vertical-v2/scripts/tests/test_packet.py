@@ -21,8 +21,19 @@ type 6 block ended by a Unicode-space line, a comment holding a heading or a lab
 placeholder or an autolink); so does every label line the exact-label rule refuses (A10, C1A6-1: a `Status:`
 line held in an inline comment opened mid-line, a link reference definition's title in quotes or parentheses or
 an inline link's title, a second label, a label with text after its value or a Setext underline; in the header a
-hidden `Base:`, two `Base:` lines, a short or upper-case sha); the same shapes in any other Markdown file of the
-commit never stop the run.
+hidden `Base:`, two `Base:` lines, a short or upper-case sha); so does every heading or label line off the plain
+form (A12, C1A7-1: check 7's slice heading and label indented one or three spaces, `##` then a tab, a bare `##`,
+an indented label with the exact one in a lazy quote or list line or under an empty `##`, a withheld heading with
+two spaces, a tab, an indent or a list marker before it, an indented level 1 heading, a label after `>`, `2)` or a
+tab; in the header an indented or listed `Base:` and a `#` then a tab); the same shapes in any other Markdown
+file of the commit never stop the run. Since A12 the fixture's withheld headings are on the plain form, their odd
+spellings kept where it allows them (inner runs of spaces, upper case, closing hashes, trailing spaces). Every one of
+those earlier shapes is stopped by its line rule, ahead of the second reading (A13). Since A13 every shape whose
+decisions the two readings take differently stops too, naming the first line where they differ: a Setext slice
+heading or withheld heading, a character reference in a slice heading, a withheld heading, a `Status:` label or a
+`Base:` line, inline markup in a withheld heading, extra spaces in a slice heading, an escaped or bold `Base:` line;
+so does another Markdown file whose builder's-notes declaration the two readings decide differently (a
+character-coded first heading). A heading whose markup leaves every decision equal still builds every packet.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -80,12 +91,12 @@ def class_doc():
         "- AC1: two turns", "Footprint: src/spinner.py", "Not in this slice: none", "Depends on: A",
         "Status: signed off",
         "",
-        "##  Build assumptions", "- ASSUMPTION-MARKER the clock is monotonic",
+        "## Build   assumptions", "- ASSUMPTION-MARKER the clock is monotonic",
         "### a sub-heading inside it", "- ASSUMPTION-MARKER still inside",
         "## Deviations  ", "- DEVIATION-MARKER skipped the retry",
-        "##\tDiscovered", "- DISCOVERED-MARKER the clock drifts",
-        "  ## Handoffs", "", "### 2026-09-25 %s handoff" % D, "- HANDOFF-MARKER slice B was easy",
-        "##   punch   LIST  ", "", "### 2026-09-24 %s review: Slice A" % D,
+        "## Discovered\t##", "- DISCOVERED-MARKER the clock drifts",
+        "## HANDOFFS", "", "### 2026-09-25 %s handoff" % D, "- HANDOFF-MARKER slice B was easy",
+        "## punch   LIST  ", "", "### 2026-09-24 %s review: Slice A" % D,
         "- MAJOR %s src/turnstile.py:2 %s PUNCH-MARKER %s a double tap %s Slice A review" % (M, M, M, M),
         ""])
 
@@ -221,7 +232,7 @@ class TheClassGuard(unittest.TestCase):
         spec = testlib.read_text(os.path.join(dest, "documents", "spec.md"))
         self.assertEqual(spec, testlib.read_text(os.path.join(dest, "workspace", DOC)))
         lines = class_doc().split("\n")
-        first_withheld = lines.index("##  Build assumptions") + 1
+        first_withheld = lines.index("## Build   assumptions") + 1
         kept = "".join(line + "\n" for number, line in enumerate(lines, 1)
                        if number < first_withheld and number not in STATUS_LINES)
         self.assertEqual(STATUS_LINES, [6, 30, 41])
@@ -243,12 +254,12 @@ class TheClassGuard(unittest.TestCase):
         return testlib.git(self.ws, ["rev-parse", "HEAD"]).strip()
 
     def test_an_unclosed_fence_after_the_slices_stops_before_any_packet(self):
-        text = class_doc().replace("##  Build assumptions\n", "````\n```\n##  Build assumptions\n")
+        text = class_doc().replace("## Build   assumptions\n", "````\n```\n## Build   assumptions\n")
         head = self.recommit_doc(text)
         with self.assertRaises(specmod.SpecUnreadable) as caught:
             packet.Snapshot(self.ws, head, DOC)
         lines = text.split("\n")
-        self.assertEqual(caught.exception.line, lines.index("##  Build assumptions") - 1)
+        self.assertEqual(caught.exception.line, lines.index("## Build   assumptions") - 1)
 
     def test_an_unclosed_fence_before_the_slices_stops_before_any_packet(self):
         text = class_doc().replace("## Slice A", "~~~~\n\n## Slice A", 1)
@@ -308,11 +319,117 @@ class TheClassGuard(unittest.TestCase):
         ("a short sha (A10)", ["Base: abc123"], "Base: abc123"),
         ("an upper-case sha (A10)", ["Base: ABCDEF1"], "Base: ABCDEF1"),
     )
+    PLAIN_SHAPES = (
+        ("check 7's slice heading and label indented one space (A12, C1A7-1)",
+         [" ## Slice C %s the encoder" % D, " Status: built"], " ## Slice C %s the encoder" % D),
+        ("check 7's slice heading and label indented three spaces (A12, C1A7-1)",
+         ["   ## Slice C %s the encoder" % D, "   Status: built"], "   ## Slice C %s the encoder" % D),
+        ("a slice heading with a tab after its hashes (A12, C1A7-1)", ["##\tSlice C %s the encoder" % D, "Status: built"],
+         "##\tSlice C %s the encoder" % D),
+        ("a bare ## (A12, C1A7-1)", ["##", "a paragraph under an empty heading"], "##"),
+        ("an indented label with the exact one in a lazy block-quote line (A12, C1A7-1)",
+         [" Status: built", "", "> Earlier draft:", "Status: signed off"], " Status: built"),
+        ("an indented label with the exact one in a lazy list line (A12, C1A7-1)",
+         [" Status: built", "", "- earlier draft:", "Status: signed off"], " Status: built"),
+        ("an indented label with the exact one under an empty ## (A12, C1A7-1)",
+         [" Status: built", "", "##", "Status: signed off"], " Status: built"),
+        ("a withheld heading with two spaces after its hashes (A12; C1A2-5's spelling)", ["##  Deviations", "- LEAK"],
+         "##  Deviations"),
+        ("a withheld heading with a tab after its hashes (A12)", ["##\tDiscovered", "- LEAK"], "##\tDiscovered"),
+        ("an indented withheld heading (A12)", ["  ## Handoffs", "- LEAK"], "  ## Handoffs"),
+        ("a withheld heading after a list marker (A12)", ["- ## Punch list", "- LEAK"], "- ## Punch list"),
+        ("a level 1 heading indented (A12)", ["   # Appendix"], "   # Appendix"),
+        ("a label after a block-quote marker (A12)", ["> Status: built"], "> Status: built"),
+        ("a label after a numbered marker (A12)", ["2) Status: built"], "2) Status: built"),
+        ("a label after a tab (A12)", ["\tStatus: built"], "\tStatus: built"),
+    )
+    PLAIN_HEADER_SHAPES = (
+        ("an indented Base: line (A12, C1A7-1)", [" Base: 1111111"], " Base: 1111111"),
+        ("a Base: line after a list marker (A12)", ["* Base: 1111111"], "* Base: 1111111"),
+        ("a heading with a tab after its hashes in the header (A12)", ["#\tTurnstile again"], "#\tTurnstile again"),
+    )
     HEADER_AT = "signed off by an earlier reviewer\n"
+    TWO_READINGS_SHAPES = (
+        ("a Setext slice heading hides a slice (A13, family 1)", ["Slice C %s the encoder" % D, "---", "Goal: encode."],
+         "Slice C %s the encoder" % D),
+        ("a Setext withheld heading hides a withheld section (A13, family 1)", ["Punch list", "---", "- LEAK"],
+         "Punch list"),
+        ("a character-coded dash hides a slice (A13, family 2)", ["## Slice C &#8212; the encoder", "Status: built"],
+         "## Slice C &#8212; the encoder"),
+        ("a character-coded space hides a withheld section (A13, family 2)", ["## Punch&#32;list", "- LEAK"],
+         "## Punch&#32;list"),
+        ("a character-coded colon makes a second rendered label (A13, family 2)", ["Status&#58; built"],
+         "Status&#58; built"),
+        ("bold markup hides a withheld section (A13, family 3)", ["## **Punch list**", "- LEAK"], "## **Punch list**"),
+        ("two spaces inside a slice heading hide a slice (A13, family 4)", ["## Slice  C %s the encoder" % D,
+                                                                             "Status: built"],
+         "## Slice  C %s the encoder" % D),
+    )
+    TWO_READINGS_HEADER_SHAPES = (
+        ("an escaped colon hides a base (A13, family 5)", ["Base\\: 1111111"], "Base\\: 1111111"),
+        ("a bold label hides a base (A13, family 5)", ["**Base:** 1111111"], "**Base:** 1111111"),
+        ("a character-coded colon hides a base (A13, families 2 and 5)", ["Base&#58; 1111111"], "Base&#58; 1111111"),
+    )
+
+    def test_every_shape_the_two_readings_take_differently_stops_before_any_packet_naming_its_line(self):
+        """A13: the line rules accept each shape; the second reading takes a decision differently, so the snapshot
+        stops naming the first line where they differ."""
+        from vertical_core import fences  # noqa: E402
+        for what, shape, first in self.TWO_READINGS_SHAPES:
+            text = class_doc().replace("## Build   assumptions\n", "\n".join(shape) + "\n\n## Build   assumptions\n")
+            self.assertEqual(fences.read(text).problems, [], what)
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+            self.assertIn("CommonMark", str(caught.exception), what)
+        for what, shape, first in self.TWO_READINGS_HEADER_SHAPES:
+            text = class_doc().replace(self.HEADER_AT, self.HEADER_AT + "\n" + "\n".join(shape) + "\n", 1)
+            self.assertEqual(fences.read(text).problems, [], what)
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+
+    def test_every_earlier_shape_is_stopped_by_its_line_rule_ahead_of_the_second_reading(self):
+        """A13 keeps A8 to A12 as they are: each earlier shape is refused by the line rules, naming its line, before
+        the two readings are compared."""
+        from vertical_core import fences  # noqa: E402
+        for shapes, at in ((self.STRICT_SHAPES + self.PLAIN_SHAPES, "## Build   assumptions\n"),
+                           (self.HEADER_SHAPES + self.PLAIN_HEADER_SHAPES, self.HEADER_AT)):
+            for what, shape, first in shapes:
+                if at == self.HEADER_AT:
+                    text = class_doc().replace(at, at + "\n" + "\n".join(shape) + "\n", 1)
+                else:
+                    text = class_doc().replace(at, "\n".join(shape) + "\n\n" + at)
+                problems = fences.read(text).problems
+                self.assertTrue(problems, what)
+                self.assertEqual(problems[0][0], text.split("\n").index(first) + 1, what)
+
+    def test_a_notes_file_the_two_readings_decide_differently_stops_before_any_packet(self):
+        """A13: a character-coded first heading declares the file the builder's notes to CommonMark and not to the
+        line reading; the snapshot stops naming the file and the line."""
+        testlib.write_text(os.path.join(self.ws, "notes", "coded.md"), "# Builder&#32;notes\n\nCODED-NOTES-MARKER\n")
+        testlib.git(self.ws, ["add", "notes/coded.md"])
+        testlib.git(self.ws, ["commit", "-q", "-m", "coded notes"], when="2026-09-20T12:00:00-07:00")
+        head = testlib.git(self.ws, ["rev-parse", "HEAD"]).strip()
+        with self.assertRaises(specmod.SpecUnreadable) as caught:
+            packet.Snapshot(self.ws, head, DOC)
+        self.assertEqual(caught.exception.line, 1)
+        self.assertIn("notes/coded.md", str(caught.exception))
+
+    def test_markup_that_leaves_every_decision_equal_still_builds_every_packet(self):
+        text = class_doc().replace("## Slice B %s the spinner" % D, "## Slice B %s the `spinner` **loop**" % D)
+        head = self.recommit_doc(text)
+        snap = packet.Snapshot(self.ws, head, DOC)
+        self.assertIn("## Slice B %s the `spinner` **loop**" % D, snap.spec)
+        self.assertEqual(sorted(r["what"] for r in snap.removed if r["what"] != "Status: line"),
+                         ["## Build assumptions", "## Deviations", "## Discovered", "## Handoffs", "## Punch list"])
+
 
     def test_every_shape_the_strict_rule_stops_stops_before_any_packet_naming_its_line(self):
         for what, shape, first in self.STRICT_SHAPES:
-            text = class_doc().replace("##  Build assumptions\n", "\n".join(shape) + "\n\n##  Build assumptions\n")
+            text = class_doc().replace("## Build   assumptions\n", "\n".join(shape) + "\n\n## Build   assumptions\n")
             head = self.recommit_doc(text)
             with self.assertRaises(specmod.SpecUnreadable) as caught:
                 packet.Snapshot(self.ws, head, DOC)
@@ -328,11 +445,29 @@ class TheClassGuard(unittest.TestCase):
                 packet.Snapshot(self.ws, head, DOC)
             self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
 
+    def test_every_shape_the_plain_structure_rule_stops_stops_before_any_packet_naming_its_line(self):
+        """A12, C1A7-1: a heading or a `Status:` or `Base:` label off the plain form (indented, after a list-item or
+        block-quote marker, a heading not followed by exactly one space) stops the snapshot naming its line, in a
+        slice and in the header."""
+        for what, shape, first in self.PLAIN_SHAPES:
+            text = class_doc().replace("## Build   assumptions\n", "\n".join(shape) + "\n\n## Build   assumptions\n")
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+        for what, shape, first in self.PLAIN_HEADER_SHAPES:
+            text = class_doc().replace(self.HEADER_AT, self.HEADER_AT + "\n" + "\n".join(shape) + "\n", 1)
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+
     def test_the_strict_shapes_in_another_markdown_file_never_stop_the_run(self):
         """The rule reads the build doc; another `.md` file of the commit is copied as it is (its first heading is
         still read for the builder's-notes rule, never a stop)."""
         body = "# Bench guide\n\n" + "\n\n".join("\n".join(shape) for what, shape, first
-                                                     in self.STRICT_SHAPES + self.HEADER_SHAPES) + "\n"
+                                                     in self.STRICT_SHAPES + self.HEADER_SHAPES + self.PLAIN_SHAPES
+                                                     + self.PLAIN_HEADER_SHAPES) + "\n"
         testlib.write_text(os.path.join(self.ws, "notes", "bench-guide.md"), body)
         testlib.git(self.ws, ["add", "notes/bench-guide.md"])
         testlib.git(self.ws, ["commit", "-q", "-m", "a guide"], when="2026-09-20T12:00:00-07:00")
@@ -487,8 +622,18 @@ class TheAstraProbes(unittest.TestCase):
         for name, withheld in self.withheld_of_every_packet(run_dir):
             self.assertIn("%s Status: line %d" % (DOC, line), [w["what"] for w in withheld], name)
 
-    def test_c1a2_5_a_withheld_heading_with_two_spaces_is_withheld_and_named(self):
+    def test_c1a2_5_a_withheld_heading_with_two_spaces_now_stops_the_gate_naming_its_line(self):
+        """A12: `##` then two spaces is off the plain form, so the gate stops `doc-unreadable` before any packet."""
         doc = vlib.build_doc().replace("## Deviations\n", "##  Deviations\n- DEVIATION-MARKER skipped it\n")
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=True)
+        drive, run_dir = vlib.start(self.tmp, ws)
+        code, out, err = drive(["gate", "--run-dir", run_dir])
+        self.assertEqual((code, (out or {}).get("stop_tag")), (10, "doc-unreadable"), (out, err))
+        self.assertIn("line %d" % (doc.split("\n").index("##  Deviations") + 1), out["reason"])
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "packets")))
+
+    def test_c1a2_5_a_withheld_heading_in_odd_case_and_spacing_on_the_plain_form_is_withheld_and_named(self):
+        doc = vlib.build_doc().replace("## Deviations\n", "## DEVIATIONS  \n- DEVIATION-MARKER skipped it\n")
         drive, run_dir, ws, info = vlib.through_local_requests(self.tmp, repo={"doc_text": doc})
         for path, text in self.every_reviewer_text(run_dir):
             self.assertNotIn("DEVIATION-MARKER", text, path)

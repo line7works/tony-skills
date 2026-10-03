@@ -54,6 +54,7 @@ def build_result(ctx, run, status, tag, reason, selection=None, gate=None, extra
     ask = common.read(run, "ask.json").get("answer") if common.has(run, "ask.json") else None
     scope = common.read(run, "scope.json") if common.has(run, "scope.json") else {}
     verdict = common.read(run, "verdict.json") if common.has(run, "verdict.json") else {}
+    common.check_trace(run)
     lines = trace.read(run.run_dir)
     station_result = {
         "gate": gate, "ask": {"rows": ask["rows"], "words": ask["words"]} if ask else None,

@@ -180,6 +180,7 @@ def _appendix(run, records):
     for call in records:
         if call["status"] != "ok" or not call.get("raw_file"):
             continue
+        common.check_file(run, call["raw_file"], "the raw file of %s" % call["call_id"])
         with open(call["raw_file"], "rb") as fh:
             data = fh.read()
         if call.get("raw_hash") and fsio.sha256_bytes(data) != call["raw_hash"]:

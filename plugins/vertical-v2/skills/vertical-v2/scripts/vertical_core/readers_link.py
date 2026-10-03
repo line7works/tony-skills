@@ -301,6 +301,7 @@ def refused_line(run, ctx, found, ident, refusals):
                       route=found["route"], run_dir=common.path_of(run, "readers"),
                       refusal={"rules": sorted(set(r["rule"] for r in refusals)),
                                "reason": "; ".join(r["message"] for r in refusals)}, at=common.now())
+    common.check_trace(run)
     trace.append(run.run_dir, line, ctx.skill_root, ctx.prefix)
 
 
@@ -311,6 +312,7 @@ def refuse_root(ctx, run, exc):
     line = trace.line(kind="refused", caller=common.STATION, expected="readers", identity=None, route=route,
                       run_dir=common.path_of(run, "readers"), refusal={"rules": [exc.rule], "reason": str(exc)},
                       at=common.now())
+    common.check_trace(run)
     trace.append(run.run_dir, line, ctx.skill_root, ctx.prefix)
     report.finish(ctx, run, "stopped", "station-refused", "%s; nothing was requested" % exc)
 

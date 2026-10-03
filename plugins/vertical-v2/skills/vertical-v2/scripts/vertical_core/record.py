@@ -66,8 +66,11 @@ def capture_path(run, call_id):
 
 def sidecar_of(run, call):
     path = sidecar_path(run, call["call_id"])
-    if not os.path.isfile(path):
+    if not common.present(path):
         return None, "%s has no sidecar at %s: record the call through readers first" % (call["call_id"], path)
+    why = common.irregular(run, path)
+    if why is not None:
+        return None, "%s's sidecar %s %s" % (call["call_id"], path, why)
     try:
         body = fsio.read_json(path)
     except (OSError, ValueError) as exc:
@@ -82,7 +85,10 @@ def sidecar_of(run, call):
         if not body.get("raw_file") or os.path.realpath(body["raw_file"]) != os.path.realpath(capture):
             return None, "%s's sidecar names its capture at %r, not where readers writes it (%s)" % (
                 call["call_id"], body.get("raw_file"), capture)
-        if not os.path.isfile(capture) or fsio.sha256_file(capture) != body.get("raw_hash"):
+        why = common.irregular(run, capture)
+        if why is not None:
+            return None, "%s's capture %s %s" % (call["call_id"], capture, why)
+        if not common.present(capture) or fsio.sha256_file(capture) != body.get("raw_hash"):
             return None, "%s's capture %s does not match the raw_hash readers recorded" % (call["call_id"], capture)
     return body, None
 
@@ -166,6 +172,7 @@ def _summons_lines(ctx, run, requests, records):
         line = trace.line(kind="summons", caller=common.STATION, expected="readers", identity=readers["identity"],
                           route=readers["route"], run_dir=requests["run_dir"], status=rec["status"] or "unknown",
                           call_id=rec["call_id"], row=rec["row"], at=common.now())
+        common.check_trace(run)
         trace.append(run.run_dir, line, ctx.skill_root, ctx.prefix)
 
 
@@ -253,10 +260,12 @@ RECEIPT = "local-receipt.json"
 def _receipt_calls(run, requests):
     out = []
     for call in requests["calls"]:
-        capture = capture_path(run, call["call_id"])
+        side, capture = sidecar_path(run, call["call_id"]), capture_path(run, call["call_id"])
+        common.check_file(run, side, "%s's sidecar" % call["call_id"])
+        common.check_file(run, capture, "%s's capture" % call["call_id"])
         out.append({"call_id": call["call_id"], "row": call["row"], "lens": call["lens"],
-                    "sidecar_sha256": fsio.sha256_file(sidecar_path(run, call["call_id"])),
-                    "capture_sha256": fsio.sha256_file(capture) if os.path.isfile(capture) else None})
+                    "sidecar_sha256": fsio.sha256_file(side),
+                    "capture_sha256": fsio.sha256_file(capture) if common.present(capture) else None})
     return out
 
 
@@ -279,8 +288,11 @@ def local_receipt_problem(ctx, run):
     and local.json still holding the way record-local holds an answer. `request --outside` and `verdict`
     both hold the run to it (C1A3-5)."""
     path = common.path_of(run, RECEIPT)
-    if not os.path.isfile(path):
+    if not common.present(path):
         return "the run holds no %s: record-local writes it when the local review completes" % RECEIPT
+    why = common.irregular(run, path)
+    if why is not None:
+        return "%s %s" % (RECEIPT, why)
     try:
         receipt = fsio.read_json(path)
     except (OSError, ValueError) as exc:
@@ -293,21 +305,33 @@ def local_receipt_problem(ctx, run):
         return "%s is for run %r, not this run %r" % (RECEIPT, receipt["run_id"], run.checkpoint["run_id"])
     if not common.has(run, "requests-local.json"):
         return "the run holds no requests-local.json, so %s covers no requested call" % RECEIPT
+    why = common.irregular(run, common.path_of(run, "requests-local.json"))
+    if why is not None:
+        return "requests-local.json %s" % why
     requests = common.read(run, "requests-local.json")
     if [(c["call_id"], c["row"], c["lens"]) for c in receipt["calls"]] != \
             [(c["call_id"], c["row"], c["lens"]) for c in requests["calls"]]:
         return "%s does not name exactly the local calls this run requested" % RECEIPT
     local_path = common.path_of(run, "local.json")
-    if not os.path.isfile(local_path):
+    if not common.present(local_path):
         return "local.json is gone, and %s says record-local wrote it" % RECEIPT
+    why = common.irregular(run, local_path)
+    if why is not None:
+        return "local.json %s" % why
     if fsio.sha256_file(local_path) != receipt["local_sha256"]:
         return "local.json no longer matches the receipt record-local wrote (its sha256 differs)"
     for call in receipt["calls"]:
         side = sidecar_path(run, call["call_id"])
-        if not os.path.isfile(side) or fsio.sha256_file(side) != call["sidecar_sha256"]:
+        why = common.irregular(run, side)
+        if why is not None:
+            return "%s's sidecar %s" % (call["call_id"], why)
+        if not common.present(side) or fsio.sha256_file(side) != call["sidecar_sha256"]:
             return "%s's sidecar no longer matches the receipt record-local wrote" % call["call_id"]
         capture = capture_path(run, call["call_id"])
-        now = fsio.sha256_file(capture) if os.path.isfile(capture) else None
+        why = common.irregular(run, capture)
+        if why is not None:
+            return "%s's capture %s" % (call["call_id"], why)
+        now = fsio.sha256_file(capture) if common.present(capture) else None
         if now != call["capture_sha256"]:
             return "%s's capture no longer matches the receipt record-local wrote" % call["call_id"]
     try:

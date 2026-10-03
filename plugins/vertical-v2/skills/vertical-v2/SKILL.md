@@ -61,8 +61,12 @@ for the hunt (the repo's tiers only: `docs/plans/`, then the older flat build pl
 slice doc; no wider hunt). The gate stops on: nothing found or several found (list them, ask the owner,
 run again with `--doc`); a build doc holding a fence it does not accept, a raw HTML line or a label it does not take (`doc-unreadable`:
 only plain code blocks whose fences open and close at the left margin are read, no line opening with `<`
-and a letter, `/`, `!` or `?`, and only an exact `Status:` label per slice and `Base:` line in the header,
-each the last line of its paragraph; tell the owner the line to edit); zero slices or a slice with no `Status:` line; any slice short of `signed off`
+and a letter, `/`, `!` or `?`, headings and labels only in their plain form at column 0 (no indent, no list or
+quote marker, a heading's `#`s then exactly one space), and only an exact `Status:` label per slice and `Base:`
+line in the header, each the last line of its paragraph; then the doc is read a second time by a CommonMark
+reader, and any slice, card, base or withheld section the two readings take differently stops it too, as does
+another Markdown file of the commit whose builder's-notes heading the two readings decide differently; tell the
+owner the line to edit); zero slices or a slice with no `Status:` line; any slice short of `signed off`
 (name each slice and its state; a `built` card's remedy is a fresh slice signoff, never a recheck); a
 card in the records that disagrees with its `Status:` line (name both); no git; no base (ask the owner
 for the base and run again with his answer in `station.owner_words.base`); dirt touching the boundary or
@@ -103,9 +107,12 @@ untracked file, no review record, the build doc reduced to its spec), each with 
 hashes) and its withheld list. State the depth line it prints before launching anything. The previews are
 for you to inspect; every request below gets its own fresh copy from the same builder. A build doc holding a
 fence line off the left margin, inside a list item or a block quote, or never closed, or any raw HTML line
-(a line opening with `<` and a letter, `/`, `!` or `?`, outside a fence), or any `Status:` or `Base:` line
-that is not exact and the last line of its paragraph, stops the run here (`doc-unreadable`, naming the line)
-before any packet exists: tell the owner the line to edit.
+(a line opening with `<` and a letter, `/`, `!` or `?`, outside a fence), or any heading or label line off the
+plain form (indented, after a list or quote marker, or a heading whose `#`s are not followed by exactly one
+space), or any `Status:` or `Base:` line that is not exact and the last line of its paragraph, or any slice,
+card, base, withheld section or builder's-notes heading that a CommonMark reader takes differently from those
+line rules, stops the run here (`doc-unreadable`, naming the line) before any packet exists: tell the owner the
+line to edit.
 
 ## Step 4: The reviews, local first
 

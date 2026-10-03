@@ -2,6 +2,12 @@
 section 5, the allow rule's (3)).
 
     declares(text) -> the heading text that declares the file the builder's notes, or None
+    declaration(text) -> (that heading text, its line), or None: the line is the ATX heading's own, or a Setext
+        heading's first text line
+
+Since the E15 lane contract A13 this is the line reading of a file's declaration; `readings.notes_difference`
+reads the file a second time with a CommonMark reader, and a file the two decide differently stops the run
+(`packet.declared_notes`).
 
 The slice review withholds a Markdown file whose first heading says it is the builder's notes, and so does
 this core: a `.md` blob of the reviewed commit (a regular file, never a link) whose first heading holds
@@ -45,6 +51,11 @@ FRONT_CLOSE = re.compile(r"^(?:---|\.\.\.)[ \t]*$")
 
 
 def declares(text):
+    found = declaration(text)
+    return None if found is None else found[0]
+
+
+def declaration(text):
     if text.startswith("﻿"):
         text = text[1:]
     raw = fences.split_lines(text)
@@ -56,19 +67,21 @@ def declares(text):
     front = first is not None and bool(FRONT_OPEN.match(lines[first]))
     certain_allowed = not front
     html_seen = False
-    para, candidates = [], []
+    para, candidates, para_at = [], [], None
     for index, line in enumerate(lines):
         stripped = CONTAINERS.sub("", line)
         if stripped.lstrip().startswith("<"):
             html_seen = True
         atx = ATX.match(stripped)
         if atx:
-            candidates.append(atx.group(1) or "")
+            candidates.append((atx.group(1) or "", index + 1))
             para = []
         elif UNDERLINE.match(stripped) and para:
-            candidates.append(" ".join(para))
+            candidates.append((" ".join(para), para_at))
             para = []
         elif stripped.strip():
+            if not para:
+                para_at = index + 1
             para.append(stripped.strip())
         else:
             para = []
@@ -79,7 +92,7 @@ def declares(text):
             break
         if front and not certain_allowed and index > first and FRONT_CLOSE.match(line):
             certain_allowed = True
-    for heading in candidates:
+    for heading, at in candidates:
         if DECLARES.search(heading):
-            return heading
+            return heading, at
     return None
