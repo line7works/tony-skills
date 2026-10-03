@@ -7,7 +7,7 @@
     "session_id": "4cd53208-8cb8-4de2-bb71-be7594182bb1"
   },
   "plugin_version": "0.1.0",
-  "reason": "the build doc's line 41: a fence opened here never closes, so what follows it cannot be told from code; its ledger cannot be told from a code block there, so no packet was built: vertical-v2 reads only plain code blocks whose fences open and close at the left margin, outside any list item or block quote; the plan's author edits the doc and commits",
+  "reason": "the build doc's line 41: a fence opened here never closes, so what follows it cannot be told from code; its ledger cannot be told from content there, so no packet was built: vertical-v2 reads only plain code blocks whose fences open and close at the left margin, outside any list item or block quote, and no raw HTML line; the plan's author edits the doc and commits",
   "report_only": false,
   "run_dir": "/tmp/vertical-v2/run-0001",
   "run_id": "run-0001",

@@ -7,8 +7,12 @@ accepted only when its opening line and its closing line both start at the left 
 marker, no `>`), the closing line is the same character, at least as long, with nothing after it but spaces
 or tabs, and no line between is another fence line off the margin. Any other fence line (three or more
 backticks or tildes after any indent, after a list-item or block-quote marker, a backtick line whose info
-string holds a backtick, a fence never closed, a fence line inside raw HTML) stops the run with its line
-number before any packet is built.
+string holds a backtick, a fence never closed) stops the run with its line number before any packet is built.
+
+No raw HTML lines (A9, C1A5-1 and C1A5-2): any line outside an accepted fence whose first characters, after
+any indent and any list-item or block-quote markers, are `<` followed by a letter, `/`, `!` or `?` stops the
+run with its line number too; the reader no longer tracks where a raw HTML block ends. A `<` line inside an
+accepted fence is content.
 """
 import os
 import unittest
@@ -112,11 +116,12 @@ class TheFenceShapes(unittest.TestCase):
         self.assertEqual(caught.exception.line, text.split("\n").index("  ```") + 1)
 
     def test_a_fence_marker_inside_a_raw_html_block_stops(self):
+        """A9: the raw HTML line itself stops (at check 5 the fence line inside the block did)."""
         for block in (["<pre>", "```", "</pre>"], ["<!--", "```", "-->"], ["<div>", "```", ""]):
             text = doc_with(after_slices=block + ["## Punch list", "```"])
             with self.assertRaises(spec.SpecUnreadable) as caught:
                 spec.clean(text)
-            self.assertEqual(caught.exception.line, text.split("\n").index(block[0]) + 2, block)
+            self.assertEqual(caught.exception.line, text.split("\n").index(block[0]) + 1, block)
 
     def test_crlf_endings_read_the_same(self):
         text = doc_with(after_slices=["````", "```", "## Punch list", "````"]).replace("\n", "\r\n")
@@ -194,6 +199,76 @@ class TheStrictRule(unittest.TestCase):
         kept, removed = kept_and_removed(doc_with(after_slices=["- an item", "```", "## Punch list", "```"]))
         self.assertEqual(removed, ALL_FIVE)
         self.assertIn("- an item\n```\n## Punch list\n```\n", kept)
+
+
+UNICODE_BLANKS = (("a no-break space", "\u00a0"), ("a form feed", "\x0c"), ("a vertical tab", "\x0b"),
+                  ("a next-line character", "\x85"), ("an ideographic space", "\u3000"), ("an em space", "\u2003"))
+
+
+class TheRawHtmlRule(unittest.TestCase):
+    """A9, C1A5-1 and C1A5-2: any raw HTML line outside an accepted fence stops the run naming its line, before
+    any packet; a `<` line inside an accepted fence is content, and a `<` that does not open a tag does not stop."""
+
+    def assert_stops(self, text, first):
+        with self.assertRaises(spec.SpecUnreadable) as caught:
+            spec.clean(text)
+        self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, (repr(first), str(caught.exception)))
+        self.assertIn("line %d" % caught.exception.line, str(caught.exception))
+        self.assertIn("raw HTML", caught.exception.what)
+        scan = fences.scan(fences.split_lines(text))
+        self.assertEqual(scan.problems[0][0], caught.exception.line)
+        return caught.exception
+
+    def test_check_5s_six_unicode_space_shapes_stop_at_the_html_line(self):
+        """C1A5-1: `<div>`, a line of a Unicode space CommonMark does not count as blank, a margin fence, then the
+        withheld sections, and a second `<div>` and fence at the end: the reader once accepted the fence."""
+        for what, blank in UNICODE_BLANKS:
+            text = doc_with(after_slices=["<div>", blank, "```", ""]) + "<div>\n```\n"
+            self.assert_stops(text, "<div>")
+
+    def test_a_comment_holding_a_heading_inside_the_punch_list_stops(self):
+        """C1A5-2: `## Older entries` inside a comment once ended the withheld `## Punch list` early."""
+        text = doc_with() + "<!--\n## Older entries\n-->\n- PUNCH-LEAK an older entry\n"
+        self.assert_stops(text, "<!--")
+
+    def test_each_raw_html_opening_stops_at_its_line(self):
+        for line in ("<pre>", "<details>", "<div>", "<?php x ?>", "<!DOCTYPE html>", "<![CDATA[ x ]]>", "</div>",
+                     "<!-- a note -->", "<script>", "<textarea>", "<style>", "<summary>a</summary>", "<br/>",
+                     "<a href=\"x\">link</a>"):
+            self.assert_stops(doc_with(after_slices=["", line, "", "text"]), line)
+
+    def test_a_tag_after_a_list_marker_a_quote_marker_a_tab_or_an_indent_stops(self):
+        for line in ("- <div>", "* <details>", "+ <pre>", "1. <div>", "2) <!--", "> <div>", "><div>", "> > <pre>",
+                     "> - <div>", "\t<div>", " <div>", "   <!--", "    <div>", "-\t<div>"):
+            self.assert_stops(doc_with(after_slices=["", line, "", "text"]), line)
+
+    def test_a_line_opening_with_an_inline_placeholder_or_an_autolink_stops_by_design(self):
+        for line in ("<path> is where the counter lives", "<https://example.com/turnstile>",
+                     "<turns@example.com> for questions"):
+            self.assert_stops(doc_with(after_slices=["a paragraph that wraps", line]), line)
+
+    def test_a_raw_html_line_before_the_slices_stops(self):
+        self.assert_stops(doc_with(before_slices=["<!--", "Status: signed off", "-->"]), "<!--")
+
+    def test_a_raw_html_line_inside_an_accepted_fence_is_content(self):
+        for fence in (["```html", "<div>", "<!--", "## Punch list", "-->", "</div>", "```"],
+                      ["~~~~", "<pre>", "Status: an example", "</pre>", "~~~~"]):
+            kept, removed = kept_and_removed(doc_with(after_slices=fence))
+            self.assertEqual(removed, ALL_FIVE, fence)
+            self.assertIn("\n".join(fence) + "\n", kept)
+
+    def test_a_less_than_sign_mid_line_does_not_stop(self):
+        kept, removed = kept_and_removed(doc_with(after_slices=["the count stays < 3 and <div> is inline here",
+                                                                "Footprint note: see <path> later"]))
+        self.assertEqual(removed, ALL_FIVE)
+        self.assertIn("the count stays < 3 and <div> is inline here\n", kept)
+
+    def test_a_less_than_sign_followed_by_a_space_or_a_digit_or_another_sign_does_not_stop(self):
+        for line in ("< 3 turns", "<3 turns", "<= 3 turns", "<- back", "<<", "\u00a0<div> after a no-break space",
+                     "-<div> with no space after the dash"):
+            kept, removed = kept_and_removed(doc_with(after_slices=["", line, ""]))
+            self.assertEqual(removed, ALL_FIVE, repr(line))
+            self.assertIn(line + "\n", kept)
 
 
 class TheCleanDoc(unittest.TestCase):

@@ -15,8 +15,11 @@ shape the strict rule stops (A8, C1A4-1: check 4's lazy-continuation fence, bull
 indented in a list item; a fence in a block quote; a fence with one to three spaces of indent at top level,
 which check 3's fixture held as placed; an indented line inside a margin fence that could close it; an
 unclosed margin fence, after the slices or before them; a margin backtick fence whose info string holds a
-backtick) stops before any packet, naming its line; the same shapes in any other Markdown file of the
-commit never stop the run. `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
+backtick) stops before any packet, naming its line; so does every raw HTML line (A9, C1A5-1 and C1A5-2: a
+type 6 block ended by a Unicode-space line, a comment holding a heading or a label, `<pre>`, `<details>`, `<?`,
+`<!X`, `<![CDATA[`, a closing tag, a tag after a list marker, a `>` or a tab, a line opening with an inline
+placeholder or an autolink); the same shapes in any other Markdown file of the commit never stop the run.
+`TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
 import os
@@ -262,6 +265,22 @@ class TheClassGuard(unittest.TestCase):
          "  ```"),
         ("an unclosed margin fence", ["```text", "## Punch list"], "```text"),
         ("a backtick info string holding a backtick", ["```x`y", "text"], "```x`y"),
+        ("a raw HTML block ended by a no-break space line (C1A5-1)", ["<div>", "\u00a0", "```", ""], "<div>"),
+        ("a raw HTML block ended by a form feed line (C1A5-1)", ["<div>", "\x0c", "```", ""], "<div>"),
+        ("a comment holding a level 2 heading (C1A5-2)", ["<!--", "## Notes", "-->"], "<!--"),
+        ("a comment holding a Status: label (C1A5-2)", ["<!--", "Status: signed off", "-->"], "<!--"),
+        ("a pre block holding a heading", ["<pre>", "## Punch list", "</pre>"], "<pre>"),
+        ("a details block", ["<details>", "## Handoffs", "</details>"], "<details>"),
+        ("a processing instruction", ["<?x y ?>"], "<?x y ?>"),
+        ("a declaration", ["<!X y>"], "<!X y>"),
+        ("a CDATA section", ["<![CDATA[", "## Deviations", "]]>"], "<![CDATA["),
+        ("a closing tag", ["</div>"], "</div>"),
+        ("a tag after a list marker", ["- <div>", "## Discovered"], "- <div>"),
+        ("a tag after a block-quote marker", ["> <div>"], "> <div>"),
+        ("a tag after a tab", ["\t<div>"], "\t<div>"),
+        ("a line opening with an inline placeholder", ["text that wraps", "<path> is the counter's file"],
+         "<path> is the counter's file"),
+        ("a line opening with an autolink", ["<https://example.com/turnstile>"], "<https://example.com/turnstile>"),
     )
 
     def test_every_shape_the_strict_rule_stops_stops_before_any_packet_naming_its_line(self):

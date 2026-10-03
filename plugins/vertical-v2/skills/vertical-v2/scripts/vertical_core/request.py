@@ -10,11 +10,12 @@ its identity read and checked (`readers_link.py`).
 
 Every summons gets a FRESH copy (A4, class (a)): the first send and every retry alike, `request` reads the
 reviewed commit through `packet.Snapshot`, has `packet.build` decide the packet, cuts it into
-`summons/<call id>/` (a directory that must not exist yet), and, immediately before the request files are
-written, holds every cut to that function's own output file by file (`packet.check`: path, size, sha256)
-and to the fingerprint `scope` recorded (`packet.digest`). Any difference is refused (exit 5): the copies
-this command cut are removed and no request file is written. A reader's scratch, or anything planted in
-an earlier copy or in `scope`'s preview, never reaches a later summons.
+`summons/<call id>/` (a directory that must not exist yet, under a `summons` folder that is no link and lies
+inside the run directory, else a refusal before any copy is written, C1A5-3), and, immediately before the
+request files are written, holds every cut to that function's own output file by file (`packet.check`:
+path, size, sha256) and to the fingerprint `scope` recorded (`packet.digest`). Any difference is refused
+(exit 5): the copies this command cut are removed and no request file is written. A reader's scratch, or
+anything planted in an earlier copy or in `scope`'s preview, never reaches a later summons.
 
 `request --outside` releases nothing unless the local review is on record as `record-local` wrote it
 (A4, class (b)): the checkpoint at `recorded-local` AND the receipt (`record.local_receipt_problem`:
@@ -54,10 +55,30 @@ def _identity(ctx, run, args):
     return found, roster, ident
 
 
+def summons_problem(run):
+    """A sentence when the run directory's `summons` folder is a link, is not a folder, or resolves outside the
+    run directory (C1A5-3); None when it is absent or a real folder inside it."""
+    summons = common.path_of(run, "summons")
+    if os.path.islink(summons):
+        return ("the run directory's summons folder is a link, so a copy cut there would land wherever it points; "
+                "the run refuses and no copy was cut")
+    if not os.path.lexists(summons):
+        return None
+    top = os.path.realpath(run.run_dir).rstrip(os.sep) + os.sep
+    if not os.path.isdir(summons) or not os.path.realpath(summons).startswith(top):
+        return ("the run directory's summons entry is not a folder inside the run directory; the run refuses and "
+                "no copy was cut")
+    return None
+
+
 def fresh_copies(ctx, run, pairs):
     """Cut one fresh packet per (scope's packet, call id) from the reviewed commit, each held to the
     builder's own output and to scope's fingerprint. Returns ({call id: paths}, [problem]); on a problem
-    every copy cut here is removed."""
+    every copy cut here is removed. A `summons` folder that is a link, or that resolves outside the run
+    directory, is a problem before any copy is written (C1A5-3)."""
+    problem = summons_problem(run)
+    if problem:
+        return {}, [problem]
     gate = common.read(run, "gate.json")
     scope = common.read(run, "scope.json")
     snap = packet.Snapshot(common.workspace(run), gate["head"], gate["doc"])
@@ -106,7 +127,7 @@ def _local(ctx, args, run):
     pairs = [(p, "%s-local-%s" % (run.checkpoint["run_id"], p["lens"])) for p in planned]
     copies, problems = fresh_copies(ctx, run, pairs)
     if problems:
-        return _refuse(ctx, run, "a fresh copy does not hold what the packet builder decided; nothing was built: %s"
+        return _refuse(ctx, run, "a fresh copy was refused; nothing was built: %s"
                        % "; ".join(problems), problems=problems)
     calls = [_local_call(run, roster, local, p, copies[call_id], call_id, session_model) for p, call_id in pairs]
     common.write(run, "requests-local.json", {"readers": {"root": found["root"], "route": found["route"],
@@ -157,7 +178,7 @@ def _resend(ctx, args):
     call_id = "%s-2" % first[0]["call_id"]
     copies, problems = fresh_copies(ctx, run, [(planned, call_id)])
     if problems:
-        return _refuse(ctx, run, "a fresh copy does not hold what the packet builder decided; nothing was built: %s"
+        return _refuse(ctx, run, "a fresh copy was refused; nothing was built: %s"
                        % "; ".join(problems), problems=problems)
     call = _local_call(run, roster, local, planned, copies[call_id], call_id, common.station(run).get("session_model"))
     call["resend_of"] = {"call_id": first[0]["call_id"], "status": args.status}
@@ -222,7 +243,7 @@ def _outside(ctx, args):
     pairs = [(planned[row], "%s-%s" % (run.checkpoint["run_id"], row)) for row in wanted]
     copies, problems = fresh_copies(ctx, run, pairs)
     if problems:
-        return _refuse(ctx, run, "a fresh copy does not hold what the packet builder decided; nothing was built: %s"
+        return _refuse(ctx, run, "a fresh copy was refused; nothing was built: %s"
                        % "; ".join(problems), problems=problems)
     word = {"owner_word": {"rows": list(answer["rows"]), "words": answer["words"]}}
     calls = []

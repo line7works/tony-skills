@@ -103,6 +103,58 @@ class TheLocalRequests(_Request):
         self.assertIn("session_model", out["reason"])
 
 
+class TheSummonsFolder(_Request):
+    """C1A5-3: `request` refuses, before any copy is written, when the run directory's `summons` folder is a link
+    or resolves outside the run directory; the outside folder stays empty and no request file is written."""
+
+    def plant(self, run_dir):
+        outside = os.path.join(self.tmp, "OUTSIDE")
+        os.makedirs(outside)
+        summons = os.path.join(run_dir, "summons")
+        if os.path.isdir(summons) and not os.path.islink(summons):
+            os.rename(summons, os.path.join(run_dir, "summons-moved"))
+        os.symlink(outside, summons)
+        return outside
+
+    def assert_refused(self, code, out, err, outside):
+        self.assertEqual(code, 5, (out, err))
+        self.assertIn("summons", out["reason"])
+        self.assertIn("link", out["reason"])
+        self.assertEqual(os.listdir(outside), [])
+
+    def test_a_linked_summons_folder_refuses_the_local_requests_and_writes_nothing_outside(self):
+        drive, run_dir, ws, info = vlib.through_scope(self.tmp)
+        outside = self.plant(run_dir)
+        code, out, err = drive(["request", "--run-dir", run_dir])
+        self.assert_refused(code, out, err, outside)
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "requests-local.json")))
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "requests")))
+        self.assertEqual(vlib.load(run_dir, "checkpoint.json")["phase"], "scoped")
+
+    def test_a_linked_summons_folder_refuses_the_outside_requests_and_writes_nothing_outside(self):
+        drive, run_dir, ws, info = vlib.through_record_local(self.tmp)
+        outside = self.plant(run_dir)
+        code, out, err = drive(["request", "--run-dir", run_dir, "--outside"])
+        self.assert_refused(code, out, err, outside)
+        self.assertEqual(vlib.outside_files(run_dir), [])
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "requests-outside.json")))
+
+    def test_a_linked_summons_folder_refuses_a_resend(self):
+        drive, run_dir, ws, info = vlib.through_local_requests(self.tmp)
+        outside = self.plant(run_dir)
+        code, out, err = drive(["request", "--run-dir", run_dir, "--resend", "spec", "--status", "empty"])
+        self.assert_refused(code, out, err, outside)
+        self.assertEqual(vlib.load(run_dir, "requests-local.json")["resent"], [])
+
+    def test_a_summons_link_to_a_folder_inside_the_run_directory_is_refused_too(self):
+        drive, run_dir, ws, info = vlib.through_scope(self.tmp)
+        inside = os.path.join(run_dir, "elsewhere")
+        os.makedirs(inside)
+        os.symlink(inside, os.path.join(run_dir, "summons"))
+        code, out, err = drive(["request", "--run-dir", run_dir])
+        self.assert_refused(code, out, err, inside)
+
+
 class LocalBeforeOutside(_Request):
 
     def test_an_outside_request_before_record_local_is_refused_and_no_file_exists(self):

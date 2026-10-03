@@ -322,5 +322,40 @@ class TheLensesAndTheSheet(_Scope):
             self.assertIn("a reset never leaves a negative count", text)
 
 
+
+class ThePacketsFolder(_Scope):
+    """C1A5-4: a `packets` link planted before `scope` is removed as a link (its target untouched) and the
+    previews are cut inside the run directory; never a traceback."""
+
+    def test_a_linked_packets_folder_is_unlinked_and_scope_completes(self):
+        ws, info = vlib.make_repo(self.tmp, review_sheet=SHEET, records=True)
+        drive, run_dir = vlib.start(self.tmp, ws)
+        code, out, err = vlib.through_ask(drive, self.tmp, run_dir, rows=("gpt-astra",), words="local plus GPT")
+        self.assertEqual(code, 0, (out, err))
+        outside = os.path.join(self.tmp, "OUTSIDE")
+        testlib.write_text(os.path.join(outside, "keep.txt"), "keep\n")
+        os.symlink(outside, os.path.join(run_dir, "packets"))
+        code, out, err = drive(["scope", "--run-dir", run_dir])
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual(out["next"], "request")
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(sorted(os.listdir(outside)), ["keep.txt"])
+        self.assertEqual(testlib.read_text(os.path.join(outside, "keep.txt")), "keep\n")
+        packets = os.path.join(run_dir, "packets")
+        self.assertFalse(os.path.islink(packets))
+        self.assertTrue(os.path.isdir(packets))
+        for entry in vlib.load(run_dir, "scope.json")["packets"]:
+            self.assertTrue(os.path.realpath(entry["dir"]).startswith(os.path.realpath(run_dir) + os.sep), entry["dir"])
+        self.assertEqual(vlib.load(run_dir, "checkpoint.json")["phase"], "scoped")
+
+    def test_a_packets_file_in_place_of_the_folder_is_removed_and_scope_completes(self):
+        ws, info = vlib.make_repo(self.tmp, review_sheet=SHEET, records=True)
+        drive, run_dir = vlib.start(self.tmp, ws)
+        self.assertEqual(vlib.through_ask(drive, self.tmp, run_dir, rows=("gpt-astra",), words="local plus GPT")[0], 0)
+        testlib.write_text(os.path.join(run_dir, "packets"), "not a folder\n")
+        code, out, err = drive(["scope", "--run-dir", run_dir])
+        self.assertEqual(code, 0, (out, err))
+        self.assertTrue(os.path.isdir(os.path.join(run_dir, "packets")))
+
 if __name__ == "__main__":
     unittest.main()

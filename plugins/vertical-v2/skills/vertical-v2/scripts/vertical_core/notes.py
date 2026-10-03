@@ -17,16 +17,17 @@ a candidate until the first CERTAIN heading, which is a candidate too:
   after any block-quote and list-item markers are stripped, whatever its indentation, and whether or not a
   fence, a raw HTML block, a block quote, a list or a front matter block holds it;
 - a CERTAIN heading is an ATX heading at the left margin, outside every fence the strict rule accepts
-  (`fences.py`, the E15 lane contract A8), BEFORE the first fence line that rule does not accept (past it,
-  where a fence ends is not known, so no heading is certain and every heading-shaped line stays a candidate,
-  C1A4-1), with no line opening with `<` before it (a raw HTML block may hold it) and, when the file opens
+  (`fences.py`, the E15 lane contract A8), BEFORE the first line that rule does not place (a fence line it does
+  not accept, or a raw HTML line, A9: past it, where a fence or a raw HTML block ends is not known, so no
+  heading is certain and every heading-shaped line stays a candidate, C1A4-1), with no line opening with `<`
+  before it (a raw HTML block may hold it) and, when the file opens
   with a `---` line, after that block's closing `---` or `...` line (front matter, which the slice review
   also reads as a thematic break with a Setext heading above it: both readings are candidates here). A
   heading at the left margin before any such line can be held by nothing else: a list item's or a block
   quote's content is indented or marked, and an ATX heading is never a lazy line.
 
-A notes file is not the build doc: a fence line the strict rule does not accept never stops the run here; it
-only widens the reading.
+A notes file is not the build doc: a fence line the strict rule does not accept, or a raw HTML line, never
+stops the run here; it only widens the reading.
 
 CRLF and CR endings are line endings and a leading byte order mark is dropped.
 """

@@ -8,9 +8,9 @@ doc's `Status:` line; a disagreement is a stop naming both. The component's deri
 A3, C1A-2): a slice whose derived card differs is named, with both cards, in the verdict's Method line.
 A slice the log names nothing about falls back to its `Status:` line, and the result says so. The slices
 and their `Status:` lines are read with vertical-v2's own fence rule (the E15 lane contract A7 and A8,
-`fences.py`: strict plain code blocks), so a heading or a label inside a fence is never a slice or a card,
-and a doc holding any fence line the rule does not accept stops the gate (`doc-unreadable`, naming the line)
-before the ask. Zero slices,
+`fences.py`: strict plain code blocks, and no raw HTML lines, A9), so a heading or a label inside a fence is
+never a slice or a card, and a doc holding any fence line the rule does not accept, or any raw HTML line
+outside an accepted fence, stops the gate (`doc-unreadable`, naming the line) before the ask. Zero slices,
 or a slice with no `Status:` line, is malformed input and never passes, collapsed or not. A collapse
 comes only from `station.owner_words.collapse_gate` and passes short slices only.
 
@@ -59,7 +59,8 @@ def slices_of(text):
     `## Slice <name> <dash> <short>` heading (the build-doc form's slice pattern, `templates.BUILD["slice"]`)
     opens a slice, any other `## ` heading closes it, and the first `Status:` label inside it is its line. A
     heading or a label inside a fence is content, never a slice or a card. Any fence line the rule does not
-    accept raises spec.SpecUnreadable naming the line."""
+    accept, and any raw HTML line outside an accepted fence (A9: a label inside raw HTML is never read as a
+    card, because the doc stops), raises spec.SpecUnreadable naming the line."""
     lines = fences.split_lines(text)
     scan = fences.scan(lines)
     if scan.problems:
@@ -85,9 +86,10 @@ def recorded_base(text):
     """The `Base:` line of the build doc's header (before the first `## ` heading outside a fence), or None:
     {"line": the line as written, "commit": its value when it is 7 to 40 lowercase hex characters, else None}.
     The first such line outside a fence counts. Read with vertical-v2's own fence rule (the E15 lane contract
-    A7, send-back 2, and A8): a `Base:` or a `## ` line inside a fence is content. The handler reads the slices from the
-    same text first (`slices_of`), so a doc the reader cannot place has already stopped (`doc-unreadable`);
-    this function raises spec.SpecUnreadable too if it is ever reached with one."""
+    A7, send-back 2, and A8): a `Base:` or a `## ` line inside a fence is content; a raw HTML line (A9: a `Base:`
+    inside a comment) makes the doc unreadable. The handler reads the slices from the same text first
+    (`slices_of`), so a doc the reader cannot place has already stopped (`doc-unreadable`); this function
+    raises spec.SpecUnreadable too if it is ever reached with one."""
     lines = fences.split_lines(text)
     scan = fences.scan(lines)
     if scan.problems:

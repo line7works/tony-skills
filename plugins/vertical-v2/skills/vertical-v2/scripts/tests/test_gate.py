@@ -211,6 +211,59 @@ class TheFenceReading(_Gate):
             self.assert_unreadable_before_the_ask(fence_shape_doc(closer=True), "```x`y", records=records)
 
 
+def commented_label_doc():
+    """C1A5-2: in slice B, an HTML comment holding `Status: signed off` before the real `Status: built`; a reader
+    that takes lines inside raw HTML as structure reads B as signed off (the frozen importer reads the same line)."""
+    text = vlib.build_doc(slices=[("A", "the counter", "signed off"), ("B", "the spinner", None)])
+    old = "Depends on: nothing\n\n## Build assumptions"
+    assert text.count(old) == 1
+    new = "Depends on: nothing\n<!--\nStatus: signed off\n-->\nStatus: built\n\n## Build assumptions"
+    return text.replace(old, new, 1)
+
+
+def unicode_flip_doc(blank):
+    """C1A5-1, check 5's gate shape: `<div>`, a line of a Unicode space CommonMark does not count as blank, a margin
+    fence holding slice B's CommonMark-real `Status: built`, then a raw-HTML `Status: signed off`."""
+    text = vlib.build_doc(slices=[("A", "the counter", "signed off"), ("B", "the spinner", None)])
+    trick = "<div>\n%s\n```\n\nStatus: built\n<div>\n```\nStatus: signed off\n" % blank
+    old = "Depends on: nothing\n\n## Build assumptions"
+    assert text.count(old) == 1
+    return text.replace(old, "Depends on: nothing\n" + trick + "\n## Build assumptions", 1)
+
+
+class TheRawHtmlLines(_Gate):
+    """A9, C1A5-1 and C1A5-2: a raw HTML line anywhere outside an accepted fence stops the gate (`doc-unreadable`,
+    naming the line) before the ask, with and without a records log; never a pass on a label inside raw HTML."""
+
+    def assert_unreadable_before_the_ask(self, doc, first, records):
+        self.repos = getattr(self, "repos", 0) + 1
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=records, name="ws-%d" % self.repos)
+        code, out, err = self.gate(ws)
+        result = self.stopped(code, out, "doc-unreadable")
+        self.assertIn("line %d" % (doc.split("\n").index(first) + 1), result["reason"])
+        self.assertIn("raw HTML", result["reason"])
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir, "ask.json")))
+        self.assertEqual(vlib.load(self.run_dir, "checkpoint.json")["phase"], "done")
+        return result
+
+    def test_a_commented_signed_off_label_before_a_real_built_one_stops_with_no_records_log(self):
+        self.assert_unreadable_before_the_ask(commented_label_doc(), "<!--", records=False)
+
+    def test_a_commented_signed_off_label_before_a_real_built_one_stops_with_a_records_log(self):
+        """The frozen importer reads B `signed off` from the commented line; the gate never gets that far."""
+        self.assert_unreadable_before_the_ask(commented_label_doc(), "<!--", records=True)
+
+    def test_check_5s_unicode_space_flip_stops_the_gate_records_on_and_off(self):
+        for blank in ("\u00a0", "\u3000"):
+            for records in (False, True):
+                self.assert_unreadable_before_the_ask(unicode_flip_doc(blank), "<div>", records=records)
+
+    def test_slices_of_refuses_a_raw_html_line(self):
+        with self.assertRaises(specmod.SpecUnreadable) as caught:
+            gatemod.slices_of(commented_label_doc())
+        self.assertEqual(caught.exception.line, commented_label_doc().split("\n").index("<!--") + 1)
+
+
 class TheDocHunt(_Gate):
 
     def test_a_named_doc_is_taken(self):
@@ -373,6 +426,24 @@ class TheFencedBaseLine(_Gate):
         doc = vlib.build_doc(extra_header=["````", "Base: deadbeef"])
         result = self.stopped(*self.gate(ws)[:2], tag="doc-unreadable")
         self.assertIn("line %d" % (doc.split("\n").index("````") + 1), result["reason"])
+
+
+class TheCommentedBaseLine(_Gate):
+    """A9, C1A5-2: a `Base:` line inside an HTML comment was once the recorded base; now the comment's opening line
+    stops the gate (`doc-unreadable`) and `recorded_base` refuses the text."""
+
+    def test_a_commented_base_line_before_the_real_one_stops_doc_unreadable(self):
+        ws, info = vlib.make_repo(self.tmp)
+        first = testlib.git(ws, ["rev-list", "--max-parents=0", "HEAD"]).strip()
+        header = ["<!--", "Base: 1111111", "-->", "Base: %s" % first]
+        testlib.write_text(os.path.join(ws, vlib.DOC), vlib.build_doc(extra_header=header))
+        testlib.git(ws, ["commit", "-q", "-am", "a header with a commented base"])
+        doc = vlib.build_doc(extra_header=header)
+        result = self.stopped(*self.gate(ws)[:2], tag="doc-unreadable")
+        self.assertIn("line %d" % (doc.split("\n").index("<!--") + 1), result["reason"])
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir, "ask.json")))
+        with self.assertRaises(specmod.SpecUnreadable):
+            gatemod.recorded_base(doc)
 
 
 class TheDerivedCard(_Gate):
