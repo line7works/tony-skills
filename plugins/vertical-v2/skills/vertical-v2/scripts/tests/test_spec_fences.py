@@ -13,6 +13,10 @@ No raw HTML lines (A9, C1A5-1 and C1A5-2): any line outside an accepted fence wh
 any indent and any list-item or block-quote markers, are `<` followed by a letter, `/`, `!` or `?` stops the
 run with its line number too; the reader no longer tracks where a raw HTML block ends. A `<` line inside an
 accepted fence is content.
+
+Exact labels (A10, C1A6-1): a slice's `Status:` line and the header's `Base:` line are taken only when exact and
+the last line of their paragraph, one each; every reader of the build doc (the spec, the gate's slices, the
+recorded base) refuses any other such line naming it (TheLabelRule).
 """
 import os
 import unittest
@@ -21,22 +25,23 @@ import testlib
 import vlib
 
 testlib.add_scripts_to_path()
-from vertical_core import fences, spec  # noqa: E402
+from vertical_core import fences, gate as gatemod, spec  # noqa: E402
 
 D = vlib.D
 MARKERS = ("PUNCH-MARKER", "HANDOFF-MARKER", "ASSUMPTION-MARKER", "DEVIATION-MARKER", "DISCOVERED-MARKER",
-           "SLICE-STATUS")
+           "Status: signed off")
 
 
 def doc_with(before_slices=(), after_slices=()):
-    """A build doc whose slices carry SLICE-STATUS labels and whose five withheld sections carry markers, with
-    `before_slices` lines after the header and `after_slices` lines after the last slice."""
+    """A build doc whose slice carries an exact `Status: signed off` label (A10: a label with text after it stops
+    the run, so the label is its own marker) and whose five withheld sections carry markers, with `before_slices`
+    lines after the header and `after_slices` lines after the last slice."""
     lines = ["# Turnstile %s build plan (2026-09-20)" % D, "", "Intent: a counter.", "Constraints: none.",
              "Out of scope: a dashboard", ""]
     lines += list(before_slices)
     lines += ["", "## Slice A %s the counter" % D, "Goal: count.", "Requirements:", "- R1 counts",
               "Acceptance criteria:", "- AC1 adds one", "Footprint: src/turnstile.py", "Not in this slice: none",
-              "Depends on: nothing", "Status: signed off SLICE-STATUS-A", ""]
+              "Depends on: nothing", "Status: signed off", ""]
     lines += list(after_slices)
     lines += ["", "## Build assumptions", "- ASSUMPTION-MARKER", "## Deviations", "- DEVIATION-MARKER",
               "## Discovered", "- DISCOVERED-MARKER", "## Handoffs", "- HANDOFF-MARKER",
@@ -269,6 +274,128 @@ class TheRawHtmlRule(unittest.TestCase):
             kept, removed = kept_and_removed(doc_with(after_slices=["", line, ""]))
             self.assertEqual(removed, ALL_FIVE, repr(line))
             self.assertIn(line + "\n", kept)
+
+
+HIDING = (("an inline comment opened mid-line", ["Depends on: A <!--", "%s", "-->"]),
+          ("a link reference definition title in double quotes", ["", "[plan-note]: /plan \"", "%s", "\""]),
+          ("a link reference definition title in parentheses", ["", "[plan-note]: /plan (", "%s", ")"]),
+          ("an inline link title", ["see [the plan](/plan \"", "%s", "\")"]))
+
+
+def two_slices(tail_b, header=()):
+    """Slice A `signed off`, then slice B whose section ends with `tail_b` (its label lines), then the withheld
+    sections; `header` lines go after the header paragraph."""
+    lines = ["# Turnstile %s build plan (2026-09-20)" % D, "", "Intent: a counter.", "Out of scope: a dashboard"]
+    lines += list(header)
+    lines += ["", "## Slice A %s the counter" % D, "Goal: count.", "Depends on: nothing", "Status: signed off", "",
+              "## Slice B %s the spinner" % D, "Goal: spin.", "Depends on: A"]
+    lines += list(tail_b)
+    lines += ["", "## Punch list", "- PUNCH-MARKER", ""]
+    return "\n".join(lines)
+
+
+class TheLabelRule(unittest.TestCase):
+    """A10, C1A6-1: the exact-label rule, one statement in `fences.py`, read by every reader of the build doc: the
+    gate's slices (`slices_of`), the header's base (`recorded_base`) and the spec (`spec.clean`). Each refusal
+    names its line, and the same problem is the first `fences.read` reports."""
+
+    def assert_stops(self, text, number, what=None, readers=("slices", "base", "spec")):
+        calls = {"slices": gatemod.slices_of, "base": gatemod.recorded_base, "spec": spec.clean}
+        for name in readers:
+            with self.assertRaises(spec.SpecUnreadable) as caught:
+                calls[name](text)
+            self.assertEqual(caught.exception.line, number, (name, str(caught.exception)))
+            self.assertIn("line %d" % number, str(caught.exception))
+            if what is not None:
+                self.assertIn(what, caught.exception.what)
+        self.assertEqual(fences.read(text).problems[0][0], number)
+
+    def number(self, text, line, after="## Slice B %s the spinner" % D):
+        lines = text.split("\n")
+        return lines.index(line, lines.index(after) if after else 0) + 1
+
+    def test_check_6s_four_hiding_shapes_stop_every_reader(self):
+        for what, shape in HIDING:
+            for visible in ("Status: built", None):
+                tail = [line % "Status: signed off" if "%s" in line else line for line in shape]
+                text = two_slices(tail + ([visible] if visible else []))
+                with self.subTest(shape=what, visible=visible):
+                    self.assert_stops(text, self.number(text, "Status: signed off"), "Status:")
+
+    def test_check_6s_four_hiding_shapes_hold_no_base(self):
+        for what, shape in HIDING:
+            head = [line % "Base: 1111111" if "%s" in line else line for line in shape] + ["Base: 2222222"]
+            text = two_slices(["Status: signed off"], header=head)
+            with self.subTest(shape=what):
+                self.assert_stops(text, self.number(text, "Base: 1111111", after=None), "Base:")
+
+    def test_two_labels_stop_naming_both(self):
+        text = two_slices(["Status: built", "", "Status: signed off"])
+        first, second = self.number(text, "Status: built"), self.number(text, "Status: signed off")
+        self.assert_stops(text, second, "line %d" % first)
+        text = two_slices(["Status: signed off"], header=["Base: 1111111", "", "Base: 2222222"])
+        self.assert_stops(text, self.number(text, "Base: 2222222", after=None),
+                          "line %d" % self.number(text, "Base: 1111111", after=None))
+
+    def test_each_label_the_rule_does_not_take_stops(self):
+        for tail, line in ((["Status: signed off pending"], "Status: signed off pending"),
+                           (["Status: done"], "Status: done"),
+                           (["Status: Rejected"], "Status: Rejected"),
+                           (["Status: signed off with  conditions"], "Status: signed off with  conditions"),
+                           (["Status: signed off with conditions, pending"], "Status: signed off with conditions, pending"),
+                           (["Status: Signed off"], "Status: Signed off"),
+                           (["Status:\u00a0signed off"], "Status:\u00a0signed off"),
+                           (["Status:"], "Status:"),
+                           (["Status: signed off", "and more"], "Status: signed off"),
+                           (["Status: signed off", "---"], "Status: signed off"),
+                           (["Status: signed off", "==="], "Status: signed off"),
+                           (["Status: signed off", "\u00a0"], "Status: signed off"),
+                           (["Status: signed off", "\u3000"], "Status: signed off")):
+            text = two_slices(tail)
+            with self.subTest(tail=tail):
+                self.assert_stops(text, self.number(text, line))
+        for head, line in ((["Base: abc123"], "Base: abc123"), (["Base: ABCDEF1"], "Base: ABCDEF1"),
+                           (["Base: 1111111 the branch point"], "Base: 1111111 the branch point"),
+                           (["Base:\u00a01111111"], "Base:\u00a01111111"),
+                           (["Base: 1111111", "and more"], "Base: 1111111"),
+                           (["Base: 1111111", "---"], "Base: 1111111")):
+            text = two_slices(["Status: signed off"], header=head)
+            with self.subTest(head=head):
+                self.assert_stops(text, self.number(text, line, after=None))
+
+    def test_a_label_that_ends_its_paragraph_counts(self):
+        for tail, value in ((["Status: built"], "built"), (["Status: in progress", " \t"], "in progress"),
+                            (["Status: rejected"], "rejected"),
+                            (["Status: signed off with conditions \t"], "signed off with conditions"),
+                            (["Status: not started \t", "### a note", "text"], "not started"),
+                            (["Status: signed off", "```", "Status: built", "```"], "signed off"),
+                            (["Status: signed off", "## Notes"], "signed off")):
+            text = two_slices(tail)
+            with self.subTest(tail=tail):
+                self.assertEqual([s["status"] for s in gatemod.slices_of(text)], ["signed off", value])
+                spec.clean(text)
+
+    def test_a_label_at_the_docs_end_counts(self):
+        text = "\n".join(["# T", "", "## Slice A %s the counter" % D, "Goal: count.", "Status: built"])
+        for body in (text, text + "\n", text.replace("\n", "\r\n") + "\r\n"):
+            self.assertEqual([s["status"] for s in gatemod.slices_of(body)], ["built"])
+
+    def test_an_exact_base_that_ends_its_paragraph_is_the_base(self):
+        for head in (["Base: 1111111"], ["Base: %s \t" % ("a" * 40)], ["Base: 1111111", "## Slice X"],
+                     ["Base: 1111111", "```", "Base: 2222222", "```"]):
+            text = two_slices(["Status: signed off"], header=head)
+            with self.subTest(head=head):
+                self.assertEqual(gatemod.recorded_base(text)["commit"], head[0].split()[1])
+
+    def test_label_lines_outside_a_slice_and_base_lines_outside_the_header_are_not_labels(self):
+        """The rule reads `Status:` inside a slice's section and `Base:` in the header only, as the gate always
+        did; a `Status:` line elsewhere is still removed from the spec (M6)."""
+        text = two_slices(["Status: signed off", "", "Base: not a base here"],
+                          header=["Status: an earlier reviewer's note", "more of the note"])
+        self.assertEqual([s["status"] for s in gatemod.slices_of(text)], ["signed off", "signed off"])
+        self.assertIsNone(gatemod.recorded_base(text))
+        kept, removed = spec.clean(text)
+        self.assertNotIn("an earlier reviewer's note", kept)
 
 
 class TheCleanDoc(unittest.TestCase):

@@ -9,7 +9,9 @@ clean where the review looks (dirt touching the boundary or the build doc stops;
 listed and the review proceeds on HEAD). The base is v1's precedence: a `Base:` line the build doc
 records, then `git merge-base` with the default branch, then a stop that asks. Nothing is summoned and
 nothing is written outside the run directory by any of it. The slices and their `Status:` lines are read
-with vertical-v2's own fence reader (the E15 lane contract A7), never the frame's parse.
+with vertical-v2's own fence reader (the E15 lane contract A7), never the frame's parse, and under the exact
+label rule (A10, C1A6-1): a slice's one `Status:` label and the header's one `Base:` line are exact and end
+their paragraph, or the gate stops `doc-unreadable` naming the line (TheExactLabels, TheExactBaseLine).
 """
 import os
 import unittest
@@ -67,7 +69,7 @@ class TheSlices(_Gate):
         self.assertTrue(any("no log events" in note for note in gate["notes"]), gate["notes"])
 
     def test_each_short_state_stops_naming_the_slice_and_its_state(self):
-        for state in ("built", "signed off with conditions", "rejected", "not started"):
+        for state in ("built", "signed off with conditions", "rejected", "not started", "in progress"):
             doc = vlib.build_doc([("A", "the counter", "signed off"), ("B", "the spinner", state)])
             ws, info = vlib.make_repo(self.tmp, doc_text=doc, name="ws-" + state.replace(" ", "-"))
             code, out, err = self.gate(ws)
@@ -76,6 +78,24 @@ class TheSlices(_Gate):
             self.assertEqual(short, [{"name": "B", "state": state}], state)
             if state == "built":
                 self.assertIn("fresh signoff", result["reason"])
+
+    def test_a_rejected_or_conditional_label_stops_short_and_the_collapse_words_pass_it(self):
+        """A11: an exact label's value is one of six (A10's four plus `rejected` and `signed off with conditions`,
+        which the records component and the v2 stations write). Such a slice stops `gate-short` as it did before
+        A10, records off and on, and the owner's collapse words pass it exactly as before."""
+        for state in ("signed off with conditions", "rejected"):
+            doc = vlib.build_doc([("A", "the counter", "signed off"), ("B", "the spinner", state)])
+            for records in (False, True):
+                with self.subTest(state=state, records=records):
+                    ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=records,
+                                              name="ws-%s-%s" % (state.replace(" ", "-"), records))
+                    result = self.stopped(*self.gate(ws)[:2], tag="gate-short")
+                    self.assertEqual(result["station_result"]["gate"]["short"], [{"name": "B", "state": state}])
+                    self.assertIn("slice B (%s)" % state, result["reason"])
+                    code, out, err = self.gate(ws, owner_words={"collapse_gate": "run it anyway"})
+                    self.assertEqual(code, 0, (out, err))
+                    gate = vlib.load(self.run_dir, "gate.json")
+                    self.assertEqual(gate["collapse"], {"words": "run it anyway", "short": [{"name": "B", "state": state}]})
 
     def test_zero_slices_is_malformed(self):
         doc = vlib.build_doc([])
@@ -121,12 +141,14 @@ class TheSlices(_Gate):
 def fence_shape_doc(closer=False):
     """Slice B's real `Status:` line reads `built`, after a four-backtick fence holding a three-backtick line and a
     fenced literal `Status: signed off`, which the frame's parse (a toggle on every backtick line) reads as B's
-    label: the gate must never read B as signed off. With `closer`, the doc as check 3 wrote it: a backtick line
-    whose info string holds a backtick follows, which the strict rule (A8) stops on."""
+    label: the gate must never read B as signed off. With `closer`, the doc as check 3 wrote it, with one blank
+    line added after B's label (A10: a label followed by a line the fence rule refuses is not the last line of its
+    paragraph and would stop first): a backtick line whose info string holds a backtick follows, which the strict
+    rule (A8) stops on."""
     base = vlib.build_doc()
     old = "Depends on: nothing\nStatus: signed off\n\n## Build assumptions"
     new = ("Depends on: nothing\n````text\n```\nStatus: signed off\n````\nStatus: built\n%s\n"
-           "## Build assumptions" % ("```x`y\n" if closer else ""))
+           "## Build assumptions" % ("\n```x`y\n" if closer else ""))
     assert base.count(old) == 1
     return base.replace(old, new)
 
@@ -446,6 +468,205 @@ class TheCommentedBaseLine(_Gate):
             gatemod.recorded_base(doc)
 
 
+# A10, C1A6-1: the shapes CommonMark renders nothing of, each holding a label line inside one paragraph (check 6's
+# four): an inline comment opened mid-line, a link reference definition's title in double quotes and in parentheses
+# (after a blank line: a definition cannot interrupt a paragraph), and an inline link's title.
+HIDING = (
+    ("an inline comment opened mid-line", " <!--\n%s\n-->\n"),
+    ("a link reference definition title in double quotes", "\n\n[plan-note]: /plan \"\n%s\n\"\n"),
+    ("a link reference definition title in parentheses", "\n\n[plan-note]: /plan (\n%s\n)\n"),
+    ("an inline link title", " [see](/plan \"\n%s\n\")\n"),
+)
+SLICE_B = "## Slice B %s the spinner" % D
+
+
+def slice_b_doc(tail):
+    """Slice A `signed off`; slice B's section ends `Depends on: nothing` then `tail` (its label lines, as written)."""
+    text = vlib.build_doc(slices=[("A", "the counter", "signed off"), ("B", "the spinner", None)])
+    old = "Depends on: nothing\n\n## Build assumptions"
+    assert text.count(old) == 1
+    return text.replace(old, "Depends on: nothing" + tail + "\n## Build assumptions", 1)
+
+
+def hidden_label_doc(shape, visible="Status: built"):
+    """Check 6's C1A6-1 gate shape: a hidden `Status: signed off` in slice B, then (unless None) a visible label."""
+    return slice_b_doc(shape % "Status: signed off" + (visible + "\n" if visible else ""))
+
+
+def line_in_b(text, line):
+    """The 1-based number of the first `line` in slice B's section."""
+    lines = text.split("\n")
+    return lines.index(line, lines.index(SLICE_B)) + 1
+
+
+class TheExactLabels(_Gate):
+    """A10, C1A6-1: inside a slice's section a `Status:` line outside an accepted fence is the slice's label only
+    when it reads exactly `Status: ` and one of the four cards, with nothing after but spaces or tabs, and is the
+    last line of its paragraph; a slice holds at most one. Any other such line stops the gate (`doc-unreadable`,
+    naming the line, both lines for a second label) before the ask, with and without a records log."""
+
+    def assert_unreadable_before_the_ask(self, doc, number, records=False, also=None):
+        self.repos = getattr(self, "repos", 0) + 1
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=records, name="ws-%d" % self.repos)
+        code, out, err = self.gate(ws)
+        result = self.stopped(code, out, "doc-unreadable")
+        self.assertIn("line %d" % number, result["reason"])
+        if also is not None:
+            self.assertIn("line %d" % also, result["reason"])
+        self.assertIn("Status:", result["reason"])
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir, "ask.json")))
+        self.assertEqual(vlib.load(self.run_dir, "checkpoint.json")["phase"], "done")
+        with self.assertRaises(specmod.SpecUnreadable) as caught:
+            gatemod.slices_of(doc)
+        self.assertEqual(caught.exception.line, number)
+        return result
+
+    def assert_counts(self, doc, cards=("signed off", "signed off")):
+        self.repos = getattr(self, "repos", 0) + 1
+        ws, info = vlib.make_repo(self.tmp, doc_text=doc, name="ws-%d" % self.repos)
+        code, out, err = self.gate(ws)
+        self.assertEqual(code, 0, (out, err))
+        gate = vlib.load(self.run_dir, "gate.json")
+        self.assertEqual([s["status_line"] for s in gate["slices"]], list(cards))
+
+    def test_check_6s_four_hiding_shapes_stop_records_off_and_on(self):
+        for what, shape in HIDING:
+            doc = hidden_label_doc(shape)
+            for records in (False, True):
+                with self.subTest(shape=what, records=records):
+                    self.assert_unreadable_before_the_ask(doc, line_in_b(doc, "Status: signed off"), records=records)
+
+    def test_a_slice_whose_only_label_is_hidden_stops(self):
+        for what, shape in HIDING:
+            doc = hidden_label_doc(shape, visible=None)
+            for records in (False, True):
+                with self.subTest(shape=what, records=records):
+                    self.assert_unreadable_before_the_ask(doc, line_in_b(doc, "Status: signed off"), records=records)
+
+    def test_two_plain_visible_labels_in_one_slice_stop_naming_both(self):
+        doc = slice_b_doc("\nStatus: built\n\nStatus: signed off\n")
+        first, second = line_in_b(doc, "Status: built"), line_in_b(doc, "Status: signed off")
+        result = self.assert_unreadable_before_the_ask(doc, second, also=first)
+        self.assertIn("second", result["reason"])
+
+    def test_each_label_the_rule_does_not_take_stops(self):
+        for what, tail, line in (
+                ("trailing text", "\nStatus: signed off, pending a look\n", "Status: signed off, pending a look"),
+                ("an unknown value", "\nStatus: done\n", "Status: done"),
+                ("upper case", "\nStatus: Signed Off\n", "Status: Signed Off"),
+                ("all upper case", "\nStatus: SIGNED OFF\n", "Status: SIGNED OFF"),
+                ("a no-break space after the colon", "\nStatus: signed off\n", "Status: signed off"),
+                ("two spaces after the colon", "\nStatus:  signed off\n", "Status:  signed off"),
+                ("a tab after the colon", "\nStatus:\tsigned off\n", "Status:\tsigned off"),
+                ("a no-break space after the value", "\nStatus: signed off \n", "Status: signed off "),
+                ("a following paragraph line", "\nStatus: signed off\nthe reviewer agreed\n", "Status: signed off"),
+                ("a Setext underline of dashes", "\nStatus: signed off\n---\n", "Status: signed off"),
+                ("a Setext underline of equals signs", "\nStatus: signed off\n===\n", "Status: signed off"),
+                ("a next line of a no-break space only", "\nStatus: signed off\n \n", "Status: signed off"),
+                ("a next line of a form feed only", "\nStatus: signed off\n\x0c\n", "Status: signed off"),
+                ("a next line holding a closing quote", "\nStatus: signed off\n\"\n", "Status: signed off")):
+            doc = slice_b_doc(tail)
+            with self.subTest(label=what):
+                self.assert_unreadable_before_the_ask(doc, line_in_b(doc, line))
+
+    def test_a_label_followed_by_a_blank_line_counts(self):
+        self.assert_counts(slice_b_doc("\nStatus: signed off\n"))
+        self.assert_counts(slice_b_doc("\nStatus: signed off \t\n \t\n"))
+
+    def test_a_label_followed_by_a_heading_counts(self):
+        doc = vlib.build_doc().replace("Status: signed off\n\n## Slice B", "Status: signed off\n## Slice B", 1)
+        self.assertIn("Status: signed off\n## Slice B", doc)
+        self.assert_counts(doc)
+        self.assert_counts(slice_b_doc("\nStatus: signed off\n### a note under the slice\nsome text\n"))
+
+    def test_a_label_followed_by_a_fence_counts(self):
+        self.assert_counts(slice_b_doc("\nStatus: signed off\n```text\nan example\n```\n"))
+        self.assert_counts(slice_b_doc("\nStatus: signed off\n~~~\nStatus: built\n~~~\n"))
+
+    def test_a_label_at_the_docs_end_counts(self):
+        whole = vlib.build_doc()
+        cut = whole[:whole.index("\n\n## Build assumptions")]
+        self.assertTrue(cut.endswith("Status: signed off"))
+        self.assert_counts(cut + "\n")
+        self.assert_counts(cut)
+
+    def test_each_value_the_rule_takes_is_read(self):
+        for value in ("not started", "in progress", "built", "rejected", "signed off with conditions", "signed off"):
+            self.assertEqual(gatemod.slices_of(slice_b_doc("\nStatus: %s\n" % value))[1]["status"], value)
+
+
+def hidden_base_header(shape, hidden, visible):
+    """The header's `Out of scope` paragraph continued by `shape` holding `Base: <hidden>`, then `Base: <visible>`."""
+    return vlib.build_doc().replace("the owner declined it for the first version",
+                                    "the owner declined it for the first version" + shape % ("Base: %s" % hidden)
+                                    + "Base: %s" % visible, 1)
+
+
+class TheExactBaseLine(_Gate):
+    """A10, C1A6-1: in the header a `Base:` line is the recorded base only when it reads exactly `Base: ` and 7 to 40
+    lower-case hex digits, with nothing after but spaces or tabs, and is the last line of its paragraph; the header
+    holds at most one. Any other `Base:` line there stops the gate (`doc-unreadable`, naming the line) before the
+    ask, and the owner's base never clears it."""
+
+    def commit_doc(self, ws, doc):
+        testlib.write_text(os.path.join(ws, vlib.DOC), doc)
+        testlib.git(ws, ["commit", "-q", "-am", "the header's base"])
+
+    def assert_unreadable(self, doc, line, also=None, **station):
+        self.repos = getattr(self, "repos", 0) + 1
+        ws, info = vlib.make_repo(self.tmp, name="ws-%d" % self.repos)
+        self.commit_doc(ws, doc)
+        result = self.stopped(*self.gate(ws, **station)[:2], tag="doc-unreadable")
+        number = doc.split("\n").index(line) + 1
+        self.assertIn("line %d" % number, result["reason"])
+        if also is not None:
+            self.assertIn("line %d" % (doc.split("\n").index(also) + 1), result["reason"])
+        self.assertIn("Base:", result["reason"])
+        self.assertFalse(os.path.exists(os.path.join(self.run_dir, "ask.json")))
+        with self.assertRaises(specmod.SpecUnreadable) as caught:
+            gatemod.recorded_base(doc)
+        self.assertEqual(caught.exception.line, number)
+        return result
+
+    def test_check_6s_four_hiding_shapes_never_give_the_base(self):
+        ws0, info0 = vlib.make_repo(self.tmp, name="probe")
+        for what, shape in HIDING:
+            with self.subTest(shape=what):
+                doc = hidden_base_header(shape, info0["base"], "2222222")
+                self.assert_unreadable(doc, "Base: %s" % info0["base"])
+
+    def test_two_base_lines_stop_naming_both(self):
+        ws0, info0 = vlib.make_repo(self.tmp, name="probe")
+        doc = vlib.build_doc(base_line="Base: %s" % info0["base"], extra_header=["", "Base: %s" % info0["base"][:12]])
+        result = self.assert_unreadable(doc, "Base: %s" % info0["base"][:12], also="Base: %s" % info0["base"])
+        self.assertIn("second", result["reason"])
+
+    def test_a_short_or_upper_case_sha_stops(self):
+        ws0, info0 = vlib.make_repo(self.tmp, name="probe")
+        for value in (info0["base"][:6], info0["base"].upper(), info0["base"][:7].upper(), info0["base"] + "0",
+                      "main", "HEAD", "%s trailing" % info0["base"], " " + info0["base"]):
+            with self.subTest(value=value):
+                self.assert_unreadable(vlib.build_doc(base_line="Base: %s" % value), "Base: %s" % value)
+
+    def test_the_owners_base_never_clears_a_base_line_the_rule_refuses(self):
+        ws0, info0 = vlib.make_repo(self.tmp, name="probe")
+        self.assert_unreadable(vlib.build_doc(base_line="Base: main"), "Base: main",
+                               owner_words={"base": {"commit": info0["base"], "words": "from the first commit"}})
+
+    def test_a_base_line_followed_by_a_paragraph_line_stops(self):
+        ws0, info0 = vlib.make_repo(self.tmp, name="probe")
+        line = "Base: %s" % info0["base"]
+        self.assert_unreadable(vlib.build_doc(base_line=line, extra_header=["the base above is the branch point"]), line)
+
+    def test_an_exact_base_line_with_trailing_spaces_and_tabs_counts(self):
+        ws, info = vlib.make_repo(self.tmp)
+        self.commit_doc(ws, vlib.build_doc(base_line="Base: %s \t" % info["base"]))
+        code, out, err = self.gate(ws)
+        self.assertEqual(code, 0, (out, err))
+        base = vlib.load(self.run_dir, "gate.json")["base"]
+        self.assertEqual((base["commit"], base["how"]), (info["base"], "doc"))
+
+
 class TheDerivedCard(_Gate):
     """C1A-2, the owner's ruling in A3: the gate compares the observed card with the `Status:` line only; a
     derived card that differs (an open finding in the log behind a signed card) does not stop the run."""
@@ -473,8 +694,9 @@ class TheDerivedCard(_Gate):
 
 
 class TheRecordedBaseLine(_Gate):
-    """C1A-7: a recorded `Base:` is 7 to 40 lowercase hex, else a stop naming the line; a recorded base equal
-    to HEAD (an empty boundary) is a stop that says so."""
+    """C1A-7 as A10 reads it: a recorded `Base:` is exactly 7 to 40 lowercase hex, else the label rule stops the
+    gate (`doc-unreadable`) naming the line; a recorded base equal to HEAD (an empty boundary) is a stop that says
+    so (`base-unresolved`)."""
 
     def recorded(self, value, commit=True):
         ws, info = vlib.make_repo(self.tmp, name="ws-%d" % (getattr(self, "n", 0)))
@@ -487,18 +709,19 @@ class TheRecordedBaseLine(_Gate):
 
     def test_a_branch_name_on_the_base_line_stops_naming_the_line(self):
         ws = self.recorded("main")
-        result = self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
-        self.assertIn("Base: main", result["reason"])
+        result = self.stopped(*self.gate(ws)[:2], tag="doc-unreadable")
+        self.assertIn("line %d" % (vlib.build_doc(base_line="Base: main").split("\n").index("Base: main") + 1),
+                      result["reason"])
         self.assertIn("hex", result["reason"])
 
     def test_head_on_the_base_line_stops_naming_the_line(self):
         ws = self.recorded("HEAD")
-        result = self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
-        self.assertIn("Base: HEAD", result["reason"])
+        result = self.stopped(*self.gate(ws)[:2], tag="doc-unreadable")
+        self.assertIn("Base:", result["reason"])
 
     def test_upper_case_hex_stops(self):
         ws = self.recorded(lambda w: testlib.git(w, ["rev-parse", "HEAD~1"]).strip().upper())
-        self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
+        self.stopped(*self.gate(ws)[:2], tag="doc-unreadable")
 
     def test_a_recorded_base_equal_to_head_is_a_stop_that_says_the_boundary_is_empty(self):
         ws = self.recorded(lambda w: testlib.git(w, ["rev-parse", "HEAD"]).strip(), commit=False)
@@ -509,35 +732,30 @@ class TheRecordedBaseLine(_Gate):
 
 
 class TheOwnersBaseOverARecordedStop(_Gate):
-    """C1A2-3 and C1A2-4: a `Base:` line that stops is cleared by the owner's base on a fresh run, and an owner's
-    base equal to HEAD stops (an empty boundary) wherever it is taken."""
+    """C1A2-3 and C1A2-4 as A10 reads them: an exact `Base:` line that cannot be taken (it resolves to nothing or
+    names HEAD) is cleared by the owner's base on a fresh run; a `Base:` line the label rule refuses is never
+    cleared (`doc-unreadable`, TheExactBaseLine); an owner's base equal to HEAD stops (an empty boundary) wherever
+    it is taken."""
 
     OWNER = "from the first commit, the owner said"
     recorded = TheRecordedBaseLine.recorded
 
-    def test_the_owners_base_clears_a_non_hex_base_line_and_both_are_named(self):
-        ws = self.recorded("main")
+    def test_the_owners_base_clears_an_unresolvable_base_line_and_both_are_named(self):
+        ws = self.recorded("deadbeef")
         first = testlib.git(ws, ["rev-list", "--max-parents=0", "HEAD"]).strip()
         code, out, err = self.gate(ws, owner_words={"base": {"commit": first, "words": self.OWNER}})
         self.assertEqual(code, 0, (out, err))
         base = vlib.load(self.run_dir, "gate.json")["base"]
         self.assertEqual((base["commit"], base["how"], base["words"]), (first, "owner", self.OWNER))
-        self.assertIn("Base: main", base["field"])
-
-    def test_the_owners_base_clears_an_unresolvable_base_line(self):
-        ws = self.recorded("deadbeef")
-        first = testlib.git(ws, ["rev-list", "--max-parents=0", "HEAD"]).strip()
-        code, out, err = self.gate(ws, owner_words={"base": {"commit": first, "words": self.OWNER}})
-        self.assertEqual(code, 0, (out, err))
-        self.assertEqual(vlib.load(self.run_dir, "gate.json")["base"]["how"], "owner")
+        self.assertIn("Base: deadbeef", base["field"])
 
     def test_a_base_line_stop_with_no_owners_base_names_where_his_answer_goes(self):
-        ws = self.recorded("main")
+        ws = self.recorded("deadbeef")
         result = self.stopped(*self.gate(ws)[:2], tag="base-unresolved")
         self.assertIn("station.owner_words.base", result["reason"])
 
     def test_an_owners_base_equal_to_head_over_a_base_line_stops(self):
-        ws = self.recorded("main")
+        ws = self.recorded("deadbeef")
         head = testlib.git(ws, ["rev-parse", "HEAD"]).strip()
         result = self.stopped(*self.gate(ws, owner_words={"base": {"commit": head, "words": self.OWNER}})[:2],
                               tag="base-unresolved")

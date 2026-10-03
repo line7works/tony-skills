@@ -5,8 +5,9 @@ records removed.
 What is fenced is decided by vertical-v2's one fence rule, strict plain code blocks (`fences.py`, A8: a fence
 opens and closes at column 0, outside any list item or block quote), never by the frame's `templates.parse`
 (frozen in E15, whose toggle a longer or an unclosed fence defeats, C1A3-1). Any fence line the rule does not
-accept, and any raw HTML line outside an accepted fence (A9, C1A5-1 and C1A5-2: a line opening, after any indent
-and container markers, with `<` and a letter, `/`, `!` or `?`), raises SpecUnreadable naming the line, so the
+accept, any raw HTML line outside an accepted fence (A9, C1A5-1 and C1A5-2: a line opening, after any indent
+and container markers, with `<` and a letter, `/`, `!` or `?`), and any slice `Status:` line or header `Base:`
+line the label rule does not take (A10, C1A6-1: `fences.read`) raises SpecUnreadable naming the line, so the
 run stops (`doc-unreadable`) before any packet is built.
 Outside fences, removed:
 
@@ -33,19 +34,20 @@ WITHHELD = {"punch list": "## Punch list", "handoffs": "## Handoffs", "build ass
 LEDGER = ("## Punch list", "## Handoffs")
 HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*$")
 CLOSING = re.compile(r"(?:^|[ \t]+)#+$")
-LABEL = "Status:"
+LABEL = fences.STATUS_LABEL
 STOP_TAG = "doc-unreadable"
 
 
 class SpecUnreadable(driver.Usage):
-    """A build doc holding a line this reader cannot place (a fence line the fence rule does not accept, or a raw
-    HTML line): the run stops before any packet is built."""
+    """A build doc holding a line this reader cannot place (a fence line the fence rule does not accept, a raw
+    HTML line, or a label line the label rule does not take): the run stops before any ask, request or packet."""
 
     def __init__(self, line, what):
-        driver.Usage.__init__(self, "the build doc's line %d: %s; its ledger cannot be told from content there, so "
-                                    "no packet was built: vertical-v2 reads only plain code blocks whose fences open "
-                                    "and close at the left margin, outside any list item or block quote, and no raw "
-                                    "HTML line; the plan's author edits the doc and commits" % (line, what))
+        driver.Usage.__init__(self, "the build doc's line %d: %s; the doc cannot be read cleanly there, so nothing "
+                                    "was taken from it and no packet was built: vertical-v2 reads only plain code "
+                                    "blocks whose fences open and close at the left margin, outside any list item "
+                                    "or block quote, no raw HTML line, and only exact Status: and Base: labels that "
+                                    "end their paragraph; the plan's author edits the doc and commits" % (line, what))
         self.line, self.what = line, what
 
 
@@ -68,12 +70,12 @@ def withheld_name(line):
 
 def clean(text):
     """(the spec's text, [{"what", "lines": [first, last]}]) for one build doc's text; SpecUnreadable when a
-    fence is unclosed or a line cannot be placed (a fence line the rule does not accept, a raw HTML line)."""
-    lines = fences.split_lines(text)
-    scan = fences.scan(lines)
-    if scan.problems:
-        raise SpecUnreadable(*scan.problems[0])
-    fenced = scan.fenced
+    fence is unclosed or a line cannot be placed (a fence line the rule does not accept, a raw HTML line, a
+    label line the label rule does not take: `fences.read`)."""
+    doc = fences.read(text)
+    if doc.problems:
+        raise SpecUnreadable(*doc.problems[0])
+    lines, fenced = doc.lines, doc.fenced
     top = []
     for number, raw in enumerate(lines, 1):
         if number in fenced:

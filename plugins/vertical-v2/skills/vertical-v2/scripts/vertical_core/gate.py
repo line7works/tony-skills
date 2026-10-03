@@ -7,24 +7,27 @@ doc's `Status:` line; a disagreement is a stop naming both. The component's deri
 (`card_derived`) is recorded beside it and never stops the gate (the owner's ruling, E15 lane contract
 A3, C1A-2): a slice whose derived card differs is named, with both cards, in the verdict's Method line.
 A slice the log names nothing about falls back to its `Status:` line, and the result says so. The slices
-and their `Status:` lines are read with vertical-v2's own fence rule (the E15 lane contract A7 and A8,
-`fences.py`: strict plain code blocks, and no raw HTML lines, A9), so a heading or a label inside a fence is
-never a slice or a card, and a doc holding any fence line the rule does not accept, or any raw HTML line
-outside an accepted fence, stops the gate (`doc-unreadable`, naming the line) before the ask. Zero slices,
-or a slice with no `Status:` line, is malformed input and never passes, collapsed or not. A collapse
+and their `Status:` lines are read with vertical-v2's own reading rule (the E15 lane contract A7 and A8,
+`fences.py`: strict plain code blocks, no raw HTML lines, A9, and exact labels, A10), so a heading or a label
+inside a fence is never a slice or a card, and a doc holding any fence line the rule does not accept, any raw
+HTML line outside an accepted fence, or any `Status:` line in a slice or `Base:` line in the header that is not
+exact and the last line of its paragraph (or is a second one), stops the gate (`doc-unreadable`, naming the
+line) before the ask. Zero slices, or a slice with no `Status:` line, is malformed input and never passes,
+collapsed or not. A collapse
 comes only from `station.owner_words.collapse_gate` and passes short slices only.
 
 The preconditions run here, before the ask: the workspace is a git work tree root; the base is found
 (a `Base:` header line the build doc records, then `git merge-base` with the default branch, then the
-owner's base from the input, else a stop that asks; a recorded `Base:` that is not 7 to 40 lowercase hex,
-resolves to nothing or names HEAD itself stops naming the line, unless the owner's base in the input
-clears it (C1A2-3), and an owner's base that names HEAD itself stops, C1A2-4); the boundary is `git diff --name-status
+owner's base from the input, else a stop that asks; a `Base:` line the label rule refuses (A10: not exactly 7
+to 40 lowercase hex, text after it, not the last line of its paragraph, a second one) has already stopped the
+gate `doc-unreadable`; an exact recorded `Base:` that resolves to nothing or names HEAD itself stops naming the
+line, unless the owner's base in the input clears it (C1A2-3), and an owner's base that names HEAD itself
+stops, C1A2-4); the boundary is `git diff --name-status
 <base>..HEAD`; dirt (`git status --porcelain`) touching a boundary file or the build doc stops unless
 the owner's `committed_only` words are in the input; dirt elsewhere is listed and the review proceeds
 on HEAD. Nothing is read from a v1 file and nothing is written outside the run directory.
 """
 import os
-import re
 
 from station_core import driver, hunt as huntmod, records_link, templates
 
@@ -39,8 +42,6 @@ HUNTS = {
          "tier": 3},
     ],
 }
-BASE_LINE = re.compile(r"^Base: ([0-9a-f]{7,40})\s*$")
-BASE_LABEL = "Base:"
 
 
 def _named(run, path):
@@ -53,57 +54,36 @@ def _named(run, path):
     return os.path.relpath(real, ws)
 
 
+def read(text):
+    """The build doc read whole with vertical-v2's one reading rule (`fences.read`: strict plain code blocks, A8; no
+    raw HTML lines, A9; exact labels, A10), or spec.SpecUnreadable naming the first line the rule refuses."""
+    doc = fences.read(text)
+    if doc.problems:
+        raise specmod.SpecUnreadable(*doc.problems[0])
+    return doc
+
+
 def slices_of(text):
-    """[(name, short, status line or None, line number)] in document order, read with vertical-v2's own fence
-    rule (`fences.py`, the E15 lane contract A7 and A8; never the frame's parse): outside fences, a
+    """[{"name", "short", "status", "line", "status_at"}] in document order, read with vertical-v2's own reading
+    rule (`fences.py`, the E15 lane contract A7, A8, A9 and A10; never the frame's parse): outside fences, a
     `## Slice <name> <dash> <short>` heading (the build-doc form's slice pattern, `templates.BUILD["slice"]`)
-    opens a slice, any other `## ` heading closes it, and the first `Status:` label inside it is its line. A
-    heading or a label inside a fence is content, never a slice or a card. Any fence line the rule does not
-    accept, and any raw HTML line outside an accepted fence (A9: a label inside raw HTML is never read as a
-    card, because the doc stops), raises spec.SpecUnreadable naming the line."""
-    lines = fences.split_lines(text)
-    scan = fences.scan(lines)
-    if scan.problems:
-        raise specmod.SpecUnreadable(*scan.problems[0])
-    out = []
-    current = None
-    for number, raw in enumerate(lines, 1):
-        if number in scan.fenced:
-            continue
-        line = fences.bare(raw, number)
-        if line.startswith("## "):
-            match = templates.BUILD["slice"].match(line)
-            current = {"name": match.group(1), "short": match.group(2), "status": None, "line": number} if match else None
-            if current is not None:
-                out.append(current)
-        elif line.startswith(specmod.LABEL) and current is not None and current["status"] is None:
-            current["status"] = line[len(specmod.LABEL):].strip()
-            current["status_at"] = number
-    return out
+    opens a slice, any other `## ` heading closes it, and the slice's one exact `Status:` label inside it is its
+    line (A10: exact, the last line of its paragraph, at most one). A heading or a label inside a fence is
+    content, never a slice or a card. Any fence line the rule does not accept, any raw HTML line outside an
+    accepted fence, and any `Status:` or header `Base:` line the label rule does not take raises
+    spec.SpecUnreadable naming the line (both lines for a second label)."""
+    return read(text).slices
 
 
 def recorded_base(text):
     """The `Base:` line of the build doc's header (before the first `## ` heading outside a fence), or None:
-    {"line": the line as written, "commit": its value when it is 7 to 40 lowercase hex characters, else None}.
-    The first such line outside a fence counts. Read with vertical-v2's own fence rule (the E15 lane contract
-    A7, send-back 2, and A8): a `Base:` or a `## ` line inside a fence is content; a raw HTML line (A9: a `Base:`
-    inside a comment) makes the doc unreadable. The handler reads the slices from the same text first
-    (`slices_of`), so a doc the reader cannot place has already stopped (`doc-unreadable`); this function
-    raises spec.SpecUnreadable too if it is ever reached with one."""
-    lines = fences.split_lines(text)
-    scan = fences.scan(lines)
-    if scan.problems:
-        raise specmod.SpecUnreadable(*scan.problems[0])
-    for number, raw in enumerate(lines, 1):
-        if number in scan.fenced:
-            continue
-        line = fences.bare(raw, number)
-        if line.startswith("## "):
-            return None
-        if line.startswith(BASE_LABEL):
-            match = BASE_LINE.match(line)
-            return {"line": line.strip(), "commit": match.group(1) if match else None}
-    return None
+    {"line": the line as written, "commit": its 7 to 40 lowercase hex value}. Under the label rule (A10) the
+    header holds at most one, exact and the last line of its paragraph; any other `Base:` line there, a fence
+    line the rule does not accept or a raw HTML line raises spec.SpecUnreadable naming the line, so a wrong
+    value is never a base and the owner's base never clears it. A `Base:` or a `## ` line inside a fence is
+    content. The handler reads the slices from the same text first (`slices_of`, the same reading), so a doc
+    the reader cannot place has already stopped (`doc-unreadable`)."""
+    return read(text).base
 
 
 def _cards(run, ctx, doc, slices, records_root):
@@ -254,17 +234,15 @@ def _owner(ws, given):
 
 def _base(run, ctx, ws, text, words, selection, gate):
     """v1's precedence: the doc's `Base:` line, then the merge base with the default branch, then the owner's
-    base. A `Base:` line that stops is cleared by the owner's base on a fresh run (C1A2-3), and an owner's
-    base that names HEAD itself stops wherever it is taken (C1A2-4)."""
+    base. An exact `Base:` line that cannot be taken is cleared by the owner's base on a fresh run (C1A2-3), and
+    an owner's base that names HEAD itself stops wherever it is taken (C1A2-4). A `Base:` line the label rule
+    refuses never reaches here (A10: the gate stopped `doc-unreadable`)."""
     given = words.get("base")
     recorded = recorded_base(text)
     if recorded is not None:
         stop = None
-        commit = gitio.commit_of(ws, recorded["commit"]) if recorded["commit"] else None
-        if recorded["commit"] is None:
-            stop = ("the build doc's base line %r is not a commit written as 7 to 40 lowercase hex characters: ask the "
-                    "owner for the base and never guess" % recorded["line"])
-        elif commit is None:
+        commit = gitio.commit_of(ws, recorded["commit"])
+        if commit is None:
             stop = ("the build doc records the base %r on its Base: line, and it resolves to no commit here: ask the "
                     "owner for the base and never guess" % recorded["line"])
         elif commit == gitio.head(ws):

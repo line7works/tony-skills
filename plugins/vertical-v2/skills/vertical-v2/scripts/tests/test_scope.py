@@ -10,6 +10,9 @@ withheld list naming what was kept back.
 """
 import json
 import os
+import stat
+import subprocess
+import sys
 import unittest
 
 import testlib
@@ -356,6 +359,29 @@ class ThePacketsFolder(_Scope):
         code, out, err = drive(["scope", "--run-dir", run_dir])
         self.assertEqual(code, 0, (out, err))
         self.assertTrue(os.path.isdir(os.path.join(run_dir, "packets")))
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "named pipes need os.mkfifo")
+    def test_a_named_pipe_in_place_of_the_folder_is_removed_unopened_and_scope_completes(self):
+        """C1A6-2: a `packets` entry that is not a real folder (here a named pipe) is removed with `os.unlink`,
+        never opened. The run is guarded by a timeout: opening the pipe would block for ever."""
+        ws, info = vlib.make_repo(self.tmp, review_sheet=SHEET, records=True)
+        drive, run_dir = vlib.start(self.tmp, ws)
+        self.assertEqual(vlib.through_ask(drive, self.tmp, run_dir, rows=("gpt-astra",), words="local plus GPT")[0], 0)
+        packets = os.path.join(run_dir, "packets")
+        os.mkfifo(packets)
+        self.assertTrue(stat.S_ISFIFO(os.lstat(packets).st_mode))
+        try:
+            proc = subprocess.run([sys.executable, testlib.DRIVER, "scope", "--run-dir", run_dir], cwd=self.tmp,
+                                  env=drive.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        except subprocess.TimeoutExpired:
+            self.fail("scope blocked on the named pipe at packets (it opened it) and was killed after 120 s")
+        out = json.loads(proc.stdout.decode("utf-8")) if proc.stdout.strip() else None
+        self.assertEqual(proc.returncode, 0, (out, proc.stderr.decode("utf-8", "replace")[-800:]))
+        self.assertEqual(out["next"], "request")
+        self.assertNotIn("Traceback", proc.stderr.decode("utf-8", "replace"))
+        self.assertTrue(os.path.isdir(packets))
+        self.assertFalse(stat.S_ISFIFO(os.lstat(packets).st_mode))
+        self.assertEqual(vlib.load(run_dir, "checkpoint.json")["phase"], "scoped")
 
 if __name__ == "__main__":
     unittest.main()

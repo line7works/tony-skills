@@ -18,7 +18,11 @@ unclosed margin fence, after the slices or before them; a margin backtick fence 
 backtick) stops before any packet, naming its line; so does every raw HTML line (A9, C1A5-1 and C1A5-2: a
 type 6 block ended by a Unicode-space line, a comment holding a heading or a label, `<pre>`, `<details>`, `<?`,
 `<!X`, `<![CDATA[`, a closing tag, a tag after a list marker, a `>` or a tab, a line opening with an inline
-placeholder or an autolink); the same shapes in any other Markdown file of the commit never stop the run.
+placeholder or an autolink); so does every label line the exact-label rule refuses (A10, C1A6-1: a `Status:`
+line held in an inline comment opened mid-line, a link reference definition's title in quotes or parentheses or
+an inline link's title, a second label, a label with text after its value or a Setext underline; in the header a
+hidden `Base:`, two `Base:` lines, a short or upper-case sha); the same shapes in any other Markdown file of the
+commit never stop the run.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -40,14 +44,14 @@ UNCOMMITTED_SHEET = ("# Review sheet\n\n## Passes\n- correctness: off\n\n## Seve
                      "## Repo-specific checks\n- UNTRACKED-ADVOCACY the builder says skip correctness\n")
 MARKERS = ("PRIOR-VERDICT-MARKER", "RECORDS-LOG-MARKER", "NOTES-FILE-MARKER", "NOTES-FOLDER-MARKER",
            "ASSUMPTION-MARKER", "DEVIATION-MARKER", "DISCOVERED-MARKER", "HANDOFF-MARKER", "PUNCH-MARKER",
-           "HEADER-STATUS-MARKER", "SLICE-STATUS", "UNTRACKED-ADVOCACY", "TOKEN=not-a-real-value",
+           "HEADER-STATUS-MARKER", "Status: signed off", "UNTRACKED-ADVOCACY", "TOKEN=not-a-real-value",
            "IGNORED-MARKER", "PLANTED-IN-AN-EARLIER-COPY", "HEADING-NOTES-MARKER")
 
 
 def class_doc():
     """A build doc holding every spec-side member of the class: an out-of-slice `Status:` label, two in-slice
-    ones, a fenced literal `Status:` example that stays, and the five withheld sections, each spelled with
-    odd whitespace."""
+    ones (exact, A10: a slice's label is its own marker, `Status: signed off`), a fenced literal `Status:`
+    example that stays, and the five withheld sections, each spelled with odd whitespace."""
     return "\n".join([
         "# Turnstile %s build plan (2026-09-20)" % D, "",
         "Intent: a small turn counter for the bench rig.",
@@ -70,11 +74,11 @@ def class_doc():
         "",
         "## Slice A %s the counter" % D, "Goal: count turns.", "Requirements:", "- R1 counts every turn",
         "Acceptance criteria:", "- AC1: a turn adds one", "Footprint: src/turnstile.py", "Not in this slice: none",
-        "Depends on: nothing", "Status: signed off SLICE-STATUS-A",
+        "Depends on: nothing", "Status: signed off",
         "",
         "## Slice B %s the spinner" % D, "Goal: spin.", "Requirements:", "- R1 spins", "Acceptance criteria:",
         "- AC1: two turns", "Footprint: src/spinner.py", "Not in this slice: none", "Depends on: A",
-        "Status: signed off SLICE-STATUS-B",
+        "Status: signed off",
         "",
         "##  Build assumptions", "- ASSUMPTION-MARKER the clock is monotonic",
         "### a sub-heading inside it", "- ASSUMPTION-MARKER still inside",
@@ -127,7 +131,7 @@ OUTSIDE_PACKET_ONLY = sorted(["mandate.md", "documents/.gitattributes", "documen
                               "documents/docs__plans__2026-09-20-turnstile.md", "documents/notes__plain.md", "documents/src__legacy.py",
                               "documents/src__spinner.py", "documents/src__turnstile.py", "documents/src__ver.txt"])
 STATUS_LINES = [number for number, line in enumerate(class_doc().split("\n"), 1)
-                if line.startswith("Status:") and ("STATUS-" in line or "STATUS " in line)]
+                if line.startswith("Status:") and "stays" not in line]
 COMMON_WITHHELD = sorted(["docs/builder-notes.md", "docs/builder-notes/session.md", "docs/records/turnstile.jsonl",
                           "docs/reviews/2026-09-24-signoff-turnstile-A.md", "notes/session-log.md"]
                          + ["%s Status: line %d" % (DOC, n) for n in STATUS_LINES] + [
@@ -281,7 +285,30 @@ class TheClassGuard(unittest.TestCase):
         ("a line opening with an inline placeholder", ["text that wraps", "<path> is the counter's file"],
          "<path> is the counter's file"),
         ("a line opening with an autolink", ["<https://example.com/turnstile>"], "<https://example.com/turnstile>"),
+        ("an inline comment opened mid-line hiding a label (C1A6-1)", ["Depends on: A <!--", "Status: in progress", "-->"],
+         "Status: in progress"),
+        ("a link reference definition title in double quotes hiding a label (C1A6-1)",
+         ["[plan-note]: /plan \"", "Status: not started", "\""], "Status: not started"),
+        ("a link reference definition title in parentheses hiding a label (C1A6-1)",
+         ["[plan-note]: /plan (", "Status: built", ")"], "Status: built"),
+        ("an inline link title hiding a label (C1A6-1)", ["see [the plan](/plan \"", "Status: in progress", "\")"],
+         "Status: in progress"),
+        ("a second plain label in one slice (A10)", ["Status: built"], "Status: built"),
+        ("a label with text after its value (A10)", ["Status: built today"], "Status: built today"),
+        ("a label followed by a Setext underline (A10)", ["Status: built", "---"], "Status: built"),
     )
+    HEADER_SHAPES = (
+        ("an inline comment opened mid-line hiding a base (C1A6-1)",
+         ["the branch point, see <!--", "Base: 1111111", "-->", "Base: 2222222"], "Base: 1111111"),
+        ("a link reference definition title hiding a base (C1A6-1)",
+         ["[b]: /plan \"", "Base: 1111111", "\"", "Base: 2222222"], "Base: 1111111"),
+        ("an inline link title hiding a base (C1A6-1)", ["see [the plan](/plan \"", "Base: 1111111", "\")"],
+         "Base: 1111111"),
+        ("two Base lines (A10)", ["Base: 1111111", "", "Base: 2222222"], "Base: 2222222"),
+        ("a short sha (A10)", ["Base: abc123"], "Base: abc123"),
+        ("an upper-case sha (A10)", ["Base: ABCDEF1"], "Base: ABCDEF1"),
+    )
+    HEADER_AT = "signed off by an earlier reviewer\n"
 
     def test_every_shape_the_strict_rule_stops_stops_before_any_packet_naming_its_line(self):
         for what, shape, first in self.STRICT_SHAPES:
@@ -291,10 +318,21 @@ class TheClassGuard(unittest.TestCase):
                 packet.Snapshot(self.ws, head, DOC)
             self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
 
+    def test_every_header_shape_the_label_rule_stops_stops_before_any_packet_naming_its_line(self):
+        """A10, C1A6-1: a `Base:` line in the header that is not exact, not the last line of its paragraph, or a
+        second one, stops the snapshot naming its line."""
+        for what, shape, first in self.HEADER_SHAPES:
+            text = class_doc().replace(self.HEADER_AT, self.HEADER_AT + "\n" + "\n".join(shape) + "\n", 1)
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+
     def test_the_strict_shapes_in_another_markdown_file_never_stop_the_run(self):
         """The rule reads the build doc; another `.md` file of the commit is copied as it is (its first heading is
         still read for the builder's-notes rule, never a stop)."""
-        body = "# Bench guide\n\n" + "\n\n".join("\n".join(shape) for what, shape, first in self.STRICT_SHAPES) + "\n"
+        body = "# Bench guide\n\n" + "\n\n".join("\n".join(shape) for what, shape, first
+                                                     in self.STRICT_SHAPES + self.HEADER_SHAPES) + "\n"
         testlib.write_text(os.path.join(self.ws, "notes", "bench-guide.md"), body)
         testlib.git(self.ws, ["add", "notes/bench-guide.md"])
         testlib.git(self.ws, ["commit", "-q", "-m", "a guide"], when="2026-09-20T12:00:00-07:00")

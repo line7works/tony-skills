@@ -15,10 +15,12 @@ These are previews. No request ever points at them: `request` cuts a FRESH copy 
 first send and every retry alike, under `summons/<call id>/`, from the same function, holds it to that
 function's output and to the fingerprint `scope` recorded immediately before the request file is written,
 and so a reader's scratch, or anything planted in an earlier copy, never reaches a later one.
-A build doc holding any fence line vertical-v2's one fence rule does not accept, or any raw HTML line outside
-an accepted fence (`fences.py`, the E15 lane contract A8 and A9; `spec.py`), stops the run here
-(`doc-unreadable`, naming the line) before any packet is built. A `packets` entry that is a link (or a file) is
-removed as itself, never followed, before the previews are cut (C1A5-4). vertical-v2 never runs `git worktree`.
+A build doc holding any fence line vertical-v2's one fence rule does not accept, any raw HTML line outside an
+accepted fence, or any slice `Status:` line or header `Base:` line the label rule does not take (`fences.py`,
+the E15 lane contract A8, A9 and A10; `spec.py`), stops the run here (`doc-unreadable`, naming the line) before
+any packet is built. A `packets` entry that is not a real folder (a link, a plain file, a named pipe, a socket)
+is removed as itself with `os.unlink`, never followed and never opened, before the previews are cut (C1A5-4,
+C1A6-2). vertical-v2 never runs `git worktree`.
 """
 import os
 import shutil
@@ -42,7 +44,7 @@ def handler(ctx, args):
     depth = common.station(run).get("depth") or "LEAN"
     lenses = sheetmod.lenses(depth, snap.sheet)
     previews = common.path_of(run, "packets")
-    if os.path.islink(previews) or os.path.isfile(previews):
+    if os.path.islink(previews) or (os.path.lexists(previews) and not os.path.isdir(previews)):
         os.unlink(previews)
     elif os.path.lexists(previews):
         shutil.rmtree(previews)
