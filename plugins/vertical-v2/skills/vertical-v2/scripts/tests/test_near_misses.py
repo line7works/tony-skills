@@ -14,6 +14,10 @@ named as withheld, the same in both readings; a heading of any level whose rende
 (4) C1A8-4. The notes leg stops only when the CommonMark reading declares a file the builder's notes and the line
 reading does not; a file the line reading withholds wider stays withheld, as before A13.
 
+Since A16 a zero-width space is outside the character list, so the three zero-width-space shapes round 9 held (inside
+`Slice`, before a `Status:` heading, inside `Punch list`) are stopped by the line rules first, naming the character
+(`ZWSP_SHAPES`).
+
 `TheReadings` drives the readers directly; `TheGate` drives the stopping shapes through the real CLI, records off and
 on; `TheScope` drives the withheld shapes, a committed-only stop and the notes leg through `scope`.
 """
@@ -82,8 +86,6 @@ SLICE_FORM_SHAPES = [
      "## Slice B%sthe spinner" % D),
     ("a lower-case slice", with_b(["Status: built"], heading="## slice B %s the spinner" % D),
      "## slice B %s the spinner" % D),
-    ("a zero-width space inside Slice", with_b(["Status: built"], heading="## Sl%sice B %s the spinner" % (ZWSP, D)),
-     "## Sl%sice B %s the spinner" % (ZWSP, D)),
     ("a level 1 heading in the form", with_b([], heading="# Slice B %s the spinner" % D),
      "# Slice B %s the spinner" % D),
     ("a Setext heading with an en dash", with_b([], heading="Slice B %s the spinner\n---" % EN_DASH),
@@ -98,8 +100,6 @@ LABEL_HEADING_SHAPES = [
      "### Status: built"),
     ("#### Status: signed off inside a slice", with_b(["", "#### Status: signed off", "", "Status: signed off"]),
      "#### Status: signed off"),
-    ("a zero-width space before a Status: heading", with_b(["", "### %sStatus: built" % ZWSP, "", "Status: signed off"]),
-     "### %sStatus: built" % ZWSP),
     ("a character-coded Status: heading", with_b(["", "### &#83;tatus: built", "", "Status: signed off"]),
      "### &#83;tatus: built"),
     ("a Base: heading in the header", header(["", "### Base: 1234567"]), "### Base: 1234567"),
@@ -110,7 +110,6 @@ WITHHELD_SHAPES = [
     ("a colon after Punch list", "## Punch list:", "## Punch list"),
     ("a singular Handoff", "## Handoff", "## Handoffs"),
     ("a hyphen in Hand-offs", "## Hand-offs", "## Handoffs"),
-    ("a zero-width space in Punch list", "## Punch%s list" % ZWSP, "## Punch list"),
     ("a dated Handoff, as one real plan writes it", "## Handoff, 2026-09-25", "## Handoffs"),
     ("a singular Build assumption", "## Build assumption", "## Build assumptions"),
     ("a singular Deviation", "## Deviation", "## Deviations"),
@@ -121,6 +120,16 @@ WITHHELD_SHAPES = [
 
 def withheld_doc(heading, marker="NEARMISS-MARKER"):
     return with_b(["Status: signed off", "", heading, "- %s the builder says skim slice B" % marker])
+
+
+# round 9's zero-width-space shapes, stopped since A16 by the character list: (what, doc, the line)
+ZWSP_SHAPES = [
+    ("a zero-width space inside Slice", with_b(["Status: built"], heading="## Sl%sice B %s the spinner" % (ZWSP, D)),
+     "## Sl%sice B %s the spinner" % (ZWSP, D)),
+    ("a zero-width space before a Status: heading", with_b(["", "### %sStatus: built" % ZWSP, "", "Status: signed off"]),
+     "### %sStatus: built" % ZWSP),
+    ("a zero-width space in Punch list", withheld_doc("## Punch%s list" % ZWSP), "## Punch%s list" % ZWSP),
+]
 
 
 README_HTML = ("<p align=\"center\">Turnstile</p>\n\n# Turnstile\n\nA bench-rig turn counter.\n\n## Build notes\n\n"
@@ -196,6 +205,13 @@ class TheReadings(unittest.TestCase):
                 first = number_of(text, heading)
                 self.assertIn({"what": canonical, "lines": [first, first + 2]}, removed, (what, removed))
 
+    def test_every_zero_width_space_shape_is_stopped_by_the_character_list(self):
+        for what, text, first in ZWSP_SHAPES:
+            with self.subTest(shape=what):
+                problems = fences.read(text).problems
+                self.assertEqual(problems[0][0], number_of(text, first), what)
+                self.assert_stops(what, text, first, "U+200B")
+
     def test_the_wide_line_reading_alone_never_stops_a_notes_file(self):
         mod = readings()
         for text in (README_HTML, LINT_COMMENT):
@@ -248,6 +264,9 @@ class TheGate(unittest.TestCase):
 
     def test_every_heading_named_like_a_label_stops_the_gate(self):
         self.stops(LABEL_HEADING_SHAPES)
+
+    def test_every_zero_width_space_shape_stops_the_gate(self):
+        self.stops(ZWSP_SHAPES)
 
     def test_the_controls_pass_the_gate(self):
         for what, doc in (("a multi-line code span and one exact label", LABEL_CONTROL),

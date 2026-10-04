@@ -8,8 +8,13 @@ line. The spec removes any line that reads as a `Status:` label that way from ev
 `HIDDEN` are the characters put before the label: a zero-width space, a soft hyphen, a zero-width no-break space, a
 word joiner, a no-break space and an ideographic space. `TheReadings` drives the readers directly; `TheGate` drives
 each shape through the real CLI with records off and on; `TheScope` drives them through `scope` on the reviewed commit
-under the owner's committed-state-only words, records off and on, and holds a hidden header `Status:` line, which no
-reading takes as a card, absent from every packet.
+under the owner's committed-state-only words, records off and on.
+
+Since the E15 lane contract A16 every character in `HIDDEN` is outside the character list, so the line rules stop each
+shape first, naming the character's code point and its line (`fences.py`, "THE CHARACTER LIST"); a hidden header
+`Status:` line, which A15 removed from the spec, now stops every reader the same way, at the gate and at scope. The
+second reading's A15 test stays as its own guard (a character reference renders such a character; `test_character_list`
+holds that it stops too).
 """
 import os
 import unittest
@@ -59,21 +64,26 @@ class TheReadings(unittest.TestCase):
     def test_every_hidden_label_stops_every_reader_naming_its_line(self):
         for what, text, hidden in slice_shapes() + header_shapes():
             with self.subTest(shape=what):
-                self.assertEqual(fences.read(text).problems, [], what)
+                problems = fences.read(text).problems           # A16: the character list, first
+                self.assertEqual(problems[0][0], number_of(text, hidden), what)
+                self.assertIn("U+%04X" % ord(hidden[0]), problems[0][1], what)
                 for name, call in (("slices", gatemod.slices_of), ("base", gatemod.recorded_base),
                                    ("spec", spec.clean)):
                     with self.assertRaises(spec.SpecUnreadable, msg=(what, name)) as caught:
                         call(text)
                     self.assertEqual(caught.exception.line, number_of(text, hidden), (what, name))
 
-    def test_a_hidden_header_status_line_is_removed_from_the_spec(self):
+    def test_a_hidden_header_status_line_now_stops_every_reader_naming_its_character(self):
+        """A15 removed such a line from the spec; since A16 its character stops every reader first."""
         for what, ch in HIDDEN:
             with self.subTest(shape=what):
                 text = header_status_doc(ch)
-                kept, removed = spec.clean(text)
-                self.assertNotIn("HIDDEN-STATUS-MARKER", kept, what)
                 at = number_of(text, ch + "Status: built HIDDEN-STATUS-MARKER")
-                self.assertIn({"what": "Status: line", "lines": [at, at]}, removed, what)
+                for name, call in (("slices", gatemod.slices_of), ("base", gatemod.recorded_base), ("spec", spec.clean)):
+                    with self.assertRaises(spec.SpecUnreadable, msg=(what, name)) as caught:
+                        call(text)
+                    self.assertEqual(caught.exception.line, at, (what, name))
+                    self.assertIn("U+%04X" % ord(ch), caught.exception.what, (what, name))
 
     def test_a_plain_doc_is_unchanged(self):
         """A plain doc reads and cleans as before A15: its Status: labels are removed, its Base: line and every other
@@ -138,25 +148,25 @@ class TheScope(unittest.TestCase):
                     self.assertIn("line %d" % number_of(doc, hidden), out["reason"], what)
                     self.assertFalse(os.path.exists(os.path.join(run_dir, "packets")), what)
 
-    def test_a_hidden_header_status_line_reaches_no_packet_and_is_named(self):
+    def test_a_hidden_header_status_line_now_stops_scope_before_any_packet(self):
+        """A15 removed such a line from every packet; since A16 its character stops the run (here only in the commit,
+        under the owner's committed-state-only words, so the gate passes and scope stops) before any packet."""
         for index, (what, ch) in enumerate(HIDDEN):
             with self.subTest(shape=what):
                 doc = header_status_doc(ch)
-                drive, run_dir, ws, info = vlib.through_scope(os.path.join(self.tmp, "h%d" % index),
-                                                              repo={"doc_text": doc})
+                self.count += 1
+                ws, info = vlib.make_repo(self.tmp, doc_text=doc, name="ws-h%d" % index)
+                testlib.write_text(os.path.join(ws, vlib.DOC), vlib.build_doc())
+                drive, run_dir = vlib.start(self.tmp, ws, run="run-h%d" % index,
+                                            owner_words={"committed_only": "review the committed state only"})
+                self.assertEqual(vlib.through_ask(drive, self.tmp, run_dir)[0], 0, what)
+                code, out, err = drive(["scope", "--run-dir", run_dir])
                 at = number_of(doc, ch + "Status: built HIDDEN-STATUS-MARKER")
-                root = os.path.join(run_dir, "packets")
-                names = sorted(os.listdir(root))
-                self.assertTrue(names)
-                for name in names:
-                    for base, dirs, files in os.walk(os.path.join(root, name)):
-                        for leaf in files:
-                            if leaf in ("files.json", "withheld.json"):
-                                continue
-                            with open(os.path.join(base, leaf), "rb") as fh:
-                                self.assertNotIn(b"HIDDEN-STATUS-MARKER", fh.read(), (what, name, leaf))
-                    withheld = testlib.load_json(os.path.join(root, name, "withheld.json"))["withheld"]
-                    self.assertIn("%s Status: line %d" % (vlib.DOC, at), [w["what"] for w in withheld], (what, name))
+                self.assertEqual(code, 10, (what, out, err))
+                self.assertEqual(out["stop_tag"], "doc-unreadable", what)
+                self.assertIn("line %d" % at, out["reason"], what)
+                self.assertIn("U+%04X" % ord(ch), out["reason"], what)
+                self.assertFalse(os.path.exists(os.path.join(run_dir, "packets")), what)
 
 
 if __name__ == "__main__":

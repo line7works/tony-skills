@@ -24,7 +24,10 @@ leave it out:
    first heading declares it the builder's notes (`notes.py`, C1A3-3, the slice review's rule; read from the
    commit's bytes, since the declaration is in the file, not its path; read a second time by a CommonMark reader,
    and a file the CommonMark reader declares and the line reading does not stops the run, while a file only the
-   wide line reading declares is withheld, A13, A14, `declared_notes`);
+   wide line reading declares is withheld, A13, A14, `declared_notes`); or it is a `.md` regular file one of whose
+   heading lines a declaration test reads (in either reading, up to the first certain heading, never a fenced line)
+   holds a character outside the character list (a notes candidate, withheld and named with the line and the
+   character, never a stop, A16 (2) and its send-back 1, `readings.notes_unlisted`);
 4. it is `REVIEW.md` at the root (the inspection sheet: never in a workspace; a local lens receives the
    commit's bytes as a document when it is the kit sheet, and no outside packet ever carries it).
 
@@ -46,7 +49,7 @@ import re
 
 from station_core import driver, fsio, validate
 
-from . import gitio, notes as notesmod, readings, sheet as sheetmod, spec as specmod
+from . import fences, gitio, notes as notesmod, readings, sheet as sheetmod, spec as specmod
 
 SHEET = "REVIEW.md"
 RECORD_FOLDERS = (("docs", "reviews", "a prior verdict (docs/reviews/)"),
@@ -54,6 +57,8 @@ RECORD_FOLDERS = (("docs", "reviews", "a prior verdict (docs/reviews/)"),
 NOTES = re.compile(r"build(?:er)?notes")
 SEPARATORS = re.compile(r"[-_. ]")
 NOTES_WHY = "the builder's notes"
+UNLISTED_WHY = ("a notes candidate: its heading line %d holds %s, a character outside vertical-v2's character list, "
+                "so whether it declares the builder's notes cannot be told (A16)")
 SHEET_WHY = "the repo's inspection sheet: the local lenses only (its checks are distilled from prior verdicts)"
 LISTS = ("files.json", "withheld.json")
 SLOTS = ("[BUILD_DOC]", "[BASE_COMMIT]", "[BOUNDARY_FILES]")
@@ -89,19 +94,25 @@ def notes_candidate(mode, path, doc):
 
 
 def declared_notes(files):
-    """[(path, declaring heading)] for [(path, bytes)] in the order given: each file read twice for its
-    builder's-notes declaration (`notes.declaration`, then a CommonMark reader, the E15 lane contract A13); the
-    first file the CommonMark reader declares and the line reading does not raises spec.NotesUnreadable naming it
-    and the line (A14, C1A8-4); a file the line reading declares is withheld."""
+    """[(path, why it is withheld)] for [(path, bytes)] in the order given: a file one of whose heading lines holds a
+    character outside the character list is a notes candidate, withheld and named, never a stop (the E15 lane contract
+    A16 (2), `readings.notes_unlisted`); every other file is read twice for its builder's-notes declaration
+    (`notes.declaration`, then a CommonMark reader, A13); the first file the CommonMark reader declares and the line
+    reading does not raises spec.NotesUnreadable naming it and the line (A14, C1A8-4); a file the line reading
+    declares is withheld."""
     out = []
     for path, data in files:
         text = data.decode("utf-8", "replace")
+        odd = readings.notes_unlisted(text)
+        if odd is not None:
+            out.append((path, UNLISTED_WHY % (odd[0], fences.character(odd[1]))))
+            continue
         found = readings.notes_difference(text)
         if found is not None:
             raise specmod.NotesUnreadable(path, *found)
         heading = notesmod.declares(text)
         if heading is not None:
-            out.append((path, heading))
+            out.append((path, "%s (its first heading, %r, declares it)" % (NOTES_WHY, heading)))
     return out
 
 
@@ -172,9 +183,9 @@ class Snapshot(object):
             raise driver.Usage("the build doc %s in the reviewed commit is not UTF-8 text" % doc)
         self.spec, self.removed = specmod.clean(doc_text)
         declared = declared_notes([(path, contents[oid]) for mode, oid, path in kept if notes_candidate(mode, path, doc)])
-        for path, heading in declared:
-            self.left.append({"what": path, "why": "%s (its first heading, %r, declares it)" % (NOTES_WHY, heading)})
-        declared = set(path for path, heading in declared)
+        for path, why in declared:
+            self.left.append({"what": path, "why": why})
+        declared = set(path for path, why in declared)
         kept = [entry for entry in kept if entry[2] not in declared]
         self.tree, self.modes = {}, {}
         for mode, oid, path in kept:

@@ -38,8 +38,17 @@ A14 (C1A8-1 to C1A8-4) the guard also holds: two rendered labels, or a slice's o
 the reader cannot map (a multi-line code span or link title), in a slice and in the header; a level 1 or 2 heading
 that reads like a slice heading off the form (an en dash, a zero-width space); a heading named like a `Status:`
 label; each stops naming its line. A withheld near miss (`## Punch-list`, `## Punch list:`, `## Handoff`,
-`## Hand-offs`, a zero-width space) is withheld from every packet and named; a file only the wide line reading
-declares the builder's notes is withheld and named, never a stop.
+`## Hand-offs`; a zero-width space too until A16, which stops it) is withheld from every packet and named; a file
+only the wide line reading
+declares the builder's notes is withheld and named, never a stop. Since A16 (C1A9-1 to C1A9-3) the guard also holds:
+a character outside the character list (a default-ignorable mark, a Hangul filler, a braille blank, a variation
+selector) before a `Status:` label, a header `Base:` line, a slice heading's name, a withheld heading's name and a
+`### Status:` heading's name; a right-to-left override in prose; a Cyrillic letter in a slice heading; full-width
+letters in a label; a character reference to a character outside the list; a lower-case, upper-case or spaced label
+and a lower-case or spaced label heading; each stops naming its line. A withheld name past the stems (`## Hand off`,
+`## Hand` en dash `offs`, `## 1. Punch list`, `## The punch list`, `## Build-assumptions`) is withheld from every
+packet and named; another Markdown file whose heading holds a character outside the list (a Hangul filler, an
+emoji) is withheld and named, never a stop.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -401,11 +410,11 @@ class TheClassGuard(unittest.TestCase):
         ("Punch list with a colon", "## Punch list:", "## Punch list"),
         ("a singular Handoff", "## Handoff", "## Handoffs"),
         ("Hand-offs", "## Hand-offs", "## Handoffs"),
-        ("a zero-width space in Punch list", "## Punch​ list", "## Punch list"),
     )
 
     # A15 (round 9, send-back 1): a label behind invisible characters (a zero-width space, a soft hyphen, a no-break
     # space), in slice B above its plain label and in the header above a plain Base: line; each stops naming its line
+    # (since A16 the character list stops each first, naming the character)
     A15_STOPS = (
         ("a zero-width space before Status: built in slice B (A15)", "Depends on: A\nStatus: signed off",
          "Depends on: A\n\n\u200bStatus: built\n\nStatus: signed off", "\u200bStatus: built"),
@@ -424,31 +433,26 @@ class TheClassGuard(unittest.TestCase):
         for what, old, new, first in self.A15_STOPS:
             text = class_doc().replace(old, new, 1)
             self.assertNotEqual(text, class_doc(), what)
-            self.assertEqual(fences.read(text).problems, [], what)
+            problems = fences.read(text).problems            # A16: the character list, first
+            self.assertEqual(problems[0][0], text.split("\n").index(first) + 1, what)
+            self.assertIn("U+%04X" % ord(first[0]), problems[0][1], what)
             head = self.recommit_doc(text)
             with self.assertRaises(specmod.SpecUnreadable) as caught:
                 packet.Snapshot(self.ws, head, DOC)
             self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
 
-    def test_a_hidden_header_status_line_reaches_no_packet_and_is_named(self):
+    def test_a_hidden_header_status_line_now_stops_before_any_packet_naming_its_character(self):
         """A15: a `Status:` line behind a format character or a Unicode space in the header is no card to either
-        reading; the spec removes it, so no packet carries it, and every withheld list names it."""
-        for index, ch in enumerate(("​", "­", "﻿", " ", "　")):
+        reading, and the spec removed it from every packet; since A16 its character stops the snapshot first."""
+        for index, ch in enumerate(("\u200b", "\u00ad", "\ufeff", "\u00a0", "\u3000")):
             line = "%sStatus: HIDDEN-HEADER-MARKER built" % ch
             text = class_doc().replace(self.HEADER_AT, self.HEADER_AT + "\n" + line + "\n", 1)
             at = text.split("\n").index(line) + 1
-            self.snap = packet.Snapshot(self.ws, self.recommit_doc(text), DOC)
-            for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
-                               ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"},
-                                "o"),
-                               ({"name": "outside-deepseek", "side": "outside", "row": "deepseek",
-                                 "profile": "packet-only"}, "p")):
-                built, dest = self.cut(spec, "a15-%s-%d" % (name, index))
-                for path, body in texts_under(dest):
-                    if os.path.basename(path) in ("files.json", "withheld.json"):
-                        continue
-                    self.assertNotIn("HIDDEN-HEADER-MARKER", body, (repr(ch), path))
-                self.assertIn("%s Status: line %d" % (DOC, at), self.withheld(dest), repr(ch))
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, at, repr(ch))
+            self.assertIn("U+%04X" % ord(ch), caught.exception.what, repr(ch))
 
     def test_every_round_9_shape_stops_before_any_packet_naming_its_line(self):
         """A14: a rendered label in a paragraph whose lines cannot all be mapped, a level 1 or 2 heading that reads
@@ -457,7 +461,13 @@ class TheClassGuard(unittest.TestCase):
         for what, old, new, first in self.ROUND_9_STOPS:
             text = class_doc().replace(old, new, 1)
             self.assertNotEqual(text, class_doc(), what)
-            self.assertEqual(fences.read(text).problems, [], what)
+            odd = fences.unlisted(first)
+            if odd is not None:     # A16: the zero-width space is outside the character list, so it stops first
+                problems = fences.read(text).problems
+                self.assertEqual(problems[0][0], text.split("\n").index(first) + 1, what)
+                self.assertIn("U+%04X" % ord(odd[1]), problems[0][1], what)
+            else:
+                self.assertEqual(fences.read(text).problems, [], what)
             head = self.recommit_doc(text)
             with self.assertRaises(specmod.SpecUnreadable) as caught:
                 packet.Snapshot(self.ws, head, DOC)
@@ -498,6 +508,107 @@ class TheClassGuard(unittest.TestCase):
         self.assertIn("notes/readme-like.md", self.withheld(dest))
         for path, body in texts_under(dest):
             self.assertNotIn("WIDE-NOTES-MARKER", body, path)
+
+    # A16 (C1A9-1 to C1A9-3): (what, the text replaced in class_doc, its replacement, the line the stop names, the
+    # code point named or None)
+    A16_STOPS = (
+        ("U+3164 before Status: built in slice B (C1A9-1)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n\u3164Status: built\n\nStatus: signed off", "\u3164Status: built", 0x3164),
+        ("U+034F before a header Base: line (C1A9-1)", HEADER_AT, HEADER_AT + "\n\u034fBase: 1234567\n",
+         "\u034fBase: 1234567", 0x034F),
+        ("U+2800 before Slice in slice B's heading (C1A9-1)", "## Slice B %s the spinner" % D,
+         "## \u2800Slice B %s the spinner" % D, "## \u2800Slice B %s the spinner" % D, 0x2800),
+        ("U+FE0F before a withheld heading's name (C1A9-1)", "## Build   assumptions\n",
+         "## \ufe0fPunch list\n- A16-LEAK-MARKER\n\n## Build   assumptions\n", "## \ufe0fPunch list", 0xFE0F),
+        ("U+180B before a ### Status: heading (C1A9-1)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n### \u180bStatus: built\n\nStatus: signed off", "### \u180bStatus: built", 0x180B),
+        ("a right-to-left override in prose (A16)", "Goal: spin.", "Goal: spin \u202e back.",
+         "Goal: spin \u202e back.", 0x202E),
+        ("a Cyrillic letter in slice B's heading (C1A9-3)", "## Slice B %s the spinner" % D,
+         "## \u0405lice B %s the spinner" % D, "## \u0405lice B %s the spinner" % D, 0x0405),
+        ("full-width letters in a label (C1A9-3)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n\uff33tatus: built\n\nStatus: signed off", "\uff33tatus: built", 0xFF33),
+        ("a character reference to U+3164 before Status: built (A16, refusal (d))", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n&#x3164;Status: built\n\nStatus: signed off", "&#x3164;Status: built", 0x3164),
+        ("a lower-case status: label above slice B's plain one (C1A9-3)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\nstatus: built\n\nStatus: signed off", "status: built", None),
+        ("a Status : label with a space before the colon (C1A9-3)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\nStatus : built\n\nStatus: signed off", "Status : built", None),
+        ("a lower-case ### status: heading (C1A9-3)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\n### status: built\n\nStatus: signed off", "### status: built", None),
+        ("a lower-case base: line in the header (C1A9-3)", HEADER_AT, HEADER_AT + "\nbase: 1234567\n",
+         "base: 1234567", None),
+        ("a zero-width space in a Punch list heading (A14's near miss, stopped since A16)", "## Build   assumptions\n",
+         "## Punch\u200b list\n- A16-LEAK-MARKER\n\n## Build   assumptions\n", "## Punch\u200b list", 0x200B),
+    )
+    # A16 (4), C1A9-2: (what, a withheld name past the stems, its canonical name); each is withheld from every packet
+    A16_WITHHELD = (
+        ("Hand off", "## Hand off", "## Handoffs"),
+        ("Hand-offs with an en dash", "## Hand\u2013offs", "## Handoffs"),
+        ("a numbered Punch list", "## 1. Punch list", "## Punch list"),
+        ("The punch list", "## The punch list", "## Punch list"),
+        ("Build-assumptions", "## Build-assumptions", "## Build assumptions"),
+    )
+
+    def test_every_a16_shape_stops_before_any_packet_naming_its_line(self):
+        from vertical_core import fences  # noqa: E402
+        for what, old, new, first, code in self.A16_STOPS:
+            text = class_doc().replace(old, new, 1)
+            self.assertNotEqual(text, class_doc(), what)
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+            if code is not None:
+                self.assertIn("U+%04X" % code, caught.exception.what, what)
+        self.assertTrue(fences.LISTED)
+
+    def test_every_a16_withheld_name_reaches_no_packet_and_is_named(self):
+        for index, (what, heading, canonical) in enumerate(self.A16_WITHHELD):
+            text = class_doc().replace("## Build   assumptions\n", heading + "\n- A16-NEAR-MISS-MARKER skim slice B\n\n"
+                                                                    "## Build   assumptions\n")
+            first = text.split("\n").index(heading) + 1
+            self.snap = packet.Snapshot(self.ws, self.recommit_doc(text), DOC)
+            for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                               ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"},
+                                "o"),
+                               ({"name": "outside-deepseek", "side": "outside", "row": "deepseek",
+                                 "profile": "packet-only"}, "p")):
+                built, dest = self.cut(spec, "a16-%s-%d" % (name, index))
+                for path, body in texts_under(dest):
+                    if os.path.basename(path) in ("files.json", "withheld.json"):
+                        continue
+                    self.assertNotIn("A16-NEAR-MISS-MARKER", body, (what, path))
+                withheld = testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"]
+                self.assertTrue(any(w["what"] == "%s %s" % (DOC, canonical) and
+                                    "lines %d to %d" % (first, first + 2) in w["why"] for w in withheld), (what, withheld))
+
+    def test_a_markdown_file_whose_heading_holds_an_unlisted_character_is_withheld_and_named(self):
+        """A16 (2): a notes candidate, never a stop; the plain files stay."""
+        files = {"notes/filler.md": "# Bench\u3164guide\n\nA16-FILLER-MARKER\n",
+                 "notes/emoji.md": "# Rocket \U0001f680 notes\n\nA16-EMOJI-MARKER\n",
+                 "notes/deep.md": "# Bench guide\n\n## \U0001f680 Features\n\nA16-DEEP-KEPT\n",
+                 "notes/curly.md": "# Builder\u2019s notes\n\nA16-CURLY-MARKER\n"}
+        for rel, text in sorted(files.items()):
+            testlib.write_text(os.path.join(self.ws, rel), text)
+        testlib.git(self.ws, ["add", "notes"])
+        testlib.git(self.ws, ["commit", "-q", "-m", "two guides"], when="2026-09-20T12:00:00-07:00")
+        self.snap = packet.Snapshot(self.ws, testlib.git(self.ws, ["rev-parse", "HEAD"]).strip(), DOC)
+        for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                           ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"}, "o"),
+                           ({"name": "outside-deepseek", "side": "outside", "row": "deepseek", "profile": "packet-only"},
+                            "p")):
+            built, dest = self.cut(spec, "a16-notes-%s" % name)
+            whys = dict((w["what"], w["why"]) for w in testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"])
+            self.assertIn("U+3164", whys.get("notes/filler.md", ""), name)
+            self.assertIn("U+1F680", whys.get("notes/emoji.md", ""), name)
+            self.assertIn("first heading", whys.get("notes/curly.md", ""), name)
+            for path, body in texts_under(dest):
+                self.assertNotIn("A16-FILLER-MARKER", body, path)
+                self.assertNotIn("A16-EMOJI-MARKER", body, path)
+                self.assertNotIn("A16-CURLY-MARKER", body, path)
+            self.assertNotIn("notes/plain.md", whys, name)
+            self.assertNotIn("notes/deep.md", whys, name)
 
     def test_every_shape_the_two_readings_take_differently_stops_before_any_packet_naming_its_line(self):
         """A13: the line rules accept each shape; the second reading takes a decision differently, so the snapshot

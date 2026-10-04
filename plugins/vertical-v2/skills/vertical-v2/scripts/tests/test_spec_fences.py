@@ -269,11 +269,14 @@ class TheRawHtmlRule(unittest.TestCase):
         self.assertIn("the count stays < 3 and <div> is inline here\n", kept)
 
     def test_a_less_than_sign_followed_by_a_space_or_a_digit_or_another_sign_does_not_stop(self):
-        for line in ("< 3 turns", "<3 turns", "<= 3 turns", "<- back", "<<", "\u00a0<div> after a no-break space",
-                     "-<div> with no space after the dash"):
+        for line in ("< 3 turns", "<3 turns", "<= 3 turns", "<- back", "<<", "-<div> with no space after the dash"):
             kept, removed = kept_and_removed(doc_with(after_slices=["", line, ""]))
             self.assertEqual(removed, ALL_FIVE, repr(line))
             self.assertIn(line + "\n", kept)
+        # since A16 a no-break space is outside the character list: that line stops, naming the character
+        with self.assertRaises(spec.SpecUnreadable) as caught:
+            kept_and_removed(doc_with(after_slices=["", "\u00a0<div> after a no-break space", ""]))
+        self.assertIn("U+00A0", caught.exception.what)
 
 
 HIDING = (("an inline comment opened mid-line", ["Depends on: A <!--", "%s", "-->"]),

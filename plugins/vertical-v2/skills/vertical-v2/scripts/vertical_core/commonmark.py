@@ -7,6 +7,10 @@ lane contract A13; contract section 5, "Two readings", and section 15, "Runtime"
         stands (a list item and a block quote included); `name` is its rendered text, `line` its first line (1-based)
     paragraph_lines(stream) -> [(line, text, exact)]: every rendered line of every paragraph, wherever it stands;
         `exact` is False when the paragraph's rendered lines cannot all be mapped to source lines (below)
+    raw_lines(stream, headings_only=False) -> [(line, text)]: every heading's rendered name and (unless
+        `headings_only`) every paragraph's rendered line, BEFORE whitespace runs are collapsed, with the line each
+        carries above: the characters the reader renders, character references decoded (the E15 lane contract A16,
+        the second reading's refusal (d), `readings.py`; the notes candidates, `readings.notes_unlisted`)
     identity() -> {"preset", "versions", "files", "python"}: what was loaded, for the vendored tree's test
 
 The reader is `markdown-it-py` 3.0.0 with `mdurl` 0.1.2, unpacked unmodified under `scripts/vendor/` and pinned by
@@ -137,4 +141,19 @@ def paragraph_lines(stream):
         exact = consumed == after - first - 1
         for text, start in zip(lines, starts):
             out.append((first + start if exact else first, _collapse(text), exact))
+    return out
+
+
+def raw_lines(stream, headings_only=False):
+    out = []
+    for index, token in enumerate(stream):
+        if token.type == "heading_open":
+            lines, starts, consumed = _render(stream[index + 1].children)
+            out.append((token.map[0] + 1, " ".join(lines)))
+        elif token.type == "paragraph_open" and not headings_only:
+            first, after = token.map[0] + 1, token.map[1] + 1
+            lines, starts, consumed = _render(stream[index + 1].children)
+            exact = consumed == after - first - 1
+            for text, start in zip(lines, starts):
+                out.append((first + start if exact else first, text))
     return out

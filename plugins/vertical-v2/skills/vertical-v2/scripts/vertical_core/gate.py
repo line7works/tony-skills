@@ -13,14 +13,18 @@ heading or a label inside a fence is never a slice or a card, and a doc holding 
 accept, any raw HTML line outside an accepted fence, any heading or label line off the plain form (indented,
 after a list-item or block-quote marker, or a heading whose `#`s are not followed by exactly one space), or any
 `Status:` line in a slice or `Base:` line in the header that is not exact and the last line of its paragraph (or
-is a second one), stops the gate (`doc-unreadable`, naming the
+is a second one), or any character outside the character list outside an accepted fence (A16, named by its code
+point), stops the gate (`doc-unreadable`, naming the
 line) before the ask. A doc the rule accepts is read a second time by a CommonMark reader (the E15 lane contract
 A13, `spec.read`, `readings.py`): a decision the two readings take differently (the slices, a card, the recorded
-base, the withheld sections), or one of the CommonMark reading's three refusals (A14: a rendered label line in a
+base, the withheld sections), or one of the CommonMark reading's four refusals (A14: a rendered label line in a
 paragraph it cannot map to source lines, a level 1 or 2 heading off the slice form that starts with "slice", a
-heading that starts with `Status:` or `Base:`), stops the gate `doc-unreadable` naming the first such line, and so
+heading that starts with `Status:` or `Base:`; A16: a rendered character outside the list), stops the gate
+`doc-unreadable` naming the first such line, and so
 does, once the workspace is known to be a git work tree, another Markdown file of HEAD that a CommonMark reader
-declares the builder's notes and the line reading does not (`packet.commit_notes`, A14), before the ask. Zero slices, or a slice with no
+declares the builder's notes and the line reading does not (`packet.commit_notes`, A14), before the ask; a file one
+of whose heading lines holds a character outside the list is withheld, never a stop (A16 (2)). Zero slices, or a
+slice with no
 `Status:` line, is malformed input and never passes,
 collapsed or not. A collapse
 comes only from `station.owner_words.collapse_gate` and passes short slices only.

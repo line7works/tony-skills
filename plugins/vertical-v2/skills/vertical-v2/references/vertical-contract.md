@@ -2,7 +2,7 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a
 state. Written for E15 slice 1 of the skills v2 rebuild, against the E15 lane contract (sections 6 and
-8, amendments A1 to A13) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
+8, amendments A1 to A16) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
 slice 1a fix round applied A3 (C1A-1 to C1A-9), the design round applied A4 (the one packet builder,
 the local receipt, B5, C1A2-1 to C1A2-5), and fix round 3 applied A5 (the readers root by allowlist
 identity, this core's own fence reader, C1A3-3 to C1A3-6) and A7 (the gate reads with that fence reader),
@@ -11,8 +11,10 @@ removal of copies never follows a link, C1A4-3), and fix round 5 applied A9 (no 
 C1A5-2; a `summons` folder that is a link refuses, C1A5-3; a `packets` link is removed as a link, C1A5-4), and
 fix round 6 applied A10 and A11 (exact labels with A11's six values, C1A6-1; a `packets` entry that is not a
 real folder is removed unopened, C1A6-2), fix round 7 applied A12 (plain structure only, C1A7-1; the run files,
-C1A7-2), and fix round 8 applied A13 (two readings: the line rules and a vendored CommonMark reader must take every
-decision from the doc the same way). Where this
+C1A7-2), fix round 8 applied A13 (two readings: the line rules and a vendored CommonMark reader must take every
+decision from the doc the same way), fix round 9 applied A14 and A15 (the label bug, three near misses, hidden labels),
+and fix round 10 applied A16 (a character allowlist, folded label and heading-name tests, folded withheld names). Where
+this
 document and that contract differ, the contract is the authority and this document is the defect.
 `references/back-loop.md` is the discipline the three back cores share; this document is this core's own.
 
@@ -95,13 +97,16 @@ card), or any `Status:` line in a slice or `Base:` line in the header that the l
 C1A6-1: not exact, not the last line of its paragraph, or a second one; a label held hidden in a link title, a
 link reference definition or an inline comment is never a card), or any heading or label line off the plain
 form (A12, C1A7-1; section 5, "Plain structure": indented, after a list-item or block-quote marker, or a
-heading whose `#`s are not followed by exactly one space) stops the gate (`doc-unreadable`, naming the
-line, both lines for a second label) before the ask; so does a doc whose slices, cards, recorded base or withheld
-sections a CommonMark reader takes differently from those line rules, or that the CommonMark reading refuses (A14:
-a rendered label line in a paragraph it cannot map to source lines, a level 1 or 2 heading off the slice form that
-starts with "slice", a heading that starts with `Status:` or `Base:`), and, once the workspace is known to be a git
-work tree, another Markdown file of HEAD that a CommonMark reader declares the builder's notes and the line reading
-does not (A13, A14; section 5, "Two readings": the first line where they differ is named, with the decision); when the records component's importer reads a
+heading whose `#`s are not followed by exactly one space), or any character outside the character list outside an
+accepted fence (A16; section 5, "The character list": named by its code point) stops the gate (`doc-unreadable`,
+naming the line, both lines for a second label) before the ask; so does a doc whose slices, cards, recorded base or
+withheld sections a CommonMark reader takes differently from those line rules, or that the CommonMark reading refuses
+(A14: a rendered label line in a paragraph it cannot map to source lines, a level 1 or 2 heading off the slice form
+that starts with "slice", a heading that starts like a `Status:` or `Base:` label; A16: a rendered character outside
+the list), and, once the workspace is known to be a git work tree, another Markdown file of HEAD that a CommonMark
+reader declares the builder's notes and the line reading does not (A13, A14; section 5, "Two readings": the first line
+where they differ is named, with the decision); a file one of whose heading lines holds a character outside the list
+is withheld and named, never a stop (A16 (2)); when the records component's importer reads a
 card from a fenced literal, the card-and-line comparison below stops the run (`card-disagrees`). Zero
 slices, or a slice with no `Status:` line, stops (`gate-malformed`); a collapse never passes either.
 
@@ -159,8 +164,9 @@ under `repo` it says the lens runs nothing, reads the code, and reports a check 
 executed, and it promises no test run. A reviewed commit's build doc holding any fence line the fence
 rule does not accept (section 5, "The fence rule"), any raw HTML line (section 5, "No raw HTML lines"), or any
 label line the label rule does not take (section 5, "Exact labels"), or any heading or label line off the plain
-form (section 5, "Plain structure"), or any decision a CommonMark reader takes differently from those line rules,
-the builder's-notes declaration of another Markdown file of the commit included (section 5, "Two readings"),
+form (section 5, "Plain structure"), or any character outside the character list (section 5, "The character
+list"), or any decision a CommonMark reader takes differently from those line rules or any of its four refusals, the
+builder's-notes declaration of another Markdown file of the commit included (section 5, "Two readings"),
 stops the run here (`doc-unreadable`, naming the line) before any packet is built. A `packets` entry that is not a real folder (a link, a plain
 file, a named pipe, a socket) is removed as itself with `os.unlink`, never followed and never opened, before
 the previews are cut (C1A5-4, C1A6-2). Writes `scope.json` and `packets/`.
@@ -333,7 +339,9 @@ a lens, never reaches a mandate, and never reaches a packet.
 **A notes file declared by its first heading** (C1A3-3; `scripts/vertical_core/notes.py`). The slice review
 withholds a Markdown file whose first heading says it is the builder's notes; so does this core, reading the
 commit's bytes of every `.md` regular file but the build doc. A heading declares when it holds "notes from
-the builder", "builder notes", "builder's notes", "builders notes" or "build notes", letter case aside.
+the builder", "builder notes", "builder's notes", "builders notes" or "build notes", letter case aside (and,
+since A16 and its send-back 1, read folded with a curly apostrophe, U+2018 or U+2019, read as `'`, the same in both
+readings, `notes.declares_name`).
 Which heading is first is read wide, so a declaration a Markdown reader would see first is never missed:
 every heading-shaped line (an ATX heading, or the text above an `===` or `---` underline), with block-quote
 and list markers stripped, whatever holds it (a fence, raw HTML, a container, front matter), counts until
@@ -346,7 +354,17 @@ the run. Since A13 each such file is also read by the CommonMark reader ("Two re
 only one direction stops the run, named with its line: the CommonMark reader's first heading declares the file the
 builder's notes and the line reading does not (the file would reach the packets). A file the wide line reading
 declares and the CommonMark reader does not (an ordinary file that opens with an HTML line and has a later
-`## Build notes` heading) is withheld and named, as before A13; it never stops the run.
+`## Build notes` heading) is withheld and named, as before A13; it never stops the run. The declaration test reads
+the heading folded (NFKC normalization and case folding, A16 (3)). Since A16 (2), before either reading is asked, a
+file one of whose heading lines holds a character outside the character list ("The character list" below) is a notes
+candidate: withheld and named with the line and the character, never a stop (the code's statement is
+`scripts/vertical_core/notes.py`, "A HEADING LINE OUTSIDE THE CHARACTER LIST", with `readings.notes_unlisted`). The
+heading lines tested are the ones the declaration test itself reads (send-back 1 of fix round 10): the line reading's
+candidates up to and including the first certain heading, never a line an accepted fence holds, found in the file as
+written and again with the characters outside the list set aside on each line, each tested as written; and the
+CommonMark reader's first heading, rendered and before its whitespace is collapsed, so a character reference counts as
+the character it names. A heading past the first certain heading, or a fenced sample, holding such a character leaves
+the file an ordinary one.
 
 **The fence rule: strict plain code blocks** (A8, C1A4-1; the code's statement is
 `scripts/vertical_core/fences.py`; the frame's `templates.py` stays frozen and is not used for it). A fence
@@ -378,8 +396,11 @@ Unicode space line can end a block early for the reader. A `<` line inside an ac
 **Exact labels** (A10 and A11, C1A6-1; the code's statement is `scripts/vertical_core/fences.py`, "THE LABEL RULE", read
 through `fences.read` by every reader of the build doc). Outside accepted fences, a `## ` line matching the
 build-doc form's slice heading opens a slice's section and any other `## ` line closes it; the header is every
-line before the first `## ` line. Inside a slice's section, a line that starts with `Status:` is the slice's
-label only when (a) it reads exactly `Status: ` (one space) and one of the six values A11 rules, `not started`,
+line before the first `## ` line. A line "starts with `Status:`" (or `Base:`) when it is a label candidate (A16
+(3)): under NFKC normalization and case folding it opens with `status` (or `base`), any spaces or tabs, then a colon,
+so `status: built`, `STATUS: built` and `Status : built` are such lines and, not being exact, stop. Inside a slice's
+section, a line that starts with `Status:` is the slice's label only when (a) it reads exactly `Status: ` (one space)
+and one of the six values A11 rules, `not started`,
 `in progress`, `built`, `rejected`, `signed off with conditions`, `signed off` (a `rejected` or conditional slice
 stops `gate-short` and the owner's collapse words apply, as before A10), with nothing after but spaces or tabs,
 and (b) it is the last line of its paragraph: the next line
@@ -399,8 +420,9 @@ way; a slice with no `Status:` line at all stops `gate-malformed`. A `Status:` l
 **Plain structure** (A12, C1A7-1; the code's statement is `scripts/vertical_core/fences.py`, "THE PLAIN-STRUCTURE
 RULE", read through `fences.read` by every reader of the build doc). Outside accepted fences, a line that, after
 any indent and any list-item or block-quote markers (the fence rule's prefix), opens like an ATX heading (one to
-six `#`, then a space, a tab or the line's end) or like a `Status:` or `Base:` label is read only when it is
-plain: at column 0 with no marker, a heading being one to six `#` then exactly one space, a label then read as
+six `#`, then a space, a tab or the line's end) or like a `Status:` or `Base:` label (a label candidate, folded, as
+"Exact labels" reads it, A16 (3)) is read only when it is plain: at column 0 with no marker, a heading being one to
+six `#` then exactly one space, a label then read as
 "Exact labels" rules. Every other such line stops the run `doc-unreadable` with its line number, anywhere in the
 doc (inside a slice, in the header, between sections), before any ask, request or packet, and the plan's author
 edits the doc: a heading or a label indented by spaces or a tab, after a list-item marker or one or more `>`;
@@ -411,6 +433,25 @@ could show an indented `Status: built` while its one exact label sat in a lazy q
 empty `##`; the reader takes structure only in the plain form and refuses the rest. A problem line is never read
 as structure. A `#` with no space after it (`#hashtag`), seven or more `#`, and a `Status:` or `Base:` later in
 a line are text; a line inside an accepted fence is content.
+
+**The character list** (A16, C1A9-1; the code's statement is `scripts/vertical_core/fences.py`, "THE CHARACTER
+LIST", the constant `LISTED`). Outside accepted fences, every character of the build doc must be printable ASCII
+(U+0020 to U+007E), a tab, a line ending (LF, CR, CRLF) or a byte order mark at the start of line 1, or one of the
+fixed list: the punctuation and symbols the owner's real plans use (U+00A7, U+00B2, U+00B7, U+00D7, U+2013, U+2014,
+U+2019, U+2026, U+2190, U+2191, U+2192, U+2193, U+2194, U+2197, U+2212, U+2248, U+2264, U+2265, U+2715), the curly
+quotes U+2018, U+201C, U+201D, and the accented Latin letters U+00C0 to U+00FF except U+00F7. Any other character
+stops the run `doc-unreadable`, naming the character (its code point, its Unicode name, its column) and its line,
+before any ask, request or packet, and the plan's author edits the doc: a format character, a Unicode space, a
+default-ignorable or combining mark, a Hangul filler, a braille blank, a control character, a letter of another
+script, a full-width form, an emoji. The rule comes after the fence rule (a character inside an accepted fence,
+its opening and closing lines included, is never refused); on one line a fence line's or a raw HTML line's problem
+is named first, then the character, then a plain-structure or label problem (a label that only looks exact is named
+for the character that makes it so). Why it holds: each round of the class found one more character a reader renders
+as nothing, or as a letter it is not, in front of a label, a base, a slice heading, a withheld heading or a label
+heading, so both readings missed the structure a person sees; a short list of the characters the plans really use
+leaves none to find. A character reference that the CommonMark reader decodes to a character outside the list stops
+the run too (refusal (d) below). On the 25 real plans one line in one plan holds a character outside the list (a
+right-to-left override), and that plan stops until its author edits the line.
 
 **Two readings** (A13; the code's statement is `scripts/vertical_core/readings.py`, "THE TWO-READINGS RULE", read
 through `spec.read` by every reader of the build doc and through `packet.declared_notes` for every other Markdown
@@ -432,44 +473,52 @@ withheld line's section and the name its heading was read from, both readings ap
 ("The spec" below, A14) to their own reading of the name, and each section's first and last line; and (5) for every
 other Markdown file of the reviewed commit, its builder's-notes declaration, where only the leaking direction
 stops (A14, C1A8-4: the reader's first heading declares the file and the line reading's wide first heading does
-not; a file only the wide reading declares is withheld). Any difference stops the run `doc-unreadable`, naming the
+not; a file only the wide reading declares is withheld; a file with a heading line holding a character outside the
+list is withheld before either is asked, A16 (2)). Any difference stops the run `doc-unreadable`, naming the
 first line where the two readings take a decision differently and which decision, before any ask, request or
 packet, at every reader: the gate's slices and base and its notes check of HEAD, the spec, the packet snapshot.
 
 **Hidden labels** (A15; the code's statement is `scripts/vertical_core/fences.py`, "THE HIDDEN-LABEL RULE",
 `label_form`). A line reads as a `Status:` or `Base:` label when, after every format character (Unicode category Cf:
 a zero-width space, a soft hyphen, a zero-width no-break space, a word joiner) is removed and its leading whitespace
-(any Unicode space: a no-break space, an ideographic space) is stripped, it starts with that label. The CommonMark
+(any Unicode space: a no-break space, an ideographic space) is stripped, it starts with that label, "starts with"
+read as a label candidate (A16 (3): NFKC normalization and case folding, then `status` or `base`, any spaces or tabs,
+a colon). Since A16 such characters stop the run under the character list before this test is reached; it stays as
+the second reading's own guard for a rendered line. The CommonMark
 reading tests every rendered paragraph line this way for the cards (2), the base (3) and refusal (a) below, so a label
 hidden behind such characters is a label candidate: a second or a non-exact label the line rules never take, and the
 run stops `doc-unreadable` naming its line, before any ask, request or packet. The spec removes every line outside
 fences that reads as a `Status:` label this way ("The spec" below), so a hidden one no card reads (in the header,
 between sections) reaches no packet and is named in every withheld list.
 
-**The CommonMark reading's three refusals** (A14; the code's statement is `scripts/vertical_core/readings.py`, "THE
-SECOND READING'S THREE REFUSALS"). A doc the line rules accept also stops `doc-unreadable`, naming the line, before
+**The CommonMark reading's four refusals** (A14 and A16; the code's statement is `scripts/vertical_core/readings.py`,
+"THE SECOND READING'S FOUR REFUSALS"). A doc the line rules accept also stops `doc-unreadable`, naming the line, before
 any ask, request or packet, when the CommonMark reading finds: (a) a rendered paragraph line that starts with
 `Status:` or `Base:` in a paragraph whose rendered lines cannot all be mapped to source lines (a code span, a link
 destination or a link title running over a line ending), anywhere in the doc and whatever the label says, one
 exact label included, named at the paragraph's first line (C1A8-1: which source line holds which label cannot be
 told there, and two rendered labels once collapsed into one); (b) a heading of level 1 or 2 whose rendered name,
-with format characters (Unicode category Cf) removed, starts with `slice` in any letter case and is not a level 2
+with format characters (Unicode category Cf) removed and folded (NFKC normalization and case folding, A16 (3)), starts
+with `slice` and is not a level 2
 heading whose rendered name matches the build-doc form's slice pattern (C1A8-2: an en dash, a hyphen or a colon for
 the form's dash, no spaces around it, a lower-case `slice`, a zero-width character, a level 1 heading; no reading
 would take it as a slice, so its slice would vanish from the sign-off check, where v1's gate read every slice
 heading's label); a heading of level 3 or more, such as a `### Slice D` note with a date, is not touched; (c) a
-heading of any level whose rendered name, with format characters removed, starts with `Status:` or `Base:`
-(C1A8-3: no reading takes a heading as a label, so its words would stand beside the slice's card or the base,
-unread). Each refusal reads the rendered heading or line, which for a plain line is its source text, so one rule
-covers the source form and every rendering of it. The plan's author edits the doc: the form's slice heading, a plain
-label in a paragraph of its own. The plan's author edits the doc (a plain slice heading, a plain label, an ATX heading for a withheld
+heading of any level whose rendered name, with format characters removed, is a label candidate (A16 (3):
+`### status: built`, `### Status : built`) (C1A8-3: no reading takes a heading as a label, so its words would stand
+beside the slice's card or the base, unread); (d) a rendered heading name or paragraph line, before its whitespace is
+collapsed, holding a character outside the character list (A16 (1), named with its code point): once the line rules
+have accepted every source character, only a character reference (`&#x3164;`, `&nbsp;`) can put one there, and the
+reader renders it as the character it names. Each refusal reads the rendered heading or line, which for a plain line
+is its source text, so one rule covers the source form and every rendering of it. The plan's author edits the doc (the
+form's slice heading, a plain slice heading, a plain label in a paragraph of its own, an ATX heading for a withheld
 section, no character reference where a decision is read). A doc both readings take the same way runs exactly as
 the line rules alone run it; a heading whose markup leaves every decision equal (a code span or bold in a slice's
 short title) still runs. Why it holds: each family the line rules missed (a Setext heading, a character reference,
 inline markup in a heading, extra spaces in a slice heading, an escaped, bold or character-coded `Base:` line) is a
 place where what a Markdown reader renders differs from the source line; the second reading renders it, so the
 difference is seen instead of modelled. A heading both readings take as no slice, a near-miss withheld heading
-and a heading named like a label were outside the comparison; since A14 the three refusals below and the
+and a heading named like a label were outside the comparison; since A14 the refusals above and the
 withheld-name rule cover them.
 
 **The spec** (reading CR-4; ruling E15-8 as A3 widened it and A4 and A5 amended it) is the commit's build doc
@@ -481,18 +530,22 @@ assumptions`, `## Deviations` and `## Discovered` (the builder's working records
 withholds too), each found by heading level and name under **the withheld-name rule** (A14, C1A8-3; the code's
 statement is `scripts/vertical_core/spec.py`, "THE WITHHELD-NAME RULE", `withheld_of`): a heading of level 1 or 2
 (on the plain form, A12; a heading off the plain form has already stopped the run) whose name, with any closing
-hashes dropped, its format characters (Unicode category Cf) removed, its whitespace runs collapsed and lower-cased
-(C1A2-5), STARTS WITH one of the stems `punch`, `handoff`, `hand-off`, `build assumption`, `deviation` or
-`discover` is the withheld section the stem names (`## Punch list`, `## Handoffs`, `## Handoffs`,
-`## Build assumptions`, `## Deviations`, `## Discovered`), and is named as that section in every withheld list. So
-a near miss (`## Punch-list`, `## Punch list:`, `## Handoff`, `## Hand-offs`, a dated `## Handoff, <date>`, a
-zero-width space inside the name) is withheld, never sent; a wider match only ever withholds more. The CommonMark
+hashes dropped, its format characters (Unicode category Cf) removed, folded (NFKC normalization and case folding,
+A16 (4)), its hyphens, dashes (U+2010 to U+2015) and underscores read as spaces, its whitespace runs collapsed
+(C1A2-5), and a leading number (`1.`, `2)`) or a leading `the` dropped, STARTS WITH one of the stems `punch`,
+`handoff`, `hand off`, `build assumption`, `deviation` or `discover` is the withheld section the stem names
+(`## Punch list`, `## Handoffs`, `## Handoffs`, `## Build assumptions`, `## Deviations`, `## Discovered`), and is
+named as that section in every withheld list. So a near miss (`## Punch-list`, `## Punch list:`, `## Handoff`,
+`## Hand-offs`, `## Hand off`, `## Hand` en dash `offs`, `## 1. Punch list`, `## The punch list`,
+`## Build-assumptions`, a dated `## Handoff, <date>`) is withheld, never sent; a wider match only ever withholds
+more. The CommonMark
 reading applies the same rule to the rendered name, and the two readings must agree on every withheld line, its
 section and the name it was read from ("Two readings" above). Each section runs to the line
 before the next heading of level 1 or 2 outside a fence; and every `Status:` label (a line outside fences
 that starts with `Status:`, the build-doc form's label test), in a slice's section or out of one, the
 header's included (M6), each read after its format characters are removed and its leading whitespace stripped
-("Hidden labels" above, A15). Everything else stays byte for byte.
+("Hidden labels" above, A15) and as a label candidate (A16 (3), so `status: draft` and `Status : draft` go too).
+Everything else stays byte for byte.
 
 **The withheld list** of every packet names everything left out, each with why, and nothing the packet
 holds: every tracked path the allow rule left out (each prior verdict, each records log file, each
@@ -578,7 +631,7 @@ The exit codes are `references/back-loop.md` section 2's. Every stop writes `res
 | `not-git` | the workspace is not a git work tree root with a commit |
 | `base-unresolved` | no base: none recorded, no merge base, none from the owner; an exact recorded `Base:` line that resolves to nothing or names HEAD itself, with no owner's base to take over it; or an owner's base that resolves to nothing or names HEAD itself |
 | `dirty-boundary` | dirt touches the boundary or the build doc and the owner gave no committed-state-only order |
-| `doc-unreadable` | at `gate`, before the ask (the working tree's build doc), or at `scope`, before any packet (the reviewed commit's build doc): it holds a fence line the fence rule (section 5) does not accept (off column 0, in a list item or block quote, a backtick info string holding a backtick, never closed), a raw HTML line (section 5, "No raw HTML lines"), a slice `Status:` line or header `Base:` line the label rule does not take (section 5, "Exact labels": not exact, not the last line of its paragraph, or a second one), or a heading or label line off the plain form (section 5, "Plain structure": indented, after a list-item or block-quote marker, or a heading whose `#`s are not followed by exactly one space), or a decision the line rules and a CommonMark reader take differently (section 5, "Two readings": the slices, a card, the recorded base, the withheld sections), or one of the CommonMark reading's three refusals (section 5, "Two readings", A14: a rendered `Status:` or `Base:` line in a paragraph whose lines cannot all be mapped to source lines, named at the paragraph's first line; a level 1 or 2 heading off the slice form that starts with "slice"; a heading that starts with `Status:` or `Base:`); or, at `gate` once the workspace is a git work tree and at `scope`, another Markdown file of the commit that a CommonMark reader declares the builder's notes and the line reading does not; the line is named (the file too, for a notes file), both lines for a second label |
+| `doc-unreadable` | at `gate`, before the ask (the working tree's build doc), or at `scope`, before any packet (the reviewed commit's build doc): it holds a fence line the fence rule (section 5) does not accept (off column 0, in a list item or block quote, a backtick info string holding a backtick, never closed), a raw HTML line (section 5, "No raw HTML lines"), a slice `Status:` line or header `Base:` line the label rule does not take (section 5, "Exact labels": not exact, not the last line of its paragraph, or a second one), or a heading or label line off the plain form (section 5, "Plain structure": indented, after a list-item or block-quote marker, or a heading whose `#`s are not followed by exactly one space), or a decision the line rules and a CommonMark reader take differently (section 5, "Two readings": the slices, a card, the recorded base, the withheld sections), or a character outside the character list outside an accepted fence (section 5, "The character list", A16: named by its code point), or one of the CommonMark reading's four refusals (section 5, "Two readings", A14: a rendered `Status:` or `Base:` line in a paragraph whose lines cannot all be mapped to source lines, named at the paragraph's first line; a level 1 or 2 heading off the slice form that starts with "slice"; a heading that starts like a `Status:` or `Base:` label; A16: a rendered character outside the list, which only a character reference can put there); or, at `gate` once the workspace is a git work tree and at `scope`, another Markdown file of the commit that a CommonMark reader declares the builder's notes and the line reading does not; the line is named (the file too, for a notes file), both lines for a second label |
 | `station-refused` | a readers root that is not the expected readers plugin by identity, or a file of it that resolves outside it, or one named for a v1 plugin folder (each refused before any of its files is opened or run), or readers' identity breaks the trace's refusal rule; a `refused` trace line is written |
 | `floor-refused` | a local lens came back below the floor; no verdict is emitted |
 | `local-incomplete` | a local lens failed after its re-send, or refused deterministically |

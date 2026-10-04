@@ -143,8 +143,15 @@ class TheReadings(unittest.TestCase):
     names the first line where they differ and the decision."""
 
     def test_every_family_passes_the_line_rules_alone(self):
-        """The families are what A8 to A12 let through: the line rules find no problem in any of them."""
+        """The families are what A8 to A12 let through: the line rules find no problem in any of them, except that since
+        A16 a family written with a character outside the character list (the no-break space inside a slice heading)
+        is stopped by the line rules first, at the same line, naming the character."""
         for what, doc, first, decision in FAMILIES:
+            if fences.unlisted(first) is not None:
+                problems = fences.read(doc).problems
+                self.assertEqual(problems[0][0], number_of(doc, first), what)
+                self.assertIn("U+%04X" % ord(fences.unlisted(first)[1]), problems[0][1], what)
+                continue
             self.assertEqual(fences.read(doc).problems, [], what)
 
     def test_every_family_stops_each_reader_naming_its_line(self):
@@ -159,6 +166,8 @@ class TheReadings(unittest.TestCase):
     def test_every_family_names_the_decision_that_differs(self):
         mod = readings()
         for what, doc, first, decision in FAMILIES:
+            if fences.unlisted(first) is not None:
+                continue    # A16: the line rules stop it first (above); `difference` reads only a doc they accept
             with self.subTest(shape=what):
                 found = mod.difference(doc)
                 self.assertIsNotNone(found, what)

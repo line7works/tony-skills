@@ -4,6 +4,11 @@ section 5, the allow rule's (3)).
     declares(text) -> the heading text that declares the file the builder's notes, or None
     declaration(text) -> (that heading text, its line), or None: the line is the ATX heading's own, or a Setext
         heading's first text line
+    declares_name(heading) -> True when a heading's text declares the builder's notes (`DECLARES`, read folded,
+        a curly apostrophe read as `'`); both readings call it
+    unlisted_heading(text) -> (line, character) for the first heading line the declaration test reads (below) that
+        holds a character outside the character list (`fences.LISTED`), or None (the E15 lane contract A16 (2): the
+        file is a notes candidate, withheld and named, never a stop; `readings.notes_unlisted`)
 
 Since the E15 lane contract A13 this is the line reading of a file's declaration; `readings.notes_difference`
 reads the file a second time with a CommonMark reader, and a file the CommonMark reader declares and this reading
@@ -13,7 +18,8 @@ not is withheld, as before A13 (A14, C1A8-4).
 The slice review withholds a Markdown file whose first heading says it is the builder's notes, and so does
 this core: a `.md` blob of the reviewed commit (a regular file, never a link) whose first heading holds
 "notes from the builder", "builder notes", "builder's notes", "builders notes" or "build notes" (letter case
-aside) is left out of every packet and named. The file-name and folder-name leg is `packet.left_out_by_rule`.
+aside; the heading is folded first, NFKC normalization and case folding, A16 (3), and a curly apostrophe, U+2018 or
+U+2019, is read as `'`, A16 send-back 1) is left out of every packet and named. The file-name and folder-name leg is `packet.left_out_by_rule`.
 
 Which heading is first is read WIDE, so a declaration is never missed where a CommonMark reader would find
 one; a wider reading only ever withholds more, and what it withholds is named. Every heading-shaped line is
@@ -37,6 +43,18 @@ A notes file is not the build doc: a fence line the strict rule does not accept,
 stops the run here; it only widens the reading.
 
 CRLF and CR endings are line endings and a leading byte order mark is dropped.
+
+A HEADING LINE OUTSIDE THE CHARACTER LIST (A16 (2) as send-back 1 of fix round 10 narrowed it; stated once here and
+once in the contract). A file one of whose heading lines holds a character outside the character list (`fences.py`,
+"THE CHARACTER LIST") is a notes candidate: withheld and named with the line and the character, never a stop,
+because such a character can hide the declaration's words from a reader. The heading lines tested are the ones the
+declaration test itself reads: the candidates above, up to and including the first certain heading, each an ATX
+heading's line or the text lines of a Setext heading, never a line an accepted fence holds. They are found twice,
+once in the file as written and once with every character outside the list set aside on each line (so a character
+that keeps a line from reading as a heading, `<U+3164># Builder notes`, still counts), and the line as written is
+tested. A heading past the first certain heading, or a fenced sample, holding such a character leaves the file an
+ordinary one. `readings.notes_unlisted` adds the CommonMark reader's first heading (the one its declaration test
+reads), its rendered name before whitespace is collapsed, so a character reference counts as the character it names.
 """
 import re
 
@@ -56,8 +74,23 @@ def declares(text):
     return None if found is None else found[0]
 
 
+def declares_name(heading):
+    """The declaration test on one heading's text, the same in both readings: folded (NFKC, case folding, A16 (3)),
+    a curly apostrophe (U+2018, U+2019) read as `'` (A16 send-back 1), then `DECLARES`."""
+    return bool(DECLARES.search(fences.fold(heading).replace("\u2018", "'").replace("\u2019", "'")))
+
+
 def declaration(text):
-    if text.startswith("﻿"):
+    for heading, at, lines in candidates(text):
+        if declares_name(heading):
+            return heading, at
+    return None
+
+
+def candidates(text):
+    """[(heading text, its first line, [the 1-based lines its text is read from])] in file order, up to and including
+    the first certain heading: every heading the declaration test reads (module docstring)."""
+    if text.startswith("\ufeff"):
         text = text[1:]
     raw = fences.split_lines(text)
     lines = [line.rstrip("\r\n") for line in raw]
@@ -68,22 +101,23 @@ def declaration(text):
     front = first is not None and bool(FRONT_OPEN.match(lines[first]))
     certain_allowed = not front
     html_seen = False
-    para, candidates, para_at = [], [], None
+    para, found, para_at = [], [], []
     for index, line in enumerate(lines):
         stripped = CONTAINERS.sub("", line)
         if stripped.lstrip().startswith("<"):
             html_seen = True
         atx = ATX.match(stripped)
         if atx:
-            candidates.append((atx.group(1) or "", index + 1))
+            found.append((atx.group(1) or "", index + 1, [index + 1]))
             para = []
         elif UNDERLINE.match(stripped) and para:
-            candidates.append((" ".join(para), para_at))
+            found.append((" ".join(para), para_at[0], list(para_at)))
             para = []
         elif stripped.strip():
             if not para:
-                para_at = index + 1
+                para_at = []
             para.append(stripped.strip())
+            para_at.append(index + 1)
         else:
             para = []
         if unplaced is not None and index + 1 >= unplaced:
@@ -93,7 +127,23 @@ def declaration(text):
             break
         if front and not certain_allowed and index > first and FRONT_CLOSE.match(line):
             certain_allowed = True
-    for heading, at in candidates:
-        if DECLARES.search(heading):
-            return heading, at
+    return found
+
+
+def unlisted_heading(text):
+    """(line, character) for the first heading line the declaration test reads that holds a character outside the
+    character list, or None (module docstring, "A HEADING LINE OUTSIDE THE CHARACTER LIST")."""
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    lines = [line.rstrip("\r\n") for line in fences.split_lines(text)]
+    visible = "".join("".join(c for c in line if c in fences.LISTED) + "\n" for line in lines)
+    read = set()
+    for version in (text, visible):
+        fenced = fences.scan(fences.split_lines(version)).fenced
+        for heading, at, numbers in candidates(version):
+            read.update(n for n in numbers if n not in fenced)
+    for number in sorted(read):
+        odd = fences.unlisted(lines[number - 1])
+        if odd is not None:
+            return number, odd[1]
     return None
