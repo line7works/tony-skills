@@ -1,0 +1,14 @@
+{
+  "input_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "run_dir": "/work/example/run",
+  "run_id": "handoff-0001",
+  "station": {},
+  "surprise": 1,
+  "workspace": "/work/example/workspace"
+}

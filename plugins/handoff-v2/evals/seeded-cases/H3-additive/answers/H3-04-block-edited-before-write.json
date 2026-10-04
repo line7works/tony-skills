@@ -1,0 +1,11 @@
+{
+  "answers": [],
+  "case": "H3-04-block-edited-before-write",
+  "perishables": [
+    "a seam note for slice B"
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

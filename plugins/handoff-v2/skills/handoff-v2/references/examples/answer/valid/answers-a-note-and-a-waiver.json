@@ -1,0 +1,27 @@
+{
+  "answer_version": 1,
+  "answers": [
+    {
+      "answered": true,
+      "effect": {
+        "kind": "note"
+      },
+      "question": "q1",
+      "words": "yes, at 99"
+    },
+    {
+      "answered": true,
+      "effect": {
+        "finding": "f1:639752f141f2c0ee94fa",
+        "kind": "waive"
+      },
+      "question": "q2",
+      "words": "ship it, the double tap is rare"
+    }
+  ],
+  "kind": "answers",
+  "perishables": [
+    "the bench clock drifts"
+  ],
+  "run_id": "handoff-0001"
+}

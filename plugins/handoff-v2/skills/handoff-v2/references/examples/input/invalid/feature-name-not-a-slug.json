@@ -1,0 +1,18 @@
+{
+  "input_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "run_dir": "/work/example/run",
+  "run_id": "handoff-0001",
+  "station": {
+    "feature": {
+      "name": "Turn Stile",
+      "words": "x"
+    }
+  },
+  "workspace": "/work/example/workspace"
+}

@@ -1,0 +1,31 @@
+{
+  "answers": [
+    {
+      "answered": true,
+      "effect": {
+        "finding_at": "src/turnstile.py:2",
+        "kind": "waive"
+      },
+      "question": "q1",
+      "words": "ship it, the double tap is rare"
+    }
+  ],
+  "asserts": {
+    "open": [
+      "src/turnstile.py:9"
+    ]
+  },
+  "case": "H1-03-asserted-open-item",
+  "perishables": [
+    "the bench clock drifts a second a day"
+  ],
+  "questions": [
+    {
+      "source": "chat-ruling",
+      "text": "the owner said waive the double tap MAJOR"
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

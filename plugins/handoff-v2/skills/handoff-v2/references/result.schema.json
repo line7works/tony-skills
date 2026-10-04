@@ -1,0 +1,844 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/handoff-v2/result.schema.json",
+  "title": "handoff-v2 result",
+  "description": "One handoff-v2 run's result, written by `report` (or by the stop that ends a run), closed at every level but the events the records component describes (references/handoff-contract.md section 9; references/back-loop.md section 4). Every run ends in a terminal status, every stop included. handoff-v2 invokes no station, so it has no trace (`trace` is null, CR-16).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "interface_version",
+    "plugin_version",
+    "station",
+    "run_id",
+    "run_dir",
+    "status",
+    "stop_tag",
+    "reason",
+    "report_only",
+    "wrote_nothing",
+    "writes",
+    "selection",
+    "invocation",
+    "trace",
+    "station_result"
+  ],
+  "properties": {
+    "interface_version": {
+      "const": 1
+    },
+    "plugin_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "station": {
+      "const": "handoff-v2"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "stopped"
+      ]
+    },
+    "stop_tag": {
+      "enum": [
+        "selection-none",
+        "selection-several",
+        "records-refused",
+        "selection-unnamed",
+        "doc-unreadable",
+        "block-misplaced",
+        "identity-unnamed",
+        "identity-conflict",
+        "not-git",
+        "block-edited",
+        "slice-unknown",
+        "gate-open",
+        "photograph-moved",
+        "write-refused",
+        null
+      ],
+      "description": "the stop's one tag; null on a completion. The shared tags: `selection-none`, `selection-several`, `records-refused`. This core's own: `selection-unnamed`, `doc-unreadable`, `block-misplaced`, `identity-unnamed`, `identity-conflict`, `not-git`, `block-edited`, `slice-unknown`, `gate-open`, `photograph-moved`, `write-refused`."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_only": {
+      "type": "boolean"
+    },
+    "wrote_nothing": {
+      "type": "boolean"
+    },
+    "writes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind",
+          "sha256_before",
+          "sha256_after"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "run_artifact",
+              "build_doc",
+              "records_log",
+              "memory_pointer"
+            ]
+          },
+          "sha256_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sha256_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "how": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outcome": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "searched": {
+          "type": "array"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "doc": {
+          "type": "string"
+        }
+      },
+      "description": "the hunt the run used, as `select` recorded it (empty when the run stopped before it)"
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
+      "properties": {
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caller": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "description": "as the input carried it"
+    },
+    "trace": {
+      "type": "null",
+      "description": "handoff-v2 invokes no station and writes no trace.jsonl (CR-16)"
+    },
+    "station_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc",
+        "feature",
+        "identity_how",
+        "after",
+        "photograph",
+        "questions",
+        "answers",
+        "next_move",
+        "block",
+        "events",
+        "cards_after",
+        "checkpoint",
+        "pointer",
+        "chat"
+      ],
+      "properties": {
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identity_how": {
+          "enum": [
+            "dated-plan",
+            "flat-plan",
+            "title",
+            "owner",
+            null
+          ]
+        },
+        "after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "photograph": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "cards",
+                "open",
+                "repo",
+                "suite",
+                "records"
+              ],
+              "properties": {
+                "cards": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "name",
+                      "card",
+                      "source"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "card": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "enum": [
+                          "records",
+                          "status-line"
+                        ]
+                      },
+                      "status_line": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "card_derived": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "open": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "slice",
+                      "severity",
+                      "location",
+                      "claim"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^f[1-9][0-9]*:[0-9a-f]{20}$"
+                      },
+                      "slice": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "severity": {
+                        "enum": [
+                          "BLOCKER",
+                          "MAJOR",
+                          "MINOR"
+                        ]
+                      },
+                      "status": {
+                        "enum": [
+                          "open",
+                          "fixed",
+                          "waived"
+                        ]
+                      },
+                      "location": {
+                        "type": "string"
+                      },
+                      "claim": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "repo": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "branch",
+                    "head",
+                    "base",
+                    "ahead",
+                    "tree",
+                    "dirt"
+                  ],
+                  "properties": {
+                    "branch": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "head": {
+                      "type": "string"
+                    },
+                    "base": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ahead": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "tree": {
+                      "enum": [
+                        "clean",
+                        "dirty"
+                      ]
+                    },
+                    "dirt": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "checkpoint": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "suite": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "state",
+                    "provenance",
+                    "path",
+                    "sha256"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string"
+                    },
+                    "provenance": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "path": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sha256": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^[0-9a-f]{64}$"
+                    }
+                  }
+                },
+                "records": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "log",
+                    "head",
+                    "events",
+                    "exists"
+                  ],
+                  "properties": {
+                    "log": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "head": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "events": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "exists": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "questions": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "source",
+                  "text"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "enum": [
+                      "session-question",
+                      "chat-ruling",
+                      "next-slice",
+                      "doc-question"
+                    ]
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "slice": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "answers": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "asked",
+                "answered",
+                "in_block",
+                "as_ledger_lines"
+              ],
+              "properties": {
+                "asked": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "answered": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "in_block": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "as_ledger_lines": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          ]
+        },
+        "next_move": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "shape",
+                "doc",
+                "line",
+                "kickoff",
+                "alternative"
+              ],
+              "properties": {
+                "shape": {
+                  "enum": [
+                    "clean-boundary",
+                    "open-card",
+                    "loop-complete",
+                    "owner-holds"
+                  ]
+                },
+                "doc": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "string"
+                },
+                "kickoff": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "alternative": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "slice": {
+                  "type": "string"
+                },
+                "how": {
+                  "enum": [
+                    "record",
+                    "owner"
+                  ]
+                },
+                "words": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fix_list": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "slice",
+                      "severity",
+                      "location",
+                      "claim"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^f[1-9][0-9]*:[0-9a-f]{20}$"
+                      },
+                      "slice": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "severity": {
+                        "enum": [
+                          "BLOCKER",
+                          "MAJOR",
+                          "MINOR"
+                        ]
+                      },
+                      "status": {
+                        "enum": [
+                          "open",
+                          "fixed",
+                          "waived"
+                        ]
+                      },
+                      "location": {
+                        "type": "string"
+                      },
+                      "claim": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "recheck": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "block": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "heading",
+                "text",
+                "line"
+              ],
+              "properties": {
+                "heading": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "an event as this run handed it to `records.py append` (references/handoff-contract.md section 6; the component's event schema is its own)"
+          }
+        },
+        "cards_after": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "card",
+                  "after"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "card": {
+                    "type": "string"
+                  },
+                  "after": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "component": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "checkpoint": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "commit",
+                "parent",
+                "subject"
+              ],
+              "properties": {
+                "commit": {
+                  "type": "string"
+                },
+                "parent": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "pointer": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "for_adapter",
+                "file_name",
+                "text",
+                "note"
+              ],
+              "properties": {
+                "pointer_version": {
+                  "const": 1
+                },
+                "run_id": {
+                  "type": "string"
+                },
+                "harness": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "feature": {
+                  "type": "string"
+                },
+                "file_name": {
+                  "type": "string"
+                },
+                "doc": {
+                  "type": "string"
+                },
+                "block_date": {
+                  "type": "string"
+                },
+                "kickoff": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "index_line": {
+                  "type": "string"
+                },
+                "for_adapter": {
+                  "type": "boolean"
+                },
+                "note": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "written": {
+                  "type": "boolean"
+                }
+              }
+            }
+          ]
+        },
+        "chat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

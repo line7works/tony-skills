@@ -1,0 +1,11 @@
+{
+  "answers": [],
+  "case": "H3-01-clean",
+  "perishables": [
+    "a seam note for slice B"
+  ],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

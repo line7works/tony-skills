@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/handoff-v2/answer.schema.json",
+  "title": "handoff-v2 questions and answers",
+  "description": "The executor's two files, closed at every level (references/handoff-contract.md sections 3.3 and 3.4): kind `questions`, the session's questions `gate` takes (v1's sources 1 and 2); kind `answers`, the owner's answers `record-answer` takes, with the perishables and what the executor believes of the photograph (`asserts`), which the script holds to its own read.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer_version",
+        "kind",
+        "run_id",
+        "questions"
+      ],
+      "properties": {
+        "answer_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "questions"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "questions": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "text"
+            ],
+            "properties": {
+              "source": {
+                "enum": [
+                  "session-question",
+                  "chat-ruling"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 600,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer_version",
+        "kind",
+        "run_id",
+        "answers",
+        "perishables"
+      ],
+      "properties": {
+        "answer_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "answers"
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "answers": {
+          "type": "array",
+          "maxItems": 60,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "question",
+              "answered"
+            ],
+            "properties": {
+              "question": {
+                "type": "string",
+                "pattern": "^(q[1-9][0-9]*|r-next|r-q[1-9][0-9]*)$"
+              },
+              "answered": {
+                "type": "boolean"
+              },
+              "words": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 600,
+                "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$"
+              },
+              "effect": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "note"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "finding"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "waive"
+                      },
+                      "finding": {
+                        "type": "string",
+                        "pattern": "^f[1-9][0-9]*:[0-9a-f]{20}$"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "finding"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "reopen"
+                      },
+                      "finding": {
+                        "type": "string",
+                        "pattern": "^f[1-9][0-9]*:[0-9a-f]{20}$"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "kind",
+                      "slice"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "next-slice"
+                      },
+                      "slice": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": "^\\S+$"
+                      }
+                    }
+                  }
+                ],
+                "description": "what the answer does: a note lands in the block; a waiver or a reopening becomes the records event and its ledger line; a next-slice answer names the next slice (or null: the owner holds)"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "answered"
+                  ],
+                  "properties": {
+                    "answered": {
+                      "const": true
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "words",
+                    "effect"
+                  ]
+                },
+                "else": {
+                  "properties": {
+                    "words": false,
+                    "effect": false
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "perishables": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600,
+            "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$"
+          }
+        },
+        "asserts": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "what the executor believes; any disagreement with the script's read is refused (CR-11)",
+          "properties": {
+            "cards": {
+              "type": "object",
+              "additionalProperties": {
+                "enum": [
+                  "not started",
+                  "in progress",
+                  "built",
+                  "rejected",
+                  "signed off with conditions",
+                  "signed off",
+                  "none"
+                ]
+              },
+              "propertyNames": {
+                "pattern": "^\\S+$"
+              }
+            },
+            "open": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "branch": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ahead": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tree": {
+              "enum": [
+                "clean",
+                "dirty"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

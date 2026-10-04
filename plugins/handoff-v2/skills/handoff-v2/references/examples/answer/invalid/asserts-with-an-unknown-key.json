@@ -1,0 +1,10 @@
+{
+  "answer_version": 1,
+  "answers": [],
+  "asserts": {
+    "head": "abc"
+  },
+  "kind": "answers",
+  "perishables": [],
+  "run_id": "handoff-0001"
+}

@@ -1,0 +1,46 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-test-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the doc docs/phase-two.md yields no identity (not a dated plan, not a flat build plan, and no title line to slug): ask the owner to name it, and run again with his name in station.feature; never guessed",
+  "report_only": false,
+  "run_dir": "/work/example/run",
+  "run_id": "run",
+  "selection": {
+    "candidates": [
+      "docs/phase-two.md"
+    ],
+    "doc": "docs/phase-two.md",
+    "how": "named",
+    "name": null,
+    "outcome": "one",
+    "searched": []
+  },
+  "station": "handoff-v2",
+  "station_result": {
+    "after": null,
+    "answers": null,
+    "block": null,
+    "cards_after": null,
+    "chat": null,
+    "checkpoint": null,
+    "doc": "docs/phase-two.md",
+    "events": [],
+    "feature": null,
+    "identity_how": null,
+    "next_move": null,
+    "photograph": null,
+    "pointer": null,
+    "questions": null
+  },
+  "status": "stopped",
+  "stop_tag": "identity-unnamed",
+  "trace": null,
+  "writes": [],
+  "wrote_nothing": true
+}

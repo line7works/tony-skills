@@ -1,0 +1,43 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-test-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the invocation names nothing to match a build doc against: ask the owner which build doc this handoff is for, and run again with --name or --doc (the lone doc on disk is never taken)",
+  "report_only": false,
+  "run_dir": "/work/example/run",
+  "run_id": "run",
+  "selection": {
+    "candidates": [],
+    "how": null,
+    "name": null,
+    "outcome": null,
+    "searched": []
+  },
+  "station": "handoff-v2",
+  "station_result": {
+    "after": null,
+    "answers": null,
+    "block": null,
+    "cards_after": null,
+    "chat": null,
+    "checkpoint": null,
+    "doc": null,
+    "events": [],
+    "feature": null,
+    "identity_how": null,
+    "next_move": null,
+    "photograph": null,
+    "pointer": null,
+    "questions": null
+  },
+  "status": "stopped",
+  "stop_tag": "selection-unnamed",
+  "trace": null,
+  "writes": [],
+  "wrote_nothing": true
+}
