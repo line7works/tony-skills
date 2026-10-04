@@ -48,7 +48,12 @@ letters in a label; a character reference to a character outside the list; a low
 and a lower-case or spaced label heading; each stops naming its line. A withheld name past the stems (`## Hand off`,
 `## Hand` en dash `offs`, `## 1. Punch list`, `## The punch list`, `## Build-assumptions`) is withheld from every
 packet and named; another Markdown file whose heading holds a character outside the list (a Hangul filler, an
-emoji) is withheld and named, never a stop.
+emoji) is withheld and named, never a stop. Since A17 (C1A10-1 to C1A10-3) the guard also holds, written with listed
+characters only: a slice heading spelled with an accented letter or after a left curly quote, an accented `Status:`
+label and an accented header `Base:` line, each stopping naming its line; the withheld names past A16's words (joined
+by U+2212, U+00B7 or U+2019, accented, numbered `1`, `1.1`, `(1)` or `A.`, `Buildassumptions`, `Builder
+assumptions`), withheld from every packet and named; and the seven notes shapes whose unlisted character sits where it
+keeps the first line from reading as a heading or on a Setext underline, withheld and named, never a stop.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -609,6 +614,93 @@ class TheClassGuard(unittest.TestCase):
                 self.assertNotIn("A16-CURLY-MARKER", body, path)
             self.assertNotIn("notes/plain.md", whys, name)
             self.assertNotIn("notes/deep.md", whys, name)
+
+    # A17 (1), C1A10-1: (what, the text replaced in class_doc, its replacement, the line the stop names); each written
+    # with listed characters only
+    A17_STOPS = (
+        ("slice B's heading spelled with U+00EF (C1A10-1)", "## Slice B %s the spinner" % D,
+         "## Slïce B %s the spinner" % D, "## Slïce B %s the spinner" % D),
+        ("slice B's heading after a left curly quote (C1A10-1)", "## Slice B %s the spinner" % D,
+         "## ‘Slice B %s the spinner" % D, "## ‘Slice B %s the spinner" % D),
+        ("Stätus: built above slice B's plain label (C1A10-1)", "Depends on: A\nStatus: signed off",
+         "Depends on: A\n\nStätus: built\n\nStatus: signed off", "Stätus: built"),
+        ("Bäse: 1234567 in the header (C1A10-1)", HEADER_AT, HEADER_AT + "\nBäse: 1234567\n",
+         "Bäse: 1234567"),
+    )
+    # A17 (2), C1A10-2: (what, a withheld name past A16's words, its canonical name)
+    A17_WITHHELD = (
+        ("Hand-offs joined by U+2212", "## Hand−offs", "## Handoffs"),
+        ("Hand-offs joined by U+00B7", "## Hand·offs", "## Handoffs"),
+        ("Hand-offs joined by U+2019", "## Hand’offs", "## Handoffs"),
+        ("an accented Handoffs", "## Hàndoffs", "## Handoffs"),
+        ("an accented Punch list", "## Pünch list", "## Punch list"),
+        ("1 Punch list", "## 1 Punch list", "## Punch list"),
+        ("1.1 Punch list", "## 1.1 Punch list", "## Punch list"),
+        ("(1) Punch list", "## (1) Punch list", "## Punch list"),
+        ("A. Punch list", "## A. Punch list", "## Punch list"),
+        ("Buildassumptions", "## Buildassumptions", "## Build assumptions"),
+        ("Builder assumptions", "## Builder assumptions", "## Build assumptions"),
+    )
+    # A17 (3), C1A10-3: path -> (text, the line named, the code point named)
+    A17_NOTES = {
+        "notes/nbsp.md": ("# Builder notes\n\nA17-NOTES-MARKER one\n", 1, 0x00A0),
+        "notes/filler.md": ("#ㅤBuilder notes\n\nA17-NOTES-MARKER two\n", 1, 0x3164),
+        "notes/em-space.md": ("# Builder notes\n\nA17-NOTES-MARKER three\n", 1, 0x2003),
+        "notes/ideographic.md": ("#　Builder notes\n\nA17-NOTES-MARKER four\n", 1, 0x3000),
+        "notes/zwsp.md": ("#​Builder notes\n\nA17-NOTES-MARKER five\n", 1, 0x200B),
+        "notes/underline-after.md": ("Builder notes\n===ㅤ\n\nA17-NOTES-MARKER six\n", 2, 0x3164),
+        "notes/underline-before.md": ("Builder notes\n　===\n\nA17-NOTES-MARKER seven\n", 2, 0x3000),
+    }
+
+    def test_every_a17_shape_stops_before_any_packet_naming_its_line(self):
+        from vertical_core import fences  # noqa: E402
+        for what, old, new, first in self.A17_STOPS:
+            text = class_doc().replace(old, new, 1)
+            self.assertNotEqual(text, class_doc(), what)
+            self.assertIsNone(fences.unlisted(first), what)
+            head = self.recommit_doc(text)
+            with self.assertRaises(specmod.SpecUnreadable) as caught:
+                packet.Snapshot(self.ws, head, DOC)
+            self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+
+    def test_every_a17_withheld_name_reaches_no_packet_and_is_named(self):
+        for index, (what, heading, canonical) in enumerate(self.A17_WITHHELD):
+            text = class_doc().replace("## Build   assumptions\n", heading + "\n- A17-NEAR-MISS-MARKER skim slice B\n\n"
+                                                                    "## Build   assumptions\n")
+            first = text.split("\n").index(heading) + 1
+            self.snap = packet.Snapshot(self.ws, self.recommit_doc(text), DOC)
+            for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                               ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"},
+                                "o"),
+                               ({"name": "outside-deepseek", "side": "outside", "row": "deepseek",
+                                 "profile": "packet-only"}, "p")):
+                built, dest = self.cut(spec, "a17-%s-%d" % (name, index))
+                for path, body in texts_under(dest):
+                    if os.path.basename(path) in ("files.json", "withheld.json"):
+                        continue
+                    self.assertNotIn("A17-NEAR-MISS-MARKER", body, (what, path))
+                withheld = testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"]
+                self.assertTrue(any(w["what"] == "%s %s" % (DOC, canonical) and
+                                    "lines %d to %d" % (first, first + 2) in w["why"] for w in withheld), (what, withheld))
+
+    def test_every_a17_notes_shape_is_withheld_and_named_never_a_stop(self):
+        for rel, (text, line, code) in sorted(self.A17_NOTES.items()):
+            testlib.write_text(os.path.join(self.ws, rel), text)
+        testlib.git(self.ws, ["add", "notes"])
+        testlib.git(self.ws, ["commit", "-q", "-m", "seven notes"], when="2026-09-20T12:00:00-07:00")
+        self.snap = packet.Snapshot(self.ws, testlib.git(self.ws, ["rev-parse", "HEAD"]).strip(), DOC)
+        for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                           ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"}, "o"),
+                           ({"name": "outside-deepseek", "side": "outside", "row": "deepseek", "profile": "packet-only"},
+                            "p")):
+            built, dest = self.cut(spec, "a17-notes-%s" % name)
+            whys = dict((w["what"], w["why"]) for w in testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"])
+            for rel, (text, line, code) in sorted(self.A17_NOTES.items()):
+                self.assertIn("line %d" % line, whys.get(rel, ""), (name, rel))
+                self.assertIn("U+%04X" % code, whys.get(rel, ""), (name, rel))
+            for path, body in texts_under(dest):
+                self.assertNotIn("A17-NOTES-MARKER", body, path)
+            self.assertNotIn("notes/plain.md", whys, name)
 
     def test_every_shape_the_two_readings_take_differently_stops_before_any_packet_naming_its_line(self):
         """A13: the line rules accept each shape; the second reading takes a decision differently, so the snapshot

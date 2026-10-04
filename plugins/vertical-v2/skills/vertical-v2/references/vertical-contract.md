@@ -2,7 +2,7 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a
 state. Written for E15 slice 1 of the skills v2 rebuild, against the E15 lane contract (sections 6 and
-8, amendments A1 to A16) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
+8, amendments A1 to A17) and the control room's readings CR-1 to CR-10 in the slice 1a brief, as the
 slice 1a fix round applied A3 (C1A-1 to C1A-9), the design round applied A4 (the one packet builder,
 the local receipt, B5, C1A2-1 to C1A2-5), and fix round 3 applied A5 (the readers root by allowlist
 identity, this core's own fence reader, C1A3-3 to C1A3-6) and A7 (the gate reads with that fence reader),
@@ -13,8 +13,9 @@ fix round 6 applied A10 and A11 (exact labels with A11's six values, C1A6-1; a `
 real folder is removed unopened, C1A6-2), fix round 7 applied A12 (plain structure only, C1A7-1; the run files,
 C1A7-2), fix round 8 applied A13 (two readings: the line rules and a vendored CommonMark reader must take every
 decision from the doc the same way), fix round 9 applied A14 and A15 (the label bug, three near misses, hidden labels),
-and fix round 10 applied A16 (a character allowlist, folded label and heading-name tests, folded withheld names). Where
-this
+fix round 10 applied A16 (a character allowlist, folded label and heading-name tests, folded withheld names), and fix
+round 11 applied A17 (the fold drops the marks of accented letters, refusal (b) sets aside leading punctuation, wider
+withheld names, notes headings read with spaces). Where this
 document and that contract differ, the contract is the authority and this document is the defect.
 `references/back-loop.md` is the discipline the three back cores share; this document is this core's own.
 
@@ -340,8 +341,8 @@ a lens, never reaches a mandate, and never reaches a packet.
 withholds a Markdown file whose first heading says it is the builder's notes; so does this core, reading the
 commit's bytes of every `.md` regular file but the build doc. A heading declares when it holds "notes from
 the builder", "builder notes", "builder's notes", "builders notes" or "build notes", letter case aside (and,
-since A16 and its send-back 1, read folded with a curly apostrophe, U+2018 or U+2019, read as `'`, the same in both
-readings, `notes.declares_name`).
+since A16 and its send-back 1, read folded, "The fold" below, with a curly apostrophe, U+2018 or U+2019, read as
+`'`, the same in both readings, `notes.declares_name`).
 Which heading is first is read wide, so a declaration a Markdown reader would see first is never missed:
 every heading-shaped line (an ATX heading, or the text above an `===` or `---` underline), with block-quote
 and list markers stripped, whatever holds it (a fence, raw HTML, a container, front matter), counts until
@@ -355,13 +356,16 @@ only one direction stops the run, named with its line: the CommonMark reader's f
 builder's notes and the line reading does not (the file would reach the packets). A file the wide line reading
 declares and the CommonMark reader does not (an ordinary file that opens with an HTML line and has a later
 `## Build notes` heading) is withheld and named, as before A13; it never stops the run. The declaration test reads
-the heading folded (NFKC normalization and case folding, A16 (3)). Since A16 (2), before either reading is asked, a
+the heading folded ("The fold" below, A16 (3), A17 (1)). Since A16 (2), before either reading is asked, a
 file one of whose heading lines holds a character outside the character list ("The character list" below) is a notes
 candidate: withheld and named with the line and the character, never a stop (the code's statement is
 `scripts/vertical_core/notes.py`, "A HEADING LINE OUTSIDE THE CHARACTER LIST", with `readings.notes_unlisted`). The
 heading lines tested are the ones the declaration test itself reads (send-back 1 of fix round 10): the line reading's
-candidates up to and including the first certain heading, never a line an accepted fence holds, found in the file as
-written and again with the characters outside the list set aside on each line, each tested as written; and the
+candidates up to and including the first certain heading (an ATX heading's line, or a Setext heading's text lines and
+its underline line, A17 (3)), never a line an accepted fence holds, found three times (A17 (3), C1A10-3): in the file
+as written, with the characters outside the list removed on each line, and with the characters outside the list read
+as spaces (so `#`, a no-break space, then `Builder notes`, and `Builder notes` over `===` and a Hangul filler, are
+found), each line found tested as written; and the
 CommonMark reader's first heading, rendered and before its whitespace is collapsed, so a character reference counts as
 the character it names. A heading past the first certain heading, or a fenced sample, holding such a character leaves
 the file an ordinary one.
@@ -397,8 +401,9 @@ Unicode space line can end a block early for the reader. A `<` line inside an ac
 through `fences.read` by every reader of the build doc). Outside accepted fences, a `## ` line matching the
 build-doc form's slice heading opens a slice's section and any other `## ` line closes it; the header is every
 line before the first `## ` line. A line "starts with `Status:`" (or `Base:`) when it is a label candidate (A16
-(3)): under NFKC normalization and case folding it opens with `status` (or `base`), any spaces or tabs, then a colon,
-so `status: built`, `STATUS: built` and `Status : built` are such lines and, not being exact, stop. Inside a slice's
+(3)): folded ("The fold" below) it opens with `status` (or `base`), any spaces or tabs, then a colon, so `status:
+built`, `STATUS: built`, `Status : built` and `St` U+00E4 `tus: built` are such lines and, not being exact, stop (and so
+is `B` U+00E4 `se: 1234567` in the header). Inside a slice's
 section, a line that starts with `Status:` is the slice's label only when (a) it reads exactly `Status: ` (one space)
 and one of the six values A11 rules, `not started`,
 `in progress`, `built`, `rejected`, `signed off with conditions`, `signed off` (a `rejected` or conditional slice
@@ -482,8 +487,8 @@ packet, at every reader: the gate's slices and base and its notes check of HEAD,
 `label_form`). A line reads as a `Status:` or `Base:` label when, after every format character (Unicode category Cf:
 a zero-width space, a soft hyphen, a zero-width no-break space, a word joiner) is removed and its leading whitespace
 (any Unicode space: a no-break space, an ideographic space) is stripped, it starts with that label, "starts with"
-read as a label candidate (A16 (3): NFKC normalization and case folding, then `status` or `base`, any spaces or tabs,
-a colon). Since A16 such characters stop the run under the character list before this test is reached; it stays as
+read as a label candidate (A16 (3): folded, "The fold" below, then `status` or `base`, any spaces or tabs, a
+colon). Since A16 such characters stop the run under the character list before this test is reached; it stays as
 the second reading's own guard for a rendered line. The CommonMark
 reading tests every rendered paragraph line this way for the cards (2), the base (3) and refusal (a) below, so a label
 hidden behind such characters is a label candidate: a second or a non-exact label the line rules never take, and the
@@ -498,10 +503,11 @@ any ask, request or packet, when the CommonMark reading finds: (a) a rendered pa
 destination or a link title running over a line ending), anywhere in the doc and whatever the label says, one
 exact label included, named at the paragraph's first line (C1A8-1: which source line holds which label cannot be
 told there, and two rendered labels once collapsed into one); (b) a heading of level 1 or 2 whose rendered name,
-with format characters (Unicode category Cf) removed and folded (NFKC normalization and case folding, A16 (3)), starts
-with `slice` and is not a level 2
-heading whose rendered name matches the build-doc form's slice pattern (C1A8-2: an en dash, a hyphen or a colon for
-the form's dash, no spaces around it, a lower-case `slice`, a zero-width character, a level 1 heading; no reading
+with format characters (Unicode category Cf) removed, folded ("The fold" below, A16 (3), A17 (1)) and its leading
+punctuation, symbols and spaces (Unicode categories P, S and Z) set aside (A17 (1), C1A10-1), starts with `slice` and
+is not a level 2 heading whose rendered name matches the build-doc form's slice pattern (C1A8-2: an en dash, a hyphen
+or a colon for the form's dash, no spaces around it, a lower-case `slice`, a zero-width character, a level 1 heading;
+C1A10-1: an accented letter such as `Sl` U+00EF `ce`, a leading curly quote such as U+2018 before `Slice`; no reading
 would take it as a slice, so its slice would vanish from the sign-off check, where v1's gate read every slice
 heading's label); a heading of level 3 or more, such as a `### Slice D` note with a date, is not touched; (c) a
 heading of any level whose rendered name, with format characters removed, is a label candidate (A16 (3):
@@ -521,6 +527,16 @@ difference is seen instead of modelled. A heading both readings take as no slice
 and a heading named like a label were outside the comparison; since A14 the refusals above and the
 withheld-name rule cover them.
 
+**The fold** (A16 (3), A17 (1), C1A10-1; the code's statement is `scripts/vertical_core/fences.py`, "THE FOLD",
+`fold`). Every label test (the label rule, the plain-structure rule, the spec's removal, the CommonMark reading's
+cards, base and refusals (a) and (c)), every slice-heading test (refusal (b)), every withheld-name test (the spec's
+withheld-name rule, below) and the builder's-notes declaration test compare the text folded: NFKD normalization with
+every combining mark (Unicode category M) removed, then NFKC normalization, then case folding. So an accented letter
+the character list admits folds to its plain letter (`St` U+00E4 `tus` reads `status`, `Sl` U+00EF `ce` reads `slice`,
+`B` U+00E4 `se` reads `base`, `P` U+00FC `nch` reads `punch`), a compatibility form folds to its plain form, and upper
+case to lower case; a letter the list admits hides no label, slice heading or withheld name from both readings. On the
+25 real plans the fold changes no decision.
+
 **The spec** (reading CR-4; ruling E15-8 as A3 widened it and A4 and A5 amended it) is the commit's build doc
 with five sections and every `Status:` label removed outside fences, what is fenced decided by the fence rule
 above (A5 (2), A8); a build doc holding a fence line the rule does not accept, a raw HTML line (A9), a label
@@ -530,15 +546,23 @@ assumptions`, `## Deviations` and `## Discovered` (the builder's working records
 withholds too), each found by heading level and name under **the withheld-name rule** (A14, C1A8-3; the code's
 statement is `scripts/vertical_core/spec.py`, "THE WITHHELD-NAME RULE", `withheld_of`): a heading of level 1 or 2
 (on the plain form, A12; a heading off the plain form has already stopped the run) whose name, with any closing
-hashes dropped, its format characters (Unicode category Cf) removed, folded (NFKC normalization and case folding,
-A16 (4)), its hyphens, dashes (U+2010 to U+2015) and underscores read as spaces, its whitespace runs collapsed
-(C1A2-5), and a leading number (`1.`, `2)`) or a leading `the` dropped, STARTS WITH one of the stems `punch`,
-`handoff`, `hand off`, `build assumption`, `deviation` or `discover` is the withheld section the stem names
-(`## Punch list`, `## Handoffs`, `## Handoffs`, `## Build assumptions`, `## Deviations`, `## Discovered`), and is
-named as that section in every withheld list. So a near miss (`## Punch-list`, `## Punch list:`, `## Handoff`,
-`## Hand-offs`, `## Hand off`, `## Hand` en dash `offs`, `## 1. Punch list`, `## The punch list`,
-`## Build-assumptions`, a dated `## Handoff, <date>`) is withheld, never sent; a wider match only ever withholds
-more. The CommonMark
+hashes dropped, its format characters (Unicode category Cf) removed, folded ("The fold" above, A16 (4), A17 (1)), its
+hyphens, dashes (U+2010 to U+2015), underscores, minus signs (U+2212), middle dots (U+00B7) and curly single quotes
+(U+2018, U+2019) read as spaces (A17 (2)), its whitespace runs collapsed (C1A2-5), and every leading numbering (digits
+with dots or a closing parenthesis, `1`, `1.`, `1.1`, `2)`; a parenthesized number, `(1)`; a single letter with a dot,
+`A.`; A17 (2)) or leading `the` dropped, STARTS WITH one of the stems `punch`, `handoff`, `hand off`, `build
+assumption`, `buildassumption`, `builder assumption`, `builderassumption` (A17 (2)), `deviation` or `discover` is the
+withheld section the stem names (`## Punch list`, `## Handoffs`, `## Handoffs`, `## Build assumptions` for the four
+assumption stems, `## Deviations`, `## Discovered`), and is named as that section in every withheld list. So a near
+miss (`## Punch-list`, `## Punch list:`, `## Handoff`, `## Hand-offs`, `## Hand off`, `## Hand` en dash `offs`,
+`## Hand` U+2212 `offs`, `## Hand` U+00B7 `offs`, `## Hand` U+2019 `offs`, `## H` U+00E0 `ndoffs`, `## P` U+00FC
+`nch list`, `## 1 Punch list`, `## 1. Punch list`, `## 1.1 Punch list`, `## (1) Punch list`, `## A. Punch list`,
+`## The punch list`, `## Build-assumptions`, `## Buildassumptions`, `## Builder assumptions`, a dated
+`## Handoff, <date>`) is withheld, never sent; a wider match only ever withholds more (since A17 a bare leading
+number is numbering, so `## 10 punches` is withheld as the punch list). The name must START with a stem once its
+numbering and `the` are dropped: the rule does not withhold a name that only contains one (A17 rejected a contains
+rule, which would withhold an ordinary heading of a real plan), so `## Open punch list` reaches the packets (a carried
+item), and `## Theory`, `## Handy offsets` and `## A note on punctuation` are ordinary sections. The CommonMark
 reading applies the same rule to the rendered name, and the two readings must agree on every withheld line, its
 section and the name it was read from ("Two readings" above). Each section runs to the line
 before the next heading of level 1 or 2 outside a fence; and every `Status:` label (a line outside fences

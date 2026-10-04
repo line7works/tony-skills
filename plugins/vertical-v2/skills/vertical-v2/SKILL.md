@@ -63,8 +63,8 @@ run again with `--doc`); a build doc holding a fence it does not accept, a raw H
 only plain code blocks whose fences open and close at the left margin are read, no line opening with `<`
 and a letter, `/`, `!` or `?`, headings and labels only in their plain form at column 0 (no indent, no list or
 quote marker, a heading's `#`s then exactly one space), and only an exact `Status:` label per slice and `Base:`
-line in the header, each the last line of its paragraph, a label read in any letter case and with any spaces
-before its colon; no character outside the character list outside a fence (printable ASCII, a tab and the few
+line in the header, each the last line of its paragraph, a label read in any letter case or accent and with any
+spaces before its colon; no character outside the character list outside a fence (printable ASCII, a tab and the few
 punctuation marks, symbols, curly quotes and accented Latin letters the plans use; the stop names the character's
 code point); then the doc is read a second time by a CommonMark
 reader, and any slice, card, base or withheld section the two readings take differently stops it too, as does a

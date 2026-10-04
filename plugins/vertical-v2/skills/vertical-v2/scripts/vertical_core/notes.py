@@ -18,7 +18,7 @@ not is withheld, as before A13 (A14, C1A8-4).
 The slice review withholds a Markdown file whose first heading says it is the builder's notes, and so does
 this core: a `.md` blob of the reviewed commit (a regular file, never a link) whose first heading holds
 "notes from the builder", "builder notes", "builder's notes", "builders notes" or "build notes" (letter case
-aside; the heading is folded first, NFKC normalization and case folding, A16 (3), and a curly apostrophe, U+2018 or
+aside; the heading is folded first, THE FOLD of `fences.py`, A16 (3) and A17 (1), and a curly apostrophe, U+2018 or
 U+2019, is read as `'`, A16 send-back 1) is left out of every packet and named. The file-name and folder-name leg is `packet.left_out_by_rule`.
 
 Which heading is first is read WIDE, so a declaration is never missed where a CommonMark reader would find
@@ -44,17 +44,19 @@ stops the run here; it only widens the reading.
 
 CRLF and CR endings are line endings and a leading byte order mark is dropped.
 
-A HEADING LINE OUTSIDE THE CHARACTER LIST (A16 (2) as send-back 1 of fix round 10 narrowed it; stated once here and
-once in the contract). A file one of whose heading lines holds a character outside the character list (`fences.py`,
-"THE CHARACTER LIST") is a notes candidate: withheld and named with the line and the character, never a stop,
-because such a character can hide the declaration's words from a reader. The heading lines tested are the ones the
-declaration test itself reads: the candidates above, up to and including the first certain heading, each an ATX
-heading's line or the text lines of a Setext heading, never a line an accepted fence holds. They are found twice,
-once in the file as written and once with every character outside the list set aside on each line (so a character
-that keeps a line from reading as a heading, `<U+3164># Builder notes`, still counts), and the line as written is
-tested. A heading past the first certain heading, or a fenced sample, holding such a character leaves the file an
-ordinary one. `readings.notes_unlisted` adds the CommonMark reader's first heading (the one its declaration test
-reads), its rendered name before whitespace is collapsed, so a character reference counts as the character it names.
+A HEADING LINE OUTSIDE THE CHARACTER LIST (A16 (2) as send-back 1 of fix round 10 narrowed it, and A17 (3); stated
+once here and once in the contract). A file one of whose heading lines holds a character outside the character list
+(`fences.py`, "THE CHARACTER LIST") is a notes candidate: withheld and named with the line and the character, never
+a stop, because such a character can hide the declaration's words from a reader. The heading lines tested are the
+ones the declaration test itself reads: the candidates above, up to and including the first certain heading, each an
+ATX heading's line, or the text lines of a Setext heading and its underline line, never a line an accepted fence
+holds. They are found three times (the E15 lane contract A17 (3), C1A10-3): in the file as written, with every
+character outside the list removed on each line (so `<U+3164># Builder notes` still counts), and with every
+character outside the list read as a space (so `#<U+00A0>Builder notes` and `Builder notes` over `===<U+3164>` still
+count); each line found is tested as written. A heading past the first certain heading, or a fenced sample, holding
+such a character leaves the file an ordinary one. `readings.notes_unlisted` adds the CommonMark reader's first
+heading (the one its declaration test reads), its rendered name before whitespace is collapsed, so a character
+reference counts as the character it names.
 """
 import re
 
@@ -75,7 +77,7 @@ def declares(text):
 
 
 def declares_name(heading):
-    """The declaration test on one heading's text, the same in both readings: folded (NFKC, case folding, A16 (3)),
+    """The declaration test on one heading's text, the same in both readings: folded (`fences.fold`, A16 (3), A17 (1)),
     a curly apostrophe (U+2018, U+2019) read as `'` (A16 send-back 1), then `DECLARES`."""
     return bool(DECLARES.search(fences.fold(heading).replace("\u2018", "'").replace("\u2019", "'")))
 
@@ -90,6 +92,11 @@ def declaration(text):
 def candidates(text):
     """[(heading text, its first line, [the 1-based lines its text is read from])] in file order, up to and including
     the first certain heading: every heading the declaration test reads (module docstring)."""
+    return [(heading, at, lines) for heading, at, lines, underline in _candidates(text)]
+
+
+def _candidates(text):
+    """`candidates` with a fourth field: a Setext heading's underline line (1-based), or None for an ATX heading."""
     if text.startswith("\ufeff"):
         text = text[1:]
     raw = fences.split_lines(text)
@@ -108,10 +115,10 @@ def candidates(text):
             html_seen = True
         atx = ATX.match(stripped)
         if atx:
-            found.append((atx.group(1) or "", index + 1, [index + 1]))
+            found.append((atx.group(1) or "", index + 1, [index + 1], None))
             para = []
         elif UNDERLINE.match(stripped) and para:
-            found.append((" ".join(para), para_at[0], list(para_at)))
+            found.append((" ".join(para), para_at[0], list(para_at), index + 1))
             para = []
         elif stripped.strip():
             if not para:
@@ -132,16 +139,18 @@ def candidates(text):
 
 def unlisted_heading(text):
     """(line, character) for the first heading line the declaration test reads that holds a character outside the
-    character list, or None (module docstring, "A HEADING LINE OUTSIDE THE CHARACTER LIST")."""
+    character list, or None (module docstring, "A HEADING LINE OUTSIDE THE CHARACTER LIST": each line read three ways,
+    and a Setext heading's underline line tested too)."""
     if text.startswith("\ufeff"):
         text = text[1:]
     lines = [line.rstrip("\r\n") for line in fences.split_lines(text)]
-    visible = "".join("".join(c for c in line if c in fences.LISTED) + "\n" for line in lines)
+    removed = "".join("".join(c for c in line if c in fences.LISTED) + "\n" for line in lines)
+    spaced = "".join("".join(c if c in fences.LISTED else " " for c in line) + "\n" for line in lines)
     read = set()
-    for version in (text, visible):
+    for version in (text, removed, spaced):
         fenced = fences.scan(fences.split_lines(version)).fenced
-        for heading, at, numbers in candidates(version):
-            read.update(n for n in numbers if n not in fenced)
+        for heading, at, numbers, underline in _candidates(version):
+            read.update(n for n in numbers + ([underline] if underline else []) if n not in fenced)
     for number in sorted(read):
         odd = fences.unlisted(lines[number - 1])
         if odd is not None:

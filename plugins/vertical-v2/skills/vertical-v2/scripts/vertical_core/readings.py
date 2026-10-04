@@ -34,10 +34,10 @@ as they are and applied first) and once by a pinned CommonMark reader (`commonma
    rendered paragraph line before the first slice heading it reads that starts with `Base:` (read as in 2, A15), kept
    and decided as in 2 with 7 to 40 lower-case hex digits;
 4. the withheld sections: for each withheld line, the section it belongs to and the name its heading was read from.
-   Both readings apply one rule, THE WITHHELD-NAME RULE (`spec.withheld_of`, A14, C1A8-3, A16 (4): a level 1 or 2
-   heading whose name, format characters removed, folded, hyphens, dashes and underscores read as spaces, whitespace
-   collapsed and a leading number or `the` dropped, starts with `punch`, `handoff`, `hand off`, `build assumption`,
-   `deviation` or `discover`): the line rules to the source name (`spec.sections`),
+   Both readings apply one rule, THE WITHHELD-NAME RULE (`spec.withheld_of`, A14, C1A8-3, A16 (4), A17 (2): a level 1
+   or 2 heading whose name, format characters removed, folded, hyphens, dashes, underscores, U+2212, U+00B7, U+2018
+   and U+2019 read as spaces, whitespace collapsed and any leading numbering or `the` dropped, starts with one of
+   `spec.STEMS`): the line rules to the source name (`spec.sections`),
    the second reading to the rendered name, each section running from its heading to the line before the next
    heading of level 1 or 2, or the end;
 5. for each other Markdown file of the reviewed commit, its builder's-notes declaration. The line reading is
@@ -66,12 +66,14 @@ accept also stops `doc-unreadable`, naming the line, when the second reading fin
     `commonmark.paragraph_lines` marks it not exact), naming the paragraph's first line (C1A8-1), anywhere in the
     doc and whatever the label says, one exact label included: which source line holds which label cannot be told
     there;
-(b) a heading of level 1 or 2 whose rendered name, with format characters (Unicode category Cf) removed and folded
-    (NFKC, case folding, A16 (3)), starts with `slice` and is not a level 2 heading whose rendered name matches the
-    build-doc form's slice
-    pattern (C1A8-2: an en dash, a hyphen or a colon for the form's dash, no spaces around it, a lower-case `slice`, a
-    zero-width character, a level 1 heading): no reading would take it as a slice, so its slice would vanish from
-    the sign-off check. A heading of level 3 or more (a `### Slice D <dot> <date>` note) is not touched;
+(b) a heading of level 1 or 2 whose rendered name, with format characters (Unicode category Cf) removed, folded
+    (THE FOLD, `fences.fold`, A16 (3), A17 (1): NFKD with the combining marks removed, NFKC, case folding) and its
+    leading punctuation, symbols and spaces (Unicode categories P, S and Z) set aside (A17 (1), C1A10-1), starts with
+    `slice` and is not a level 2 heading whose rendered name matches the build-doc form's slice pattern (C1A8-2: an en
+    dash, a hyphen or a colon for the form's dash, no spaces around it, a lower-case `slice`, a zero-width character, a
+    level 1 heading; C1A10-1: an accented letter such as `Sl` U+00EF `ce`, a leading curly quote such as U+2018 before
+    `Slice`): no reading would take it as a slice, so its slice would vanish from the sign-off check. A heading of
+    level 3 or more (a `### Slice D <dot> <date>` note) is not touched;
 (c) a heading of any level whose rendered name, with format characters removed, is a label candidate
     (`fences.label_candidate`, A16 (3): `### status: built`, `### Status : built`) (C1A8-3): no reading takes a heading
     as a label, so its words would stand beside the slice's card or the base, unread;
@@ -84,6 +86,8 @@ accept also stops `doc-unreadable`, naming the line, when the second reading fin
 Each refusal reads the rendered heading or line, which for a plain line is its source text, so one rule covers the
 source form and every rendering of it.
 """
+import unicodedata
+
 from station_core import templates
 
 from . import commonmark, fences, notes
@@ -124,10 +128,20 @@ def _labels(lines, exact):
     return out
 
 
+def set_aside(text):
+    """The text with its leading punctuation, symbols and spaces (Unicode categories P, S and Z) set aside (refusal (b),
+    A17 (1))."""
+    at = 0
+    while at < len(text) and unicodedata.category(text[at])[0] in "PSZ":
+        at += 1
+    return text[at:]
+
+
 def slice_form(level, name):
-    """Refusal (b): a level 1 or 2 heading whose rendered name, format characters removed and folded, starts with
-    `slice` and is not a level 2 heading on the build-doc form's slice pattern."""
-    if level > 2 or not fences.fold(fences.unformatted(name)).startswith("slice"):
+    """Refusal (b): a level 1 or 2 heading whose rendered name, format characters removed, folded and its leading
+    punctuation, symbols and spaces set aside, starts with `slice` and is not a level 2 heading on the build-doc form's
+    slice pattern."""
+    if level > 2 or not set_aside(fences.fold(fences.unformatted(name))).startswith("slice"):
         return False
     return not (level == 2 and SLICE.match("## " + name))
 

@@ -13,7 +13,8 @@ file an ordinary one; and the declaration test reads a curly apostrophe (U+2018,
 (3) Label and heading-name tests compare after NFKC normalization and case folding, and `Status` or `Base` followed by
 spaces or tabs before the colon is a label candidate, so a non-exact one stops.
 (4) The withheld-name test compares after NFKC, case folding, hyphens, dashes (U+2010 to U+2015) and underscores read
-as spaces, whitespace collapsed and a leading number (`1.`, `2)`) or a leading `the` dropped.
+as spaces, whitespace collapsed and a leading number (`1.`, `2)`) or a leading `the` dropped (A17 (2) widens it:
+`test_folded_names.py`; since then a bare leading number is numbering too, so `## 10 punches` is withheld).
 
 `TheList` holds the code's constant against the contract's statement. `TheReadings` drives the readers directly;
 `TheGate` drives the stopping shapes through the real CLI, records off and on; `TheScope` drives them through `scope`
@@ -326,10 +327,20 @@ class TheReadings(unittest.TestCase):
                 self.assertIn({"what": canonical, "lines": [first, first + 2]}, removed, (what, removed))
 
     def test_a_heading_that_only_resembles_a_withheld_name_stays(self):
-        for heading in ("## Theory of the counter", "## 10 punches", "## Handover", "## Builds and assumptions"):
+        for heading in ("## Theory of the counter", "## Handover", "## Builds and assumptions"):
             with self.subTest(heading=heading):
                 kept, removed = spec.clean(withheld_doc(heading, marker="KEPT-MARKER"))
                 self.assertIn("KEPT-MARKER", kept, heading)
+
+    def test_a_bare_leading_number_is_numbering_since_a17(self):
+        """A17 (2) drops any leading numbering, a bare number such as `1` included, so `## 10 punches` (a control
+        under A16, which dropped only `1.` and `2)`) now reads `punches` and is withheld as the punch list; a wider
+        match only ever withholds more."""
+        text = withheld_doc("## 10 punches", marker="NUMBERED-MARKER")
+        kept, removed = spec.clean(text)
+        self.assertNotIn("NUMBERED-MARKER", kept)
+        first = number_of(text, "## 10 punches")
+        self.assertIn({"what": "## Punch list", "lines": [first, first + 2]}, removed)
 
 
 @unittest.skipUnless(vlib.records_usable(), "the gate reads the records component (checkout and jsonschema)")

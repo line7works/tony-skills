@@ -18,10 +18,11 @@ structure" and "The character list".
     label_form(text) -> the text with every format character (Unicode category Cf) removed and its leading whitespace
         (any Unicode space) stripped: the form a line is tested in for a `Status:` or `Base:` label by the second
         reading and by the spec (THE HIDDEN-LABEL RULE, below; the E15 lane contract A15)
-    fold(text) -> the text under NFKC normalization and case folding: the form every label and heading-name test
-        compares in (the E15 lane contract A16 (3))
-    label_candidate(text) -> `Status:` or `Base:` when the text, folded, opens with `status` or `base`, any spaces or
-        tabs, then a colon (a label candidate, A16 (3)), else None
+    fold(text) -> THE FOLD (below): NFKD normalization with every combining mark removed, then NFKC normalization,
+        then case folding: the form every label, slice-heading and withheld-name test compares in (the E15 lane
+        contract A16 (3), A17 (1))
+    label_candidate(text) -> `Status:` or `Base:` when the text, folded (THE FOLD), opens with `status` or `base`, any
+        spaces or tabs, then a colon (a label candidate, A16 (3), A17 (1)), else None
     unlisted(text) -> (column, character) for the first character of the text outside THE CHARACTER LIST (below,
         `LISTED`), else None
     read(text) -> Doc: the build doc read whole: `lines`, `fenced`, `slices` ([{"name", "short", "status",
@@ -61,9 +62,9 @@ space, a digit, another sign), is text.
 THE LABEL RULE (A10 and A11, C1A6-1; stated once here and once in the contract). Outside accepted fences, a `## ` line
 that matches the build-doc form's slice heading (`## Slice <name> <dash> <short>`) opens a slice's section and
 any other `## ` line closes it; the header is every line before the first `## ` line. A line "starts with `Status:`"
-(or `Base:`) when it is a label candidate (`label_candidate`, A16 (3)): folded (NFKC, case folding), it opens with
-`status` (or `base`), any spaces or tabs, then a colon, so `status: built` and `Status : built` are such lines. Inside
-a slice's section, a line that starts with `Status:` is the slice's label only when
+(or `Base:`) when it is a label candidate (`label_candidate`, A16 (3)): folded (THE FOLD, below), it opens with
+`status` (or `base`), any spaces or tabs, then a colon, so `status: built`, `Status : built` and `St` U+00E4
+`tus: built` are such lines. Inside a slice's section, a line that starts with `Status:` is the slice's label only when
 
 1. it reads exactly `Status: ` (one space) and one of `not started`, `in progress`, `built`, `rejected`,
    `signed off with conditions`, `signed off` (A11's six), with nothing after but spaces or tabs; and
@@ -83,10 +84,9 @@ a `Base:` line outside the header are no label (the spec still removes every `St
 
 THE PLAIN-STRUCTURE RULE (A12, C1A7-1; stated once here and once in the contract). Outside accepted fences, a
 line that, after its prefix (above), opens like an ATX heading (one to six `#`, then a space, a tab or the
-line's end) or like a `Status:` or `Base:` label (a label candidate, folded, A16 (3)) is read only when it is
-PLAIN: its prefix is empty (column 0,
-no indent, no marker), and a heading is one to six `#` then exactly one space (the next character is neither a
-space nor a tab); a plain label is then read by the label rule above. EVERY other such line is a problem
+line's end) or like a `Status:` or `Base:` label (a label candidate, folded by THE FOLD, A16 (3)) is read only
+when it is PLAIN: its prefix is empty (column 0, no indent, no marker), and a heading is one to six `#` then
+exactly one space (the next character is neither a space nor a tab); a plain label is then read by the label rule above. EVERY other such line is a problem
 named with its line number, anywhere in the doc (inside a slice, in the header, between sections): a heading or
 a label indented by any spaces or a tab, after a list-item marker or one or more `>`; `##` then a tab, a bare
 `##`, `##` then two spaces. Why it holds: CommonMark renders a heading indented one to three spaces, a heading
@@ -111,6 +111,15 @@ really use leaves no such character to find. Inside an accepted fence no charact
 comes first, and a fence's lines are content). On one line the fence rule's and the raw HTML rule's problem is named
 first, then the character, then the plain-structure or label rule's problem: a line whose label only looks exact,
 or whose heading only looks plain, is named for the character that makes it so.
+
+THE FOLD (A16 (3), A17 (1), C1A10-1; stated once here, `fold`, and once in the contract). Every label test (the
+label rule, the plain-structure rule, the spec's removal, the second reading's cards, base and refusals (a) and (c)),
+every slice-heading test (the second reading's refusal (b)) and every withheld-name test (`spec.name_key`) compares
+the text folded: NFKD normalization with every combining mark (Unicode category M) removed, then NFKC normalization,
+then case folding. So an accented letter the character list admits folds to its plain letter (`St` U+00E4 `tus` reads
+`status`, `Sl` U+00EF `ce` reads `slice`, `B` U+00E4 `se` reads `base`), a compatibility form to its plain form and
+upper case to lower case, and a letter the list admits can hide no label, slice heading or withheld name from both
+readings. The builder's-notes declaration test reads the heading folded the same way (`notes.declares_name`).
 
 Every reader of the build doc (the spec and its sections, the gate's slices and `Status:` lines, the `Base:`
 line) stops the run `doc-unreadable` on the first problem, before any ask, request or packet; the plan's
@@ -211,14 +220,17 @@ def plain_problem(line):
 
 
 def fold(text):
-    """The text under NFKC normalization and case folding (A16 (3)): `Status`, `STATUS` and a full-width `Status`
-    fold alike."""
-    return unicodedata.normalize("NFKC", text).casefold()
+    """THE FOLD (module docstring; A16 (3), A17 (1)): NFKD normalization with every combining mark (Unicode category
+    M) removed, then NFKC normalization, then case folding: `Status`, `STATUS`, `St` U+00E4 `tus` and a full-width
+    `Status` fold alike."""
+    marks_off = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.category(c).startswith("M"))
+    return unicodedata.normalize("NFKC", marks_off).casefold()
 
 
 def label_candidate(text):
-    """`Status:` or `Base:` when the text, folded, opens with `status` or `base`, any spaces or tabs, then a colon
-    (A16 (3)), else None. Whether such a line is the label is the label rule's exact test, on the line as written."""
+    """`Status:` or `Base:` when the text, folded (THE FOLD), opens with `status` or `base`, any spaces or tabs, then a
+    colon (A16 (3), A17 (1)), else None. Whether such a line is the label is the label rule's exact test, on the line
+    as written."""
     match = CANDIDATE.match(fold(text))
     if match is None:
         return None
