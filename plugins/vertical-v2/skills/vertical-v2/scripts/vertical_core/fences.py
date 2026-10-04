@@ -1,7 +1,8 @@
 """vertical-v2's one reading rule for the build doc: strict plain code blocks (the E15 lane contract A8; C1A4-1),
-no raw HTML lines (A9; C1A5-1, C1A5-2), exact labels (A10; C1A6-1), plain structure only (A12; C1A7-1) and a
-character allowlist (A16; C1A9-1); contract section 5, "The fence rule", "No raw HTML lines", "Exact labels", "Plain
-structure" and "The character list".
+no raw HTML lines (A9; C1A5-1, C1A5-2), exact labels (A10; C1A6-1), plain structure only (A12; C1A7-1), a
+character allowlist (A16; C1A9-1), and a stray `Status:` line and a label's leading marks (A18; C1A11-1, C1A11-3);
+contract section 5, "The fence rule", "No raw HTML lines", "Exact labels", "Plain structure" and "The character
+list".
 
     split_lines(text) -> [line with its ending]: CommonMark's line endings only (LF, CRLF, CR)
     bare(line, number) -> the line without its ending (and, on line 1, without a byte order mark)
@@ -21,15 +22,17 @@ structure" and "The character list".
     fold(text) -> THE FOLD (below): NFKD normalization with every combining mark removed, then NFKC normalization,
         then case folding: the form every label, slice-heading and withheld-name test compares in (the E15 lane
         contract A16 (3), A17 (1))
-    label_candidate(text) -> `Status:` or `Base:` when the text, folded (THE FOLD), opens with `status` or `base`, any
-        spaces or tabs, then a colon (a label candidate, A16 (3), A17 (1)), else None
+    marks_off(text) -> the text with its leading marks set aside (THE LEADING MARKS, below; A18 (3))
+    label_candidate(text) -> `Status:` or `Base:` when the text, its leading marks set aside (THE LEADING MARKS) and
+        folded (THE FOLD), opens with `status` or `base`, any spaces or tabs, then a colon (a label candidate, A16 (3),
+        A17 (1), A18 (3)), else None
     unlisted(text) -> (column, character) for the first character of the text outside THE CHARACTER LIST (below,
         `LISTED`), else None
     read(text) -> Doc: the build doc read whole: `lines`, `fenced`, `slices` ([{"name", "short", "status",
         "line", "status_at"}] in document order), `base` ({"line", "commit", "at"} or None), and `problems`: the
-        scan's, the character list's, the plain-structure rule's and the label rule's (below), in line order (on one
-        line, in that order). Every reader of a build doc reads through `read` and stops on its first problem; `scan`
-        alone serves the notes rule (`notes.py`), which never stops
+        scan's, the character list's, the plain-structure rule's, the label rule's and the stray-label rule's (below),
+        in line order (on one line, in that order). Every reader of a build doc reads through `read` and stops on
+        its first problem; `scan` alone serves the notes rule (`notes.py`), which never stops
 
 THE PREFIX. A line's prefix is any indent (spaces or tabs) and any block-quote markers (`>`) or list-item
 markers (`-`, `+`, `*`, or one to nine digits then `.` or `)`, followed by a space or a tab), in any order and
@@ -62,9 +65,10 @@ space, a digit, another sign), is text.
 THE LABEL RULE (A10 and A11, C1A6-1; stated once here and once in the contract). Outside accepted fences, a `## ` line
 that matches the build-doc form's slice heading (`## Slice <name> <dash> <short>`) opens a slice's section and
 any other `## ` line closes it; the header is every line before the first `## ` line. A line "starts with `Status:`"
-(or `Base:`) when it is a label candidate (`label_candidate`, A16 (3)): folded (THE FOLD, below), it opens with
-`status` (or `base`), any spaces or tabs, then a colon, so `status: built`, `Status : built` and `St` U+00E4
-`tus: built` are such lines. Inside a slice's section, a line that starts with `Status:` is the slice's label only when
+(or `Base:`) when it is a label candidate (`label_candidate`, A16 (3)): its leading marks set aside (THE LEADING
+MARKS, below, A18 (3)) and folded (THE FOLD, below), it opens with `status` (or `base`), any spaces or tabs, then a
+colon, so `status: built`, `Status : built`, `St` U+00E4 `tus: built` and U+2018 `Status: built` are such lines.
+Inside a slice's section, a line that starts with `Status:` is the slice's label only when
 
 1. it reads exactly `Status: ` (one space) and one of `not started`, `in progress`, `built`, `rejected`,
    `signed off with conditions`, `signed off` (A11's six), with nothing after but spaces or tabs; and
@@ -79,8 +83,19 @@ a following paragraph line or a Setext underline, a second label) is a problem n
 a second label's problem names the first label's line too. Why it holds: CommonMark renders nothing of a line
 held inside an inline comment opened mid-line, a link reference definition's title or an inline link's title,
 and each needs a closing mark after the held line in the same paragraph; the exact value leaves no room for
-one on the label line, and the paragraph's end leaves no later line. A `Status:` line outside every slice and
-a `Base:` line outside the header are no label (the spec still removes every `Status:` line, `spec.py`).
+one on the label line, and the paragraph's end leaves no later line. A `Base:` line outside the header is no label,
+and a `Status:` line in the header is no label (the spec still removes every `Status:` line, `spec.py`).
+
+THE STRAY-LABEL RULE (A18 (1), C1A11-1; stated once here, `STRAY`, and once in the contract). A line that starts with
+`Status:` (a label candidate, above) after the build doc's first `## ` line and outside every slice's section (in a
+section a non-slice `## ` line opened, a withheld section included) is a problem named with its line number. Only
+the source lines outside accepted fences are read for it, never the second reading's rendered lines. Why it holds: a
+`## ` heading a person reads as a slice heading but neither reading takes as one (a section number, `## 1. Slice B`,
+`## (1) Slice B`, `## A. Slice B`; a lookalike letter, `## SIice B`, `## S1ice B`; a word before it, `## Next: Slice
+B`, `## The Slice B`; U+00B2 before it) closes the slice above it and opens no slice, so its `Status:` line lands
+outside every slice's section, where no rule read it and its slice vanished from the sign-off check; whatever the
+heading's spelling, that trace is the same. This replaces, for those lines only, the rule that a `Status:` line
+outside every slice is no label; a `Status:` line before the first `## ` line is in the header and keeps it.
 
 THE PLAIN-STRUCTURE RULE (A12, C1A7-1; stated once here and once in the contract). Outside accepted fences, a
 line that, after its prefix (above), opens like an ATX heading (one to six `#`, then a space, a tab or the
@@ -112,14 +127,31 @@ comes first, and a fence's lines are content). On one line the fence rule's and 
 first, then the character, then the plain-structure or label rule's problem: a line whose label only looks exact,
 or whose heading only looks plain, is named for the character that makes it so.
 
+THE LEADING MARKS (A18 (3), C1A11-3; stated once here, `MARKS` and `marks_off`, and once in the contract). Before a
+line is tested for a `Status:` or `Base:` label (every label test THE FOLD names below), its leading run of Unicode
+spaces (category Z) and of the listed non-ASCII punctuation and symbols is set aside: the character list's fixed
+punctuation and symbols (U+00A7, U+00B2, U+00B7, U+00D7, U+2013, U+2014, U+2019, U+2026, U+2190 to U+2194, U+2197,
+U+2212, U+2248, U+2264, U+2265, U+2715) and the curly quotes U+2018, U+201C, U+201D. So U+2018 `Status: built`,
+U+201C `Status: built` U+201D, U+00A7 `Status: built`, U+2026 `Status: built`, U+00B7 `Status: built` and U+2018
+`Base: 1234567` are label candidates, not exact, and stop at their line where the label rule or the stray-label rule
+reads them; the spec removes such a `Status:` line wherever it stands; a heading named so is refusal (c) of the second
+reading. ASCII punctuation is never set aside (`*Status:`, `(Status:`, `-Status:` stay text): setting it aside would
+stop real plans. Why it holds: a reader passes over a leading quote, section sign or dot and sees the label, so both
+readings must take it as one.
+
 THE FOLD (A16 (3), A17 (1), C1A10-1; stated once here, `fold`, and once in the contract). Every label test (the
 label rule, the plain-structure rule, the spec's removal, the second reading's cards, base and refusals (a) and (c)),
 every slice-heading test (the second reading's refusal (b)) and every withheld-name test (`spec.name_key`) compares
 the text folded: NFKD normalization with every combining mark (Unicode category M) removed, then NFKC normalization,
 then case folding. So an accented letter the character list admits folds to its plain letter (`St` U+00E4 `tus` reads
 `status`, `Sl` U+00EF `ce` reads `slice`, `B` U+00E4 `se` reads `base`), a compatibility form to its plain form and
-upper case to lower case, and a letter the list admits can hide no label, slice heading or withheld name from both
-readings. The builder's-notes declaration test reads the heading folded the same way (`notes.declares_name`).
+upper case to lower case. The fold cannot reach the nine listed letters that have no decomposition (U+00C6, U+00D0,
+U+00D8, U+00DE, U+00DF and U+00E6, U+00F0, U+00F8, U+00FE): case folding takes each upper-case one to its lower-case
+one and U+00DF to `ss`, and the withheld-name key then maps U+00F0 to `d`, U+00F8 to `o`, U+00FE to `th` and U+00E6
+to `ae` (A18 (2), `spec.LETTERS`), so a letter the list admits hides no withheld name. The label and slice-heading
+tests do not map them: none of the nine is a letter of `status`, `base` or `slice`, so a word spelled with one is
+another word to both readings. The builder's-notes declaration test reads the heading folded the same way
+(`notes.declares_name`).
 
 Every reader of the build doc (the spec and its sections, the gate's slices and `Status:` lines, the `Base:`
 line) stops the run `doc-unreadable` on the first problem, before any ask, request or packet; the plan's
@@ -160,16 +192,23 @@ OFF_PLAIN_HEADING = ("a line that opens like a heading off the plain form (inden
 OFF_PLAIN_LABEL = ("a line that opens like a `%s` label off the plain form (indented, or after a list-item or "
                    "block-quote marker), which CommonMark may render as the label the reader does not take: "
                    "vertical-v2 reads a label only when it is plain, at column 0")
+MARKS = frozenset(
+    [chr(c) for c in (0x00A7, 0x00B2, 0x00B7, 0x00D7, 0x2013, 0x2014, 0x2019, 0x2026, 0x2190, 0x2191, 0x2192,
+                      0x2193, 0x2194, 0x2197, 0x2212, 0x2248, 0x2264, 0x2265, 0x2715)]  # punctuation and symbols
+    + [chr(c) for c in (0x2018, 0x201C, 0x201D)])                                   # the curly quotes
 LISTED = frozenset(
     [chr(c) for c in range(0x20, 0x7F)] + ["\t"]                                   # printable ASCII and a tab
-    + [chr(c) for c in (0x00A7, 0x00B2, 0x00B7, 0x00D7, 0x2013, 0x2014, 0x2019, 0x2026, 0x2190, 0x2191, 0x2192,
-                        0x2193, 0x2194, 0x2197, 0x2212, 0x2248, 0x2264, 0x2265, 0x2715)]  # punctuation and symbols
-    + [chr(c) for c in (0x2018, 0x201C, 0x201D)]                                    # the curly quotes
+    + list(MARKS)                                       # the listed punctuation and symbols, and the curly quotes
     + [chr(c) for c in range(0x00C0, 0x0100) if c != 0x00F7])                       # the accented Latin letters
 UNLISTED = ("%s at column %d is outside vertical-v2's character list (printable ASCII, a tab, a line ending, a byte "
             "order mark at the start of line 1, and the fixed punctuation, symbols, curly quotes and accented Latin "
             "letters the plans use): a character outside the list can hide a heading, a label or a section name "
             "from both readings, so vertical-v2 reads none outside a fence")
+STRAY = ("a `Status:` line after the build doc's first level 2 heading and outside every slice's section (a "
+         "`## Slice <name> <dash> <short>` heading opens a slice's section and any other `## ` heading closes it), "
+         "which no reading takes as any slice's card: a slice heading neither reading takes (a section number, a "
+         "lookalike letter or a word before `Slice`) leaves its `Status:` line here, so its slice would vanish from "
+         "the sign-off check; vertical-v2 reads a `Status:` line after the header only inside a slice's section")
 LABELS = {
     STATUS_LABEL: ("one of %s" % ", ".join("`%s`" % v for v in STATUS_VALUES), STATUS_EXACT, "a slice holds one"),
     BASE_LABEL: ("7 to 40 lower-case hex digits", BASE_EXACT, "the header holds one"),
@@ -227,11 +266,20 @@ def fold(text):
     return unicodedata.normalize("NFKC", marks_off).casefold()
 
 
+def marks_off(text):
+    """THE LEADING MARKS (module docstring; A18 (3)): the text with its leading run of Unicode spaces (category Z) and
+    of the listed non-ASCII punctuation and symbols (`MARKS`) set aside; ASCII punctuation is never set aside."""
+    at = 0
+    while at < len(text) and (text[at] in MARKS or unicodedata.category(text[at]).startswith("Z")):
+        at += 1
+    return text[at:]
+
+
 def label_candidate(text):
-    """`Status:` or `Base:` when the text, folded (THE FOLD), opens with `status` or `base`, any spaces or tabs, then a
-    colon (A16 (3), A17 (1)), else None. Whether such a line is the label is the label rule's exact test, on the line
-    as written."""
-    match = CANDIDATE.match(fold(text))
+    """`Status:` or `Base:` when the text, its leading marks set aside (THE LEADING MARKS, `marks_off`, A18 (3)) and
+    folded (THE FOLD), opens with `status` or `base`, any spaces or tabs, then a colon (A16 (3), A17 (1)), else None.
+    Whether such a line is the label is the label rule's exact test, on the line as written."""
+    match = CANDIDATE.match(fold(marks_off(text)))
     if match is None:
         return None
     return STATUS_LABEL if match.group(1) == "status" else BASE_LABEL
@@ -370,6 +418,8 @@ def read(text):
                 problems.append((number, problem))
             if current["status_at"] is None:
                 current["status"], current["status_at"] = value, number
+        elif not header and label_candidate(line) == STATUS_LABEL:      # THE STRAY-LABEL RULE (A18 (1))
+            problems.append((number, STRAY))
         elif header and label_candidate(line) == BASE_LABEL:
             value, problem = _label(lines, found.fenced, number, line, BASE_LABEL, "the header", base_at)
             if problem is not None:

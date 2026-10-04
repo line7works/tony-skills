@@ -22,18 +22,25 @@ Outside fences, removed:
 - the five withheld sections, `## Punch list` and `## Handoffs` (the ledger) and `## Build assumptions`,
   `## Deviations` and `## Discovered` (the builder's working records), each found by its heading level and
   name under THE WITHHELD-NAME RULE (stated once here, `withheld_of`, and once in the contract; the E15 lane
-  contract A14, C1A8-3, A16 (4) and A17 (2)): a heading of level 1 or 2 whose name, with any closing hashes dropped,
-  its format characters (Unicode category Cf) removed, folded (`fences.fold`, THE FOLD: NFKD with the combining marks
-  removed, NFKC, case folding), its hyphens, dashes (U+2010 to U+2015), underscores, minus signs (U+2212), middle
-  dots (U+00B7) and curly single quotes (U+2018, U+2019) read as spaces (`AS_SPACE`), its runs of whitespace
-  collapsed, and every leading numbering (`1`, `1.`, `1.1`, `2)`, `(1)`, `A.`) or leading `the` dropped (`LEADING`,
-  `name_key`), STARTS WITH one of the stems (`STEMS`) `punch`, `handoff`, `hand off`, `build assumption`,
-  `buildassumption`, `builder assumption`, `builderassumption`, `deviation` or `discover` is the withheld section the
-  stem names (`## Punch list`, `## Handoffs`, `## Build assumptions`, `## Deviations`, `## Discovered`), so a near
-  miss (`## Punch-list`, `## Punch list:`, `## Handoff`, `## Hand-offs`, `## Hand off`, `## Hand` en dash `offs`,
-  `## Hand` U+2212 `offs`, `## Hand` U+00B7 `offs`, `## Hand` U+2019 `offs`, an accented `## H` U+00E0 `ndoffs` or
-  `## P` U+00FC `nch list`, `## 1 Punch list`, `## 1. Punch list`, `## 1.1 Punch list`, `## (1) Punch list`,
-  `## A. Punch list`, `## The punch list`, `## Build-assumptions`, `## Buildassumptions`, `## Builder assumptions`,
+  contract A14, C1A8-3, A16 (4), A17 (2) and A18 (2)): a heading of level 1 or 2 whose name, with any closing hashes
+  dropped, its format characters (Unicode category Cf) removed, folded (`fences.fold`, THE FOLD: NFKD with the
+  combining marks removed, NFKC, case folding), U+00F0 then read as `d`, U+00F8 as `o`, U+00FE as `th` and U+00E6 as
+  `ae` (`LETTERS`: the listed letters the fold cannot reach; their upper-case forms fold to them), every character of
+  Unicode category P, S or Z read as a space (punctuation of any kind, ASCII included, symbols and spaces), its runs
+  of whitespace collapsed, and every leading numbering or `the` dropped, again and again (`LEADING`: a number with an
+  optional letter, `1`, `1a`; a single letter, `a`; a lower-case roman numeral read as any run of the letters i, v,
+  x, l and c, `ii`, `iv`; or `the`; each followed by a space or the end of the name, so `1.`, `1.1`, `2)`, `(1)`,
+  `A.`, `a)`, `(a)`, `II.`, `1:`, `1.)`, `#1` and `[1]` are dropped once their marks read as spaces; `name_key`),
+  STARTS WITH one of the stems (`STEMS`) `punch`, `handoff`, `hand off`, `build assumption`, `buildassumption`,
+  `builder assumption`, `builderassumption`, `builders assumption`, `builder s assumption`, `deviation` or
+  `discover` is the withheld section the stem names (`## Punch list`, `## Handoffs`, `## Build assumptions`,
+  `## Deviations`, `## Discovered`), so a near miss (`## Punch-list`, `## Punch list:`, `## Handoff`,
+  `## Hand-offs`, `## Hand off`, `## Hand` joined by any listed or ASCII mark (an en dash, U+2212, U+00B7, U+2019,
+  U+201C, U+2026, U+00D7, U+2192, `.`, `/`, `+`, `~`, `'`) `offs`, an accented `## H` U+00E0 `ndoffs` or `## P`
+  U+00FC `nch list`, `## ` U+00D0 `eviations`, `## Hand` U+00D8 `ffs`, `## 1 Punch list`, `## 1. Punch list`,
+  `## 1.1 Punch list`, `## (1) Punch list`, `## A. Punch list`, `## a) Punch list`, `## II. Punch list`,
+  `## #1 Punch list`, `## The punch list`, `## Build-assumptions`, `## Buildassumptions`, `## Builder assumptions`,
+  `## Builder's assumptions`, `## Builders assumptions`,
   a dated `## Handoff, <date>`) is withheld and named as the section it reads as. A name that only CONTAINS a stem
   is not withheld (A17 rejected a contains rule: it would withhold an ordinary heading of a real plan), so
   `## Open punch list` reaches the packets (a carried item). Each runs from its
@@ -46,13 +53,17 @@ Outside fences, removed:
 - every `Status:` label (a line that starts with `Status:`, the build-doc form's label test, read after its
   format characters are removed and its leading whitespace stripped: THE HIDDEN-LABEL RULE, `fences.label_form`,
   the E15 lane contract A15, so a `Status:` line behind a zero-width space, a soft hyphen or a no-break space is
-  removed too; and read as a label candidate, `fences.label_candidate`, A16 (3), so `status: draft` and
-  `Status : draft` are removed too), in a slice's section or outside one, the header's included (M6).
+  removed too; and read as a label candidate, `fences.label_candidate`, A16 (3) and A18 (3), so `status: draft`,
+  `Status : draft` and a `Status:` line after a leading curly quote, section sign or middle dot are removed too), in a
+  slice's section or outside one, the header's included (M6). Since A18 (1) a `Status:` line after the first `## `
+  line and outside every slice's section has already stopped the run (`fences.read`), so only the header's and the
+  slices' reach this removal.
 
 Everything else stays, byte for byte. Each removal is reported with its line numbers, so every packet's
 withheld list can name it.
 """
 import re
+import unicodedata
 
 from station_core import driver
 
@@ -61,13 +72,13 @@ from . import fences, readings
 STEMS = (("punch", "## Punch list"), ("handoff", "## Handoffs"), ("hand off", "## Handoffs"),
          ("build assumption", "## Build assumptions"), ("buildassumption", "## Build assumptions"),
          ("builder assumption", "## Build assumptions"), ("builderassumption", "## Build assumptions"),
+         ("builders assumption", "## Build assumptions"), ("builder s assumption", "## Build assumptions"),
          ("deviation", "## Deviations"),
-         ("discover", "## Discovered"))     # A14, A16 (4), A17 (2): THE WITHHELD-NAME RULE's stems and their sections
-AS_SPACE = re.compile("[-_\u2010-\u2015\u2212\u00b7\u2018\u2019]")   # A16 (4), A17 (2): hyphens, the dashes U+2010
-#                                                    to U+2015, underscores, U+2212, U+00B7, U+2018 and U+2019
-LEADING = re.compile(r"(?:[0-9]+(?:\.[0-9]+)*[.)]|[0-9]+(?:\.[0-9]+)*(?= |\Z)|\([0-9]+\)|[a-z]\.(?= |\Z)"
-                     r"|the(?= |\Z)) *")    # A16 (4), A17 (2): a leading numbering (`1`, `1.`, `1.1`, `2)`, `(1)`,
-#                                              `A.`) or a leading `the`
+         ("discover", "## Discovered"))     # A14, A16 (4), A17 (2), A18 (2): THE WITHHELD-NAME RULE's stems
+LETTERS = {"\u00f0": "d", "\u00f8": "o", "\u00fe": "th", "\u00e6": "ae"}   # A18 (2): the listed letters the fold
+#                                              cannot reach (no decomposition); upper case folds to them first
+LEADING = re.compile(r"(?:[0-9]+[a-z]?|[a-z]|[ivxlc]+|the)(?= |\Z) *")   # A18 (2): a leading numbering
+#                                              (`1`, `1.1`, `1a`, a single letter, a run of i, v, x, l and c) or `the`
 LEDGER = ("## Punch list", "## Handoffs")
 HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*$")
 CLOSING = re.compile(r"(?:^|[ \t]+)#+$")
@@ -113,10 +124,11 @@ def heading_of(line):
 
 
 def name_key(name):
-    """A heading's name as THE WITHHELD-NAME RULE tests it (A14, A16 (4), A17 (2)): format characters removed, folded
-    (`fences.fold`), hyphens, dashes, underscores, U+2212, U+00B7, U+2018 and U+2019 read as spaces, whitespace runs
-    collapsed, and every leading numbering (`1`, `1.`, `1.1`, `2)`, `(1)`, `A.`) and leading `the` dropped."""
-    key = " ".join(AS_SPACE.sub(" ", fences.fold(fences.unformatted(name))).split())
+    """A heading's name as THE WITHHELD-NAME RULE tests it (A14, A16 (4), A17 (2), A18 (2)): format characters
+    removed, folded (`fences.fold`), the four letters of `LETTERS` mapped, every character of Unicode category P, S or
+    Z read as a space, whitespace runs collapsed, and every leading numbering (`LEADING`) and leading `the` dropped."""
+    folded = "".join(LETTERS.get(c, c) for c in fences.fold(fences.unformatted(name)))
+    key = " ".join("".join(" " if unicodedata.category(c)[0] in "PSZ" else c for c in folded).split())
     while True:
         match = LEADING.match(key)
         if match is None or not match.end():
@@ -169,11 +181,19 @@ def read(text):
     """The build doc read twice (A13): `fences.read` under the line rules (A8 to A12), whose first problem raises
     SpecUnreadable naming its line; then a CommonMark reader, whose decisions are compared with the line rules'
     (`readings.py`, "THE TWO-READINGS RULE"), the first line where they differ raising SpecUnreadable. Returns the
-    Doc. Every reader of the build doc reads through here: the gate's slices and base, and `clean`."""
+    Doc. Every reader of the build doc reads through here: the gate's slices and base, and `clean`.
+
+    One exception to "the line rules first" (A18 (1)): when the first line-rule problem is a stray `Status:` line
+    (`fences.STRAY`), the second reading is asked too, and a refusal or difference it names on an EARLIER line is named
+    instead (a slice heading refusal (b) or the slices comparison already names, such as `## Sl` U+00EF `ce B`, keeps
+    being named at its heading, A14 (2), A17 (1)); the run stops either way."""
     doc = fences.read(text)
-    if doc.problems:
+    found = None
+    if not doc.problems or doc.problems[0][1] == fences.STRAY:
+        found = readings.compare(readings.line_reading(doc, sections(doc)),
+                                 readings.second_reading(text, len(doc.lines)))
+    if doc.problems and (found is None or found[0] >= doc.problems[0][0]):
         raise SpecUnreadable(*doc.problems[0])
-    found = readings.compare(readings.line_reading(doc, sections(doc)), readings.second_reading(text, len(doc.lines)))
     if found is not None:
         raise SpecUnreadable(*found)
     return doc

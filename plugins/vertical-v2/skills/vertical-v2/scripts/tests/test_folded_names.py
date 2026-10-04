@@ -231,7 +231,7 @@ class TheStatement(unittest.TestCase):
             self.assertIn("`%s`" % stem, para, stem)
         for code in (0x2212, 0x00B7, 0x2018, 0x2019):
             self.assertIn(u(code), para)
-            self.assertTrue(specmod.AS_SPACE.match(chr(code)), u(code))
+            self.assertEqual(specmod.name_key("Hand%soffs" % chr(code)), "hand offs", u(code))   # A18 (2): P, S, Z
         for numbering in ("`1`", "`1.`", "`1.1`", "`2)`", "`(1)`", "`A.`"):
             self.assertIn(numbering, para)
 

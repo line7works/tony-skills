@@ -401,9 +401,14 @@ Unicode space line can end a block early for the reader. A `<` line inside an ac
 through `fences.read` by every reader of the build doc). Outside accepted fences, a `## ` line matching the
 build-doc form's slice heading opens a slice's section and any other `## ` line closes it; the header is every
 line before the first `## ` line. A line "starts with `Status:`" (or `Base:`) when it is a label candidate (A16
-(3)): folded ("The fold" below) it opens with `status` (or `base`), any spaces or tabs, then a colon, so `status:
-built`, `STATUS: built`, `Status : built` and `St` U+00E4 `tus: built` are such lines and, not being exact, stop (and so
-is `B` U+00E4 `se: 1234567` in the header). Inside a slice's
+(3)): its leading marks set aside (A18 (3), C1A11-3: a leading run of Unicode spaces, category Z, and of the character
+list's non-ASCII punctuation and symbols, U+00A7, U+00B2, U+00B7, U+00D7, U+2013, U+2014, U+2019, U+2026, U+2190 to
+U+2194, U+2197, U+2212, U+2248, U+2264, U+2265, U+2715, and the curly quotes U+2018, U+201C, U+201D; ASCII punctuation
+is not set aside, so `*Status:` and `(Status:` stay text, since setting it aside would stop real plans) and folded
+("The fold" below) it opens with `status` (or `base`), any spaces or tabs, then a colon, so `status: built`, `STATUS:
+built`, `Status : built`, `St` U+00E4 `tus: built`, U+2018 `Status: built`, U+00A7 `Status: built` and U+00B7
+`Status: built` are such lines and, not being exact, stop (and so are `B` U+00E4 `se: 1234567` and U+2018 `Base:
+1234567` in the header), and a heading named so is refusal (c) below. Inside a slice's
 section, a line that starts with `Status:` is the slice's label only when (a) it reads exactly `Status: ` (one space)
 and one of the six values A11 rules, `not started`,
 `in progress`, `built`, `rejected`, `signed off with conditions`, `signed off` (a `rejected` or conditional slice
@@ -419,8 +424,22 @@ request or packet, and the plan's author edits the doc. Why it holds: CommonMark
 inside an inline comment opened mid-line, a link reference definition's title or an inline link's title, and
 each needs a closing mark after the held line in the same paragraph; the exact value leaves no room for one on
 the label line and the paragraph's end leaves no later line. A slice whose only label is hidden stops the same
-way; a slice with no `Status:` line at all stops `gate-malformed`. A `Status:` line outside every slice and a
-`Base:` line outside the header are no label (the spec still removes every `Status:` line, below).
+way; a slice with no `Status:` line at all stops `gate-malformed`. A `Base:` line outside the header and a `Status:`
+line in the header are no label (the spec still removes every `Status:` line, below). **A stray `Status:` line** (A18
+(1), C1A11-1; the code's statement is `scripts/vertical_core/fences.py`, "THE STRAY-LABEL RULE"): in the line reading
+(the source lines outside accepted fences, never the second reading's rendered lines), a line that starts with
+`Status:` after the build doc's first level 2 heading and outside every slice's section (in a section any other `## `
+line opened, a withheld section included) stops the run `doc-unreadable` naming its line, before any ask, request or
+packet; this replaces, for those lines only, the rule that a `Status:` line outside every slice is no label, and a
+`Status:` line before the first `## ` line keeps its handling (no label, removed from the spec). Why it holds: a `## `
+heading a person reads as a slice heading but neither reading takes as one (a section number, `## 1. Slice B`,
+`## (1) Slice B`, `## A. Slice B`, `## 1.1 Slice B`; a lookalike letter, `## SIice B`, `## S1ice B`; a word before it,
+`## Next: Slice B`, `## The Slice B`; U+00B2 before it) closes the slice above it and opens none, so its `Status:`
+line lands outside every slice's section, where no rule read it and the slice vanished from the sign-off check; that
+trace is the same whatever the heading's spelling. The one exception to "the line rules first": when a stray
+`Status:` line is the line rules' first problem and the second reading names an earlier line (a near-miss slice
+heading refusal (b) names, such as `## Sl` U+00EF `ce B`, or a slice heading the two readings take differently), that
+earlier line is named, as before A18; the run stops either way. On the 25 real plans no line is affected.
 
 **Plain structure** (A12, C1A7-1; the code's statement is `scripts/vertical_core/fences.py`, "THE PLAIN-STRUCTURE
 RULE", read through `fences.read` by every reader of the build doc). Outside accepted fences, a line that, after
@@ -534,8 +553,12 @@ withheld-name rule, below) and the builder's-notes declaration test compare the 
 every combining mark (Unicode category M) removed, then NFKC normalization, then case folding. So an accented letter
 the character list admits folds to its plain letter (`St` U+00E4 `tus` reads `status`, `Sl` U+00EF `ce` reads `slice`,
 `B` U+00E4 `se` reads `base`, `P` U+00FC `nch` reads `punch`), a compatibility form folds to its plain form, and upper
-case to lower case; a letter the list admits hides no label, slice heading or withheld name from both readings. On the
-25 real plans the fold changes no decision.
+case to lower case. The fold cannot reach the nine listed letters that have no decomposition (U+00C6, U+00D0, U+00D8,
+U+00DE, U+00DF and U+00E6, U+00F0, U+00F8, U+00FE): case folding takes each upper-case one to its lower-case one and
+U+00DF to `ss`, and the withheld-name rule then reads U+00F0 as `d`, U+00F8 as `o`, U+00FE as `th` and U+00E6 as `ae`
+(A18 (2), "The spec" below), so a letter the list admits hides no withheld name from both readings. The label and
+slice-heading tests do not map those letters: none of the nine is a letter of `status`, `base` or `slice`, so a word
+spelled with one is another word to both readings. On the 25 real plans the fold changes no decision.
 
 **The spec** (reading CR-4; ruling E15-8 as A3 widened it and A4 and A5 amended it) is the commit's build doc
 with five sections and every `Status:` label removed outside fences, what is fenced decided by the fence rule
@@ -546,29 +569,45 @@ assumptions`, `## Deviations` and `## Discovered` (the builder's working records
 withholds too), each found by heading level and name under **the withheld-name rule** (A14, C1A8-3; the code's
 statement is `scripts/vertical_core/spec.py`, "THE WITHHELD-NAME RULE", `withheld_of`): a heading of level 1 or 2
 (on the plain form, A12; a heading off the plain form has already stopped the run) whose name, with any closing
-hashes dropped, its format characters (Unicode category Cf) removed, folded ("The fold" above, A16 (4), A17 (1)), its
-hyphens, dashes (U+2010 to U+2015), underscores, minus signs (U+2212), middle dots (U+00B7) and curly single quotes
-(U+2018, U+2019) read as spaces (A17 (2)), its whitespace runs collapsed (C1A2-5), and every leading numbering (digits
-with dots or a closing parenthesis, `1`, `1.`, `1.1`, `2)`; a parenthesized number, `(1)`; a single letter with a dot,
-`A.`; A17 (2)) or leading `the` dropped, STARTS WITH one of the stems `punch`, `handoff`, `hand off`, `build
-assumption`, `buildassumption`, `builder assumption`, `builderassumption` (A17 (2)), `deviation` or `discover` is the
-withheld section the stem names (`## Punch list`, `## Handoffs`, `## Handoffs`, `## Build assumptions` for the four
-assumption stems, `## Deviations`, `## Discovered`), and is named as that section in every withheld list. So a near
-miss (`## Punch-list`, `## Punch list:`, `## Handoff`, `## Hand-offs`, `## Hand off`, `## Hand` en dash `offs`,
-`## Hand` U+2212 `offs`, `## Hand` U+00B7 `offs`, `## Hand` U+2019 `offs`, `## H` U+00E0 `ndoffs`, `## P` U+00FC
-`nch list`, `## 1 Punch list`, `## 1. Punch list`, `## 1.1 Punch list`, `## (1) Punch list`, `## A. Punch list`,
-`## The punch list`, `## Build-assumptions`, `## Buildassumptions`, `## Builder assumptions`, a dated
+hashes dropped, its format characters (Unicode category Cf) removed, folded ("The fold" above, A16 (4), A17 (1)),
+U+00F0 then read as `d`, U+00F8 as `o`, U+00FE as `th` and U+00E6 as `ae` (A18 (2): the listed letters the fold cannot
+reach; their upper-case forms fold to them), every character of Unicode category P, S or Z read as a space (A18 (2):
+punctuation of any kind, ASCII included, symbols and spaces; so hyphens, dashes, underscores, minus signs U+2212,
+middle dots U+00B7 and curly quotes U+2018, U+2019, U+201C, U+201D among them), its whitespace runs collapsed (C1A2-5),
+and every leading numbering or `the` dropped, again and again (A18 (2): a number with an optional letter, `1`, `1a`;
+a single letter; a lower-case roman numeral, read as any run of the letters i, v, x, l and c; or `the`; each followed
+by a space or the end of the name, so `1`, `1.`, `1.1`, `2)`, `(1)`, `A.`, `a)`, `(a)`, `II.`, `1:`, `1.)`, `#1` and
+`[1]` are dropped once their marks read as spaces), STARTS WITH one of the stems `punch`, `handoff`, `hand off`, `build
+assumption`, `buildassumption`, `builder assumption`, `builderassumption` (A17 (2)), `builders assumption`, `builder s
+assumption` (A18 (2)), `deviation` or `discover` is the withheld section the stem names (`## Punch list`,
+`## Handoffs`, `## Handoffs`, `## Build assumptions` for the six assumption stems, `## Deviations`, `## Discovered`),
+and is named as that section in every withheld list. So a near miss (`## Punch-list`, `## Punch list:`, `## Handoff`,
+`## Hand-offs`, `## Hand off`, `## Hand` en dash `offs`, `## Hand` U+2212 `offs`, `## Hand` U+00B7 `offs`, `## Hand`
+U+2019 `offs`, `## Hand` U+201C `offs`, `## Hand` U+2026 `offs`, `## Hand` U+00D7 `offs`, `## Hand` U+2192 `offs`,
+`## Hand.offs`, `## Hand/offs`, `## Hand+offs`, `## Hand~offs`, `## Hand'offs`, `## H` U+00E0 `ndoffs`, `## P` U+00FC
+`nch list`, `## ` U+00D0 `eviations`, `## Hand` U+00D8 `ffs`, `## 1 Punch list`, `## 1. Punch list`, `## 1.1 Punch
+list`, `## (1) Punch list`, `## A. Punch list`, `## a) Punch list`, `## (a) Punch list`, `## II. Punch list`, `## 1:
+Punch list`, `## 1.) Punch list`, `## #1 Punch list`, `## [1] Punch list`, `## The punch list`, `## Build-assumptions`,
+`## Buildassumptions`, `## Builder assumptions`, `## Builder` U+2019 `s assumptions`, `## Builder's assumptions`,
+`## Builders assumptions`, a dated
 `## Handoff, <date>`) is withheld, never sent; a wider match only ever withholds more (since A17 a bare leading
-number is numbering, so `## 10 punches` is withheld as the punch list). The name must START with a stem once its
+number is numbering, so `## 10 punches` is withheld as the punch list, and since A18 a number with a letter is too, so
+`## 3D punch list` is). Since A18 (2) bold or a code span around a withheld heading's name (`## **Punch list**`, `` ## `Deviations` ``)
+no longer hides it from the line reading, so both readings withhold the section and the doc runs, where A13's
+comparison stopped it before. The name must START with a stem once its
 numbering and `the` are dropped: the rule does not withhold a name that only contains one (A17 rejected a contains
 rule, which would withhold an ordinary heading of a real plan), so `## Open punch list` reaches the packets (a carried
-item), and `## Theory`, `## Handy offsets` and `## A note on punctuation` are ordinary sections. The CommonMark
+item), and `## Theory`, `## Handy offsets`, `## A note on punctuation`, `## I/O notes` and `## Mix and match` are
+ordinary sections. The CommonMark
 reading applies the same rule to the rendered name, and the two readings must agree on every withheld line, its
 section and the name it was read from ("Two readings" above). Each section runs to the line
 before the next heading of level 1 or 2 outside a fence; and every `Status:` label (a line outside fences
 that starts with `Status:`, the build-doc form's label test), in a slice's section or out of one, the
 header's included (M6), each read after its format characters are removed and its leading whitespace stripped
-("Hidden labels" above, A15) and as a label candidate (A16 (3), so `status: draft` and `Status : draft` go too).
+("Hidden labels" above, A15) and as a label candidate (A16 (3), so `status: draft` and `Status : draft` go too, and
+A18 (3), so a `Status:` line after a leading curly quote, section sign or middle dot goes too). Since A18 (1) a
+`Status:` line after the first `## ` line and outside every slice's section has already stopped the run ("Exact
+labels" above), so the header's and the slices' are the ones this removal meets.
 Everything else stays byte for byte.
 
 **The withheld list** of every packet names everything left out, each with why, and nothing the packet

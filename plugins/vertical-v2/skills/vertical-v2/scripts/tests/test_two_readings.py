@@ -11,7 +11,9 @@ differently. A doc both readings take the same way runs as before.
 
 `FAMILIES` are the five families the outside reviewer's look 3b and the control room found (A13): a Setext heading,
 character references, inline markup in a heading, extra spaces in a slice heading, and an escaped, bold or
-character-coded `Base:` line. `TheGate` drives each through the real CLI, records off and on; `TheNotes` drives a
+character-coded `Base:` line. Since A18 (2) bold or a code span around a withheld heading's name no longer differs
+(the withheld-name rule reads the marks as spaces in both readings), so those two shapes run with the section
+withheld (`MARKUP_AGREED`). `TheGate` drives each through the real CLI, records off and on; `TheNotes` drives a
 character-coded notes heading through the CLI; `TheReadings` drives the two readings directly; `TheEqualDecisions`
 holds that markup which leaves every decision equal still runs.
 """
@@ -79,12 +81,6 @@ FAMILIES = [
     ("a character-coded colon hides a base", two_slices(["Status: signed off"], header=["", "Base&#58; " + SHA]),
      "Base&#58; " + SHA, "base"),
     # (3) inline markup in a heading
-    ("bold markup hides a withheld section",
-     two_slices(["Status: signed off", "", "## **Punch list**", "- LEAK-MARKER the double tap"]), "## **Punch list**",
-     "withheld"),
-    ("a code span hides a withheld section",
-     two_slices(["Status: signed off", "", "## `Deviations`", "- LEAK-MARKER skipped the retry"]), "## `Deviations`",
-     "withheld"),
     ("emphasis inside a slice heading's name hides a slice",
      two_slices(["Status: built"], slice_b="## Slice *B* %s the spinner" % D), "## Slice *B* %s the spinner" % D,
      "slices"),
@@ -108,6 +104,19 @@ FAMILIES = [
      "**Base:** " + SHA, "base"),
     ("a code span label hides a base", two_slices(["Status: signed off"], header=["", "`Base:` " + SHA]),
      "`Base:` " + SHA, "base"),
+]
+
+# Since A18 (2) the withheld-name rule reads every character of Unicode category P, S or Z as a space, so bold and a
+# code span around a withheld heading's name no longer hide it from the line reading: both readings withhold the
+# section, the same lines and the same name, and the doc runs with the section left out of every packet (A13's two
+# markup families that once stopped): (what, the doc, the heading, the section)
+MARKUP_AGREED = [
+    ("bold markup around a withheld heading",
+     two_slices(["Status: signed off", "", "## **Punch list**", "- LEAK-MARKER the double tap"]), "## **Punch list**",
+     "## Punch list"),
+    ("a code span around a withheld heading",
+     two_slices(["Status: signed off", "", "## `Deviations`", "- LEAK-MARKER skipped the retry"]), "## `Deviations`",
+     "## Deviations"),
 ]
 
 # markup that leaves every decision equal: (what, the doc, the slices' Status: lines)
@@ -152,7 +161,19 @@ class TheReadings(unittest.TestCase):
                 self.assertEqual(problems[0][0], number_of(doc, first), what)
                 self.assertIn("U+%04X" % ord(fences.unlisted(first)[1]), problems[0][1], what)
                 continue
-            self.assertEqual(fences.read(doc).problems, [], what)
+            # A18 (1): a hidden slice heading leaves its label a stray `Status:` line, a later line the line rules
+            # refuse; the stop still names the earlier line the second reading names (below)
+            self.assertEqual([p for p in fences.read(doc).problems if p[1] != fences.STRAY], [], what)
+
+    def test_markup_around_a_withheld_heading_is_withheld_by_both_readings(self):
+        for what, doc, heading, section in MARKUP_AGREED:
+            with self.subTest(shape=what):
+                self.assertEqual(fences.read(doc).problems, [], what)
+                self.assertIsNone(readings().difference(doc), what)
+                kept, removed = spec.clean(doc)
+                self.assertNotIn("LEAK-MARKER", kept, what)
+                first = number_of(doc, heading)
+                self.assertIn({"what": section, "lines": [first, first + 2]}, removed, (what, removed))
 
     def test_every_family_stops_each_reader_naming_its_line(self):
         from vertical_core import gate as gatemod  # noqa: E402
@@ -192,7 +213,7 @@ class TheReadings(unittest.TestCase):
 
     def test_the_first_line_wins_across_decisions(self):
         """Two differences: the earlier line is named, whichever decision it belongs to."""
-        doc = two_slices(["Status: signed off", "", "## **Punch list**", "- LEAK"], header=["", "**Base:** " + SHA])
+        doc = two_slices(["Status: signed off", "", "## Punch&#32;list", "- LEAK"], header=["", "**Base:** " + SHA])
         found = readings().difference(doc)
         self.assertEqual(found[0], number_of(doc, "**Base:** " + SHA))
         doc = two_slices(["Status: built"], slice_b="## Slice  B %s the spinner" % D,
@@ -292,6 +313,15 @@ class TheGate(unittest.TestCase):
                     "base": {"commit": info0["base"], "words": "from the first commit"}})
                 self.assert_unreadable(line, code, out, err, run_dir, "line %d" % number_of(doc, line))
 
+    def test_markup_around_a_withheld_heading_passes_the_gate(self):
+        """A18 (2): both readings withhold the section, so the gate runs (A13's two markup families that once
+        stopped)."""
+        for what, doc, heading, section in MARKUP_AGREED:
+            for records in (False, True):
+                with self.subTest(shape=what, records=records):
+                    code, out, err, run_dir = self.gate(doc, records)
+                    self.assertEqual(code, 0, (what, records, out, err))
+
     def test_equal_decisions_still_pass_the_gate(self):
         for what, doc, statuses in EQUAL:
             for records in (False, True):
@@ -350,7 +380,7 @@ class TheScope(unittest.TestCase):
         self.addCleanup(testlib.rmtree, self.tmp)
 
     def test_scope_stops_on_a_family_in_the_commit(self):
-        for index, line in enumerate(("## Punch&#32;list", "Punch list\n---", "## **Handoffs**")):
+        for index, line in enumerate(("## Punch&#32;list", "Punch list\n---", "## Punch <!-- x --> list")):
             with self.subTest(shape=line):
                 doc = vlib.build_doc().replace("## Build assumptions\n", line + "\n- LEAK\n\n## Build assumptions\n", 1)
                 ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=True, name="ws-%d" % index)

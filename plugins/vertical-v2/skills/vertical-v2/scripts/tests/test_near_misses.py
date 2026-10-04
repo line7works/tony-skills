@@ -179,7 +179,9 @@ class TheReadings(unittest.TestCase):
     def test_every_slice_form_near_miss_stops_every_reader_naming_its_heading(self):
         for what, text, first in SLICE_FORM_SHAPES:
             with self.subTest(shape=what):
-                self.assertEqual(fences.read(text).problems, [], what)
+                # A18 (1): the near-miss heading leaves slice B's label a stray `Status:` line, a later line the line
+                # rules refuse; the stop still names the heading, the earlier line the second reading names
+                self.assertEqual([p for p in fences.read(text).problems if p[1] != fences.STRAY], [], what)
                 self.assert_stops(what, text, first, "slice")
 
     def test_a_level_3_slice_note_is_not_touched(self):

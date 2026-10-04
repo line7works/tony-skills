@@ -25,7 +25,8 @@ as they are and applied first) and once by a pinned CommonMark reader (`commonma
    reach a withheld section has) that starts with `Status:` once its format characters are removed and its leading
    whitespace stripped (THE HIDDEN-LABEL RULE, `fences.label_form`, A15: a label behind a zero-width space, a soft
    hyphen or a no-break space is a label candidate too), "starts with" read as a label candidate
-   (`fences.label_candidate`, A16 (3): folded, `status` or `base`, any spaces or tabs, then a colon), and keeps every
+   (`fences.label_candidate`, A16 (3), A18 (3): its leading marks set aside, folded, `status` or `base`, any spaces
+   or tabs, then a colon), and keeps every
    one of them, a list in document order,
    never one entry per source line (A14, C1A8-1: two rendered lines can carry one line number): none is no card; one
    that reads exactly `Status: ` and one of A11's six values is that value; anything else (two lines, another
@@ -34,10 +35,10 @@ as they are and applied first) and once by a pinned CommonMark reader (`commonma
    rendered paragraph line before the first slice heading it reads that starts with `Base:` (read as in 2, A15), kept
    and decided as in 2 with 7 to 40 lower-case hex digits;
 4. the withheld sections: for each withheld line, the section it belongs to and the name its heading was read from.
-   Both readings apply one rule, THE WITHHELD-NAME RULE (`spec.withheld_of`, A14, C1A8-3, A16 (4), A17 (2): a level 1
-   or 2 heading whose name, format characters removed, folded, hyphens, dashes, underscores, U+2212, U+00B7, U+2018
-   and U+2019 read as spaces, whitespace collapsed and any leading numbering or `the` dropped, starts with one of
-   `spec.STEMS`): the line rules to the source name (`spec.sections`),
+   Both readings apply one rule, THE WITHHELD-NAME RULE (`spec.withheld_of`, A14, C1A8-3, A16 (4), A17 (2), A18 (2): a
+   level 1 or 2 heading whose name, format characters removed, folded, the four stroke and ligature letters mapped,
+   every character of Unicode category P, S or Z read as a space, whitespace collapsed and any leading numbering or
+   `the` dropped, starts with one of `spec.STEMS`): the line rules to the source name (`spec.sections`),
    the second reading to the rendered name, each section running from its heading to the line before the next
    heading of level 1 or 2, or the end;
 5. for each other Markdown file of the reviewed commit, its builder's-notes declaration. The line reading is
@@ -307,12 +308,17 @@ def _held(withheld, line):
 
 
 def difference(text):
-    """compare's answer for a doc the line rules accept; None when they refuse it (their problem comes first)."""
+    """compare's answer for a doc the line rules accept; None when they refuse it (their problem comes first). As in
+    `spec.read`, a doc whose first line-rule problem is a stray `Status:` line (`fences.STRAY`, A18 (1)) gets compare's
+    answer when it names an earlier line, else None."""
     from . import spec
     doc = fences.read(text)
-    if doc.problems:
+    if doc.problems and doc.problems[0][1] != fences.STRAY:
         return None
-    return compare(line_reading(doc, spec.sections(doc)), second_reading(text, len(doc.lines)))
+    found = compare(line_reading(doc, spec.sections(doc)), second_reading(text, len(doc.lines)))
+    if doc.problems and (found is None or found[0] >= doc.problems[0][0]):
+        return None
+    return found
 
 
 def notes_difference(text):

@@ -267,7 +267,9 @@ class TheReadings(unittest.TestCase):
     def test_a_character_reference_to_an_unlisted_character_stops_every_reader(self):
         for what, text, line, code in REFERENCE_SHAPES:
             with self.subTest(shape=what):
-                self.assertEqual(fences.read(text).problems, [], what)
+                # A18 (1): a slice heading no reading takes leaves a stray `Status:` line, a later line the
+                # line rules refuse; the stop still names the earlier line the second reading names
+                self.assertEqual([p for p in fences.read(text).problems if p[1] != fences.STRAY], [], what)
                 self.assert_stops(what, text, line, code)
 
     def test_every_listed_character_in_plain_prose_runs(self):
@@ -304,14 +306,19 @@ class TheReadings(unittest.TestCase):
                 self.assert_stops(what, text, line, None)
 
     def test_a_folded_status_line_outside_every_slice_is_removed_from_the_spec(self):
-        text = with_b(["Status: signed off", "", "## Notes", "", "status: STATUS-FOLD-MARKER draft", "",
-                       "Status : SPACED-FOLD-MARKER draft"])
+        """In the header the removal still meets them; since A18 (1) after a non-slice `## ` heading they stop."""
+        text = header(["", "status: STATUS-FOLD-MARKER draft", "", "Status : SPACED-FOLD-MARKER draft"])
         kept, removed = spec.clean(text)
         for marker in ("STATUS-FOLD-MARKER", "SPACED-FOLD-MARKER"):
             self.assertNotIn(marker, kept)
         for line in ("status: STATUS-FOLD-MARKER draft", "Status : SPACED-FOLD-MARKER draft"):
             at = number_of(text, line)
             self.assertIn({"what": "Status: line", "lines": [at, at]}, removed)
+        stray = with_b(["Status: signed off", "", "## Notes", "", "status: STATUS-FOLD-MARKER draft", "",
+                        "Status : SPACED-FOLD-MARKER draft"])
+        with self.assertRaises(spec.SpecUnreadable) as caught:
+            spec.clean(stray)
+        self.assertEqual(caught.exception.line, number_of(stray, "status: STATUS-FOLD-MARKER draft"))
 
     def test_every_withheld_name_shape_is_withheld_and_named_the_same_in_both_readings(self):
         for what, heading, canonical in WITHHELD_SHAPES:

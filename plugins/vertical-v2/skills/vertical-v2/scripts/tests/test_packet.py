@@ -31,7 +31,8 @@ spellings kept where it allows them (inner runs of spaces, upper case, closing h
 those earlier shapes is stopped by its line rule, ahead of the second reading (A13). Since A13 every shape whose
 decisions the two readings take differently stops too, naming the first line where they differ: a Setext slice
 heading or withheld heading, a character reference in a slice heading, a withheld heading, a `Status:` label or a
-`Base:` line, inline markup in a withheld heading, extra spaces in a slice heading, an escaped or bold `Base:` line;
+`Base:` line, inline markup in a withheld heading (an inline comment; bold, since A18 (2), is withheld by both
+readings and runs), extra spaces in a slice heading, an escaped or bold `Base:` line;
 so does another Markdown file whose builder's-notes declaration the two readings decide differently (a
 character-coded first heading). A heading whose markup leaves every decision equal still builds every packet. Since
 A14 (C1A8-1 to C1A8-4) the guard also holds: two rendered labels, or a slice's one label, in a paragraph whose lines
@@ -53,7 +54,14 @@ characters only: a slice heading spelled with an accented letter or after a left
 label and an accented header `Base:` line, each stopping naming its line; the withheld names past A16's words (joined
 by U+2212, U+00B7 or U+2019, accented, numbered `1`, `1.1`, `(1)` or `A.`, `Buildassumptions`, `Builder
 assumptions`), withheld from every packet and named; and the seven notes shapes whose unlisted character sits where it
-keeps the first line from reading as a heading or on a Setext underline, withheld and named, never a stop.
+keeps the first line from reading as a heading or on a Setext underline, withheld and named, never a stop. Since A18
+(C1A11-1 to C1A11-3) the guard also holds, written with listed characters only: slice B's heading behind a section
+number (`1.`, `(1)`), with a capital I for its l, or after a word, over `Status: built`, and a `Status:` line in a
+withheld section, each stopping at the stray `Status:` line; a left curly quote or a middle dot before a `Status:`
+label above the plain one, a left curly quote before a header `Base:` line, and a `###` heading named like a label
+after a left curly quote, each stopping naming its line; and the withheld names past A17's words (joined by U+201C, a
+full stop or a plus sign, numbered `a)`, `II.` or `#1`, a possessive or plural `Builder`, U+00D0 or U+00D8 for D or
+O), withheld from every packet and named.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -380,7 +388,6 @@ class TheClassGuard(unittest.TestCase):
          "## Punch&#32;list"),
         ("a character-coded colon makes a second rendered label (A13, family 2)", ["Status&#58; built"],
          "Status&#58; built"),
-        ("bold markup hides a withheld section (A13, family 3)", ["## **Punch list**", "- LEAK"], "## **Punch list**"),
         ("two spaces inside a slice heading hide a slice (A13, family 4)", ["## Slice  C %s the encoder" % D,
                                                                              "Status: built"],
          "## Slice  C %s the encoder" % D),
@@ -472,7 +479,9 @@ class TheClassGuard(unittest.TestCase):
                 self.assertEqual(problems[0][0], text.split("\n").index(first) + 1, what)
                 self.assertIn("U+%04X" % ord(odd[1]), problems[0][1], what)
             else:
-                self.assertEqual(fences.read(text).problems, [], what)
+                # A18 (1): a slice heading no reading takes leaves a stray `Status:` line, a later line the
+                # line rules refuse; the stop still names the earlier line the second reading names
+                self.assertEqual([p for p in fences.read(text).problems if p[1] != fences.STRAY], [], what)
             head = self.recommit_doc(text)
             with self.assertRaises(specmod.SpecUnreadable) as caught:
                 packet.Snapshot(self.ws, head, DOC)
@@ -702,13 +711,96 @@ class TheClassGuard(unittest.TestCase):
                 self.assertNotIn("A17-NOTES-MARKER", body, path)
             self.assertNotIn("notes/plain.md", whys, name)
 
+    # A18 (1) and (3), C1A11-1 and C1A11-3: (what, [(the text replaced in class_doc, its replacement)], the line the
+    # stop names); each written with listed characters only
+    B_HEAD = "## Slice B %s the spinner" % D
+    B_LABEL = ("Depends on: A\nStatus: signed off", "Depends on: A\nStatus: built")
+    A18_STOPS = (
+        ("slice B's heading behind a section number, over Status: built (C1A11-1)",
+         [(B_HEAD, "## 1. Slice B %s the spinner" % D), B_LABEL], "Status: built"),
+        ("slice B's heading behind a parenthesized number, over Status: built (C1A11-1)",
+         [(B_HEAD, "## (1) Slice B %s the spinner" % D), B_LABEL], "Status: built"),
+        ("slice B's heading with a capital I for the l, over Status: built (C1A11-1)",
+         [(B_HEAD, "## SIice B %s the spinner" % D), B_LABEL], "Status: built"),
+        ("slice B's heading after a word, over Status: built (C1A11-1)",
+         [(B_HEAD, "## Next: Slice B %s the spinner" % D), B_LABEL], "Status: built"),
+        ("a Status: line in a withheld section (A18 (1))",
+         [("- DEVIATION-MARKER skipped the retry\n", "- DEVIATION-MARKER skipped the retry\n\nStatus: built\n")],
+         "Status: built"),
+        ("a left curly quote before Status: built above slice B's plain label (C1A11-3)",
+         [("Depends on: A\nStatus: signed off", "Depends on: A\n\n\u2018Status: built\n\nStatus: signed off")],
+         "\u2018Status: built"),
+        ("a middle dot before Status: built above slice B's plain label (C1A11-3)",
+         [("Depends on: A\nStatus: signed off", "Depends on: A\n\n\u00b7 Status: built\n\nStatus: signed off")],
+         "\u00b7 Status: built"),
+        ("a left curly quote before Base: 1234567 in the header (C1A11-3)",
+         [(HEADER_AT, HEADER_AT + "\n\u2018Base: 1234567\n")], "\u2018Base: 1234567"),
+        ("a ### heading named like a label after a left curly quote, refusal (c) (C1A11-3)",
+         [("Depends on: A\nStatus: signed off", "Depends on: A\n\n### \u2018Status: built\n\nStatus: signed off")],
+         "### \u2018Status: built"),
+    )
+    # A18 (2), C1A11-2: (what, a withheld name past A17's words, its canonical name)
+    A18_WITHHELD = (
+        ("Hand-offs joined by U+201C", "## Hand\u201coffs", "## Handoffs"),
+        ("Hand-offs joined by a full stop", "## Hand.offs", "## Handoffs"),
+        ("Hand-offs joined by a plus sign", "## Hand+offs", "## Handoffs"),
+        ("a) Punch list", "## a) Punch list", "## Punch list"),
+        ("II. Punch list", "## II. Punch list", "## Punch list"),
+        ("#1 Punch list", "## #1 Punch list", "## Punch list"),
+        ("Builder's assumptions with U+2019", "## Builder\u2019s assumptions", "## Build assumptions"),
+        ("Builders assumptions", "## Builders assumptions", "## Build assumptions"),
+        ("Deviations with U+00D0", "## \u00d0eviations", "## Deviations"),
+        ("Handoffs with U+00D8", "## Hand\u00d8ffs", "## Handoffs"),
+        ("bold markup around Punch list (A13's family 3 shape, withheld by both readings since A18 (2))",
+         "## **Punch list**", "## Punch list"),
+    )
+
+    def test_every_a18_shape_stops_before_any_packet_naming_its_line(self):
+        from vertical_core import fences  # noqa: E402
+        for what, pairs, first in self.A18_STOPS:
+            with self.subTest(shape=what):
+                text = class_doc()
+                for old, new in pairs:
+                    self.assertIn(old, text, what)
+                    text = text.replace(old, new, 1)
+                self.assertTrue(all(fences.unlisted(row) is None for row in text.split("\n")), what)
+                head = self.recommit_doc(text)
+                with self.assertRaises(specmod.SpecUnreadable) as caught:
+                    packet.Snapshot(self.ws, head, DOC)
+                self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1,
+                                 (what, str(caught.exception)))
+
+    def test_every_a18_withheld_name_reaches_no_packet_and_is_named(self):
+        for index, (what, heading, canonical) in enumerate(self.A18_WITHHELD):
+            with self.subTest(shape=what):
+                planted = heading + "\n- A18-NEAR-MISS-MARKER skim slice B\n\n## Build   assumptions\n"
+                text = class_doc().replace("## Build   assumptions\n", planted)
+                first = text.split("\n").index(heading) + 1
+                self.snap = packet.Snapshot(self.ws, self.recommit_doc(text), DOC)
+                for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                                   ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra",
+                                     "profile": "repo"}, "o"),
+                                   ({"name": "outside-deepseek", "side": "outside", "row": "deepseek",
+                                     "profile": "packet-only"}, "p")):
+                    built, dest = self.cut(spec, "a18-%s-%d" % (name, index))
+                    for path, body in texts_under(dest):
+                        if os.path.basename(path) in ("files.json", "withheld.json"):
+                            continue
+                        self.assertNotIn("A18-NEAR-MISS-MARKER", body, (what, path))
+                    withheld = testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"]
+                    self.assertTrue(any(w["what"] == "%s %s" % (DOC, canonical) and
+                                        "lines %d to %d" % (first, first + 2) in w["why"] for w in withheld),
+                                    (what, withheld))
+
     def test_every_shape_the_two_readings_take_differently_stops_before_any_packet_naming_its_line(self):
         """A13: the line rules accept each shape; the second reading takes a decision differently, so the snapshot
         stops naming the first line where they differ."""
         from vertical_core import fences  # noqa: E402
         for what, shape, first in self.TWO_READINGS_SHAPES:
             text = class_doc().replace("## Build   assumptions\n", "\n".join(shape) + "\n\n## Build   assumptions\n")
-            self.assertEqual(fences.read(text).problems, [], what)
+            # A18 (1): a slice heading no reading takes leaves a stray `Status:` line, a later line the
+            # line rules refuse; the stop still names the earlier line the second reading names
+            self.assertEqual([p for p in fences.read(text).problems if p[1] != fences.STRAY], [], what)
             head = self.recommit_doc(text)
             with self.assertRaises(specmod.SpecUnreadable) as caught:
                 packet.Snapshot(self.ws, head, DOC)
