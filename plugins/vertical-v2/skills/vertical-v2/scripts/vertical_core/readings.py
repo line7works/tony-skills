@@ -85,7 +85,14 @@ accept also stops `doc-unreadable`, naming the line, when the second reading fin
     x`, `## Next: Slice B <dash> x`, `## ` U+00B2 `Slice B <dash> x`, and a level 3 `### Slice B <dash> x` that would
     lend its card to the slice above. A heading that only mentions a slice later in its name (`## Notes on slice A
     <dash> what we learned`) is not refused, nor a level 3 heading without the form (a `### Slice D <dot> <date>`
-    note, `### Slice A notes`); a heading of level 4 or more is not touched;
+    note, `### Slice A notes`); a heading of level 4 or more is not touched. Also (A21 (2), Astra's look 4, the
+    owner's numbered slice style) a heading of level 1 or 2 whose folded name, behind its numbering and at most one
+    word ending in a colon (A20's reading: `behind_numbering`, then `LABEL_WORD`), reads `slice <name>` ending the
+    name, or followed by a colon or a dash (a hyphen or U+2010 to U+2015, spaced or not: `NAMED`), and is not an exact
+    slice heading: `## 2. Slice B`, `## Next: Slice B`, `## 2. Slice B: beta`, `## 2. Slice B - beta`, `## 7. Slice 1:
+    the frame`, each over no `Status:` line yet or over a label only the rendered text shows. Level 3 is not widened
+    (`### 7.1 Slice 1: the frame` runs; it would stop 189 headings of the 25 real plans), and `## Slice B notes` behind
+    a number (`## 2. Slice B notes`) is not refused;
 (c) a heading of any level whose rendered name, with format characters removed, is a label candidate
     (`fences.label_candidate`, A16 (3): `### status: built`, `### Status : built`) (C1A8-3): no reading takes a heading
     as a label, so its words would stand beside the slice's card or the base, unread;
@@ -117,6 +124,9 @@ LABELS = (fences.STATUS_LABEL, fences.BASE_LABEL)
 FORM = re.compile(r"slice \S+ %s " % D)        # A20: the slice form `slice <name> <dash> `, read folded
 JOINED = re.compile(r"[0-9]+(?=[^\W\d_])")    # A20: digits joined directly to the name (a folded U+00B2 is `2`)
 LABEL_WORD = re.compile(r"[^\s:]+: *")          # A20: one word ending in a colon (`Next:`)
+SEPARATOR = "\\-\u2010-\u2015"                       # A21 (2): a hyphen or U+2010 to U+2015
+NAMED = re.compile(r"slice [^\s:%s]+ *(?:\Z|[:%s])" % (SEPARATOR, SEPARATOR))   # A21 (2): `slice <name>` ending the
+#                                              name, or followed by a colon or a dash, spaced or not, read folded
 
 
 def line_reading(doc, sections):
@@ -171,14 +181,17 @@ def slice_form(level, name):
     """Refusal (b): a level 1 or 2 heading whose rendered name, format characters removed, folded and its leading
     punctuation, symbols and spaces set aside, starts with `slice`; or (A20) a level 1, 2 or 3 heading whose folded name
     behind its numbering (`behind_numbering`), with at most one word ending in a colon then dropped, reads as the slice
-    form (`FORM`); in either case unless it is a level 2 heading on the build-doc form's slice pattern."""
+    form (`FORM`); or (A21 (2)) a level 1 or 2 heading whose name read that way reads `slice <name>` ending the name or
+    followed by a colon or a dash (`NAMED`); in each case unless it is a level 2 heading on the build-doc form's slice
+    pattern."""
     if level > 3:
         return False
     folded = fences.fold(fences.unformatted(name))
     if not (level <= 2 and set_aside(folded).startswith("slice")):
         rest = behind_numbering(folded)
         word = LABEL_WORD.match(rest)
-        if not (FORM.match(rest) or (word is not None and FORM.match(rest[word.end():]))):
+        forms = (FORM,) if level == 3 else (FORM, NAMED)              # A21 (2): level 3 is not widened
+        if not any(form.match(rest) or (word is not None and form.match(rest[word.end():])) for form in forms):
             return False
     return not (level == 2 and SLICE.match("## " + name))
 
@@ -190,11 +203,14 @@ def label_heading(name):
 
 def second_reading(text, total):
     """The CommonMark reader's decisions, in line_reading's shape (module docstring, 1 to 4), and its refusals
-    (module docstring, (a) to (c)) as [(line, kind, rendered text, level)] in document order."""
+    (module docstring, (a) to (d)) as [(line, kind, rendered text, level)] in document order; plus "status_lines",
+    every source line of a rendered paragraph line it takes as a `Status:` label candidate, wherever it stands (A21
+    (1): never compared, the spec removes each one, `spec.clean`)."""
     from . import spec   # the withheld-name rule, applied as the line reading applies it
     stream = commonmark.tokens(text)
     heads = commonmark.headings(stream)
-    paragraphs = commonmark.paragraph_lines(stream)
+    spans = commonmark.paragraph_spans(stream)
+    paragraphs = [(line, text, exact) for line, last, text, exact in spans]
     refused = []
     for line, raw in commonmark.raw_lines(stream):                                         # (d), A16
         odd = fences.unlisted(raw)
@@ -233,8 +249,12 @@ def second_reading(text, total):
         end = tops[index + 1][2] - 1 if index + 1 < len(tops) else total
         for number in range(line, end + 1):
             withheld[number] = (what, spec.name_key(name))
+    status_lines = set()                                                                   # A21 (1)
+    for line, last, rendered, exact in spans:
+        if fences.label_candidate(fences.label_form(rendered)) == fences.STATUS_LABEL:
+            status_lines.update(range(line, last + 1))
     return {"slices": dict(slices), "cards": cards, "base": base, "withheld": withheld, "refused": refused,
-            "total": total}
+            "total": total, "status_lines": sorted(status_lines)}
 
 
 def _decided(labels):
@@ -282,7 +302,8 @@ def _refusal(kind, rendered, level):
                 "whose every rendered line maps to its own source line" % rendered)
     if kind == "slice-form":
         return ("a level %d heading a CommonMark reader renders as %r reads like a slice heading (it starts with "
-                "\"slice\", or reads as \"Slice <name> %s \" behind a number or a one-word label) but is off the "
+                "\"slice\", or reads as \"Slice <name> %s \", or at level 1 or 2 as \"Slice <name>\" ending the name "
+                "or followed by a colon or a dash, behind a number or a one-word label) but is off the "
                 "build-doc form's slice heading \"## Slice <name> %s <short name>\", so no reading takes it as a slice "
                 "and its slice would vanish from the sign-off check; vertical-v2 reads such a level 1, 2 or 3 heading "
                 "only on that form" % (level, rendered, D, D))

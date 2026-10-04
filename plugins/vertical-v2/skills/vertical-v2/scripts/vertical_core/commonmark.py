@@ -7,6 +7,10 @@ lane contract A13; contract section 5, "Two readings", and section 15, "Runtime"
         stands (a list item and a block quote included); `name` is its rendered text, `line` its first line (1-based)
     paragraph_lines(stream) -> [(line, text, exact)]: every rendered line of every paragraph, wherever it stands;
         `exact` is False when the paragraph's rendered lines cannot all be mapped to source lines (below)
+    paragraph_spans(stream) -> [(line, last, text, exact)]: paragraph_lines with the last source line each rendered
+        line runs over (a line ending inside an inline HTML token keeps the rendered line going), so a reader can
+        name every source line of a rendered line (the E15 lane contract A21 (1), `spec.clean`); when `exact` is
+        False, every line of the paragraph
     raw_lines(stream, headings_only=False) -> [(line, text)]: every heading's rendered name and (unless
         `headings_only`) every paragraph's rendered line, BEFORE whitespace runs are collapsed, with the line each
         carries above: the characters the reader renders, character references decoded (the E15 lane contract A16,
@@ -131,7 +135,7 @@ def headings(stream):
     return out
 
 
-def paragraph_lines(stream):
+def paragraph_spans(stream):
     out = []
     for index, token in enumerate(stream):
         if token.type != "paragraph_open":
@@ -139,9 +143,17 @@ def paragraph_lines(stream):
         first, after = token.map[0] + 1, token.map[1] + 1
         lines, starts, consumed = _render(stream[index + 1].children)
         exact = consumed == after - first - 1
-        for text, start in zip(lines, starts):
-            out.append((first + start if exact else first, _collapse(text), exact))
+        ends = [start - 1 for start in starts[1:]] + [after - first - 1]
+        for text, start, end in zip(lines, starts, ends):
+            if exact:
+                out.append((first + start, first + end, _collapse(text), True))
+            else:
+                out.append((first, after - 1, _collapse(text), False))
     return out
+
+
+def paragraph_lines(stream):
+    return [(line, text, exact) for line, last, text, exact in paragraph_spans(stream)]
 
 
 def raw_lines(stream, headings_only=False):

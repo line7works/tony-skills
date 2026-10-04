@@ -57,7 +57,17 @@ Outside fences, removed:
   `Status : draft` and a `Status:` line after a leading curly quote, section sign or middle dot are removed too), in a
   slice's section or outside one, the header's included (M6). Since A18 (1) a `Status:` line after the first `## `
   line and outside every slice's section has already stopped the run (`fences.read`), so only the header's and the
-  slices' reach this removal.
+  slices' reach this removal;
+- THE RENDERED-LABEL RULE (the E15 lane contract A21 (1), Astra's look 4; stated once here and once in the contract):
+  every source line of a rendered paragraph line that the second reading takes as a `Status:` label candidate
+  (`readings.second_reading`'s "status_lines": a rendered line read through `fences.label_form` and
+  `fences.label_candidate` as the cards are, every source line it runs over named, `commonmark.paragraph_spans`),
+  wherever it stands outside accepted fences: a bold `**Status:** built` or a code-span `` `Status:` built `` in the
+  header, under a `## Summary` heading, under a numbered heading, in a list item, outside every slice's section or in
+  one; nothing stops on it: the line is removed and named, never compared (inside a slice's section the cards already
+  compare it, A13). A sentence that only mentions a status in its middle stays. On the 25 real plans this withholds 5
+  more lines in 2 plans, four of them prose sentences that open with a code-span `Status:`; it errs toward
+  withholding.
 
 Everything else stays, byte for byte. Each removal is reported with its line numbers, so every packet's
 withheld list can name it.
@@ -187,33 +197,41 @@ def read(text):
     (`fences.STRAY`), the second reading is asked too, and a refusal or difference it names on an EARLIER line is named
     instead (a slice heading refusal (b) or the slices comparison already names, such as `## Sl` U+00EF `ce B`, keeps
     being named at its heading, A14 (2), A17 (1)); the run stops either way."""
+    return _read(text)[0]
+
+
+def _read(text):
+    """`read`, returning (the Doc, the second reading's decisions) so `clean` takes the rendered `Status:` lines from
+    the reading `read` compared (A21 (1))."""
     doc = fences.read(text)
-    found = None
+    found = second = None
     if not doc.problems or doc.problems[0][1] == fences.STRAY:
-        found = readings.compare(readings.line_reading(doc, sections(doc)),
-                                 readings.second_reading(text, len(doc.lines)))
+        second = readings.second_reading(text, len(doc.lines))
+        found = readings.compare(readings.line_reading(doc, sections(doc)), second)
     if doc.problems and (found is None or found[0] >= doc.problems[0][0]):
         raise SpecUnreadable(*doc.problems[0])
     if found is not None:
         raise SpecUnreadable(*found)
-    return doc
+    return doc, second
 
 
 def clean(text):
     """(the spec's text, [{"what", "lines": [first, last]}]) for one build doc's text; SpecUnreadable when a
     fence is unclosed or a line cannot be placed (a fence line the rule does not accept, a raw HTML line, a
     label line the label rule does not take: `fences.read`), or when the two readings differ (A13, `read`)."""
-    doc = read(text)
+    doc, second = _read(text)
     lines, fenced = doc.lines, doc.fenced
     drop = set()
     removed = []
     for name, number, end, key in sections(doc):
         drop.update(range(number, end + 1))
         removed.append({"what": name, "lines": [number, end]})
+    rendered = set(second["status_lines"])                                                 # A21 (1)
     for number, raw in enumerate(lines, 1):
         if number in fenced or number in drop:
             continue
-        if fences.label_candidate(fences.label_form(fences.bare(raw, number))) == LABEL:     # A15, A16 (3)
+        if (fences.label_candidate(fences.label_form(fences.bare(raw, number))) == LABEL     # A15, A16 (3)
+                or number in rendered):                                                    # A21 (1)
             drop.add(number)
             removed.append({"what": "Status: line", "lines": [number, number]})
     kept = "".join(line for number, line in enumerate(lines, 1) if number not in drop)

@@ -539,7 +539,14 @@ pattern): `## 1. Slice B <dash> x`, `## (1) Slice B <dash> x`, `## B. Slice B <d
 (`**Status:** built`), and a level 3 `### Slice B <dash> x` that would lend its card to the slice above; a heading that
 only mentions a slice later in its name (`## Notes on slice A <dash> what we learned`) is not refused, nor a level 3
 heading off the form (a `### Slice D` note with a date, `### Slice A notes`); a heading of level 4 or more is not
-touched (on the 25 real plans, 0 decisions change); (c) a
+touched (on the 25 real plans, 0 decisions change); also (A21 (2), Astra's look 4, the owner's numbered slice style)
+a heading of level 1 or 2 whose folded name, behind its numbering and at most one word ending in a colon (A20's
+reading above), reads `slice <name>` ending the name, or followed by a colon or a dash (a hyphen or U+2010 to U+2015,
+spaced or not), and is not an exact slice heading: `## 2. Slice B`, `## Next: Slice B`, `## 2. Slice B: beta`, `## 2.
+Slice B - beta`, `## 7. Slice 1: the frame`, each over no `Status:` line yet or over a label only the rendered text
+shows; `## 2. Slice B notes` is not refused. Level 3 is not widened (`### 7.1 Slice 1: the frame` runs; widening it
+would stop 189 real headings). On the 25 real plans this stops 4 level 2 headings in 2 lane contracts (numbered
+`Slice <n>:` headings in documents that are not build docs), as the owner ruled; (c) a
 heading of any level whose rendered name, with format characters removed, is a label candidate (A16 (3):
 `### status: built`, `### Status : built`) (C1A8-3: no reading takes a heading as a label, so its words would stand
 beside the slice's card or the base, unread); (d) a rendered heading name or paragraph line, before its whitespace is
@@ -618,7 +625,15 @@ header's included (M6), each read after its format characters are removed and it
 ("Hidden labels" above, A15) and as a label candidate (A16 (3), so `status: draft` and `Status : draft` go too, and
 A18 (3), so a `Status:` line after a leading curly quote, section sign or middle dot goes too). Since A18 (1) a
 `Status:` line after the first `## ` line and outside every slice's section has already stopped the run ("Exact
-labels" above), so the header's and the slices' are the ones this removal meets.
+labels" above), so the header's and the slices' are the ones this removal meets. Also removed (A21 (1), Astra's
+look 4; the code's statement is `scripts/vertical_core/spec.py`, "THE RENDERED-LABEL RULE"): every source line of a
+rendered paragraph line that the CommonMark reading takes as a `Status:` label candidate (read as its cards are,
+"Hidden labels" above, every source line the rendered line runs over), wherever it stands outside accepted fences:
+a bold `**Status:** built` or a code-span `` `Status:` built `` in the header, under a `## Summary` heading, under a
+numbered heading, in a list item, outside every slice's section or in one; nothing stops on it, and each line is
+named in every withheld list. A sentence that only mentions a status in its middle (`the status of each slice`)
+stays. On the 25 real plans this withholds 5 more lines in 2 plans, four of them prose sentences that open with a
+code-span `Status:`; it errs toward withholding.
 Everything else stays byte for byte.
 
 **The withheld list** of every packet names everything left out, each with why, and nothing the packet

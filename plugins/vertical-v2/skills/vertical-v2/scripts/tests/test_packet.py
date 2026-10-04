@@ -65,7 +65,11 @@ O), withheld from every packet and named. Since A20 (C1A12-1 and C1A12-2) slice 
 (`1.`, `(1)`), a letter (`B.`), a one-word label (`Next:`) or U+00B2 stops at that heading, by refusal (b), whatever
 lies under it (no `Status:` line yet, a bold `**Status:** built`, a character-coded `St&auml;tus: built`, or
 `Status: built`, which A18 stopped at the label line); so does a level 3 `### Slice B` heading inside slice A when
-slice A has no label of its own, which lent slice A its card before.
+slice A has no label of its own, which lent slice A its card before. Since A21 (Astra's look 4) slice B's heading in
+the numbered slice style (`## 2. Slice B`, `## Next: Slice B`, `## 2. Slice B: beta`, `## 2. Slice B - beta`, `## 7.
+Slice 1: the frame`), over no `Status:` line yet or a bold `**Status:** built`, stops at that heading by refusal (b);
+and a line that renders as a `Status:` label outside every slice (a bold label in the header, a code-span label under
+`## Summary`, a bold label under a numbered heading) is withheld from every packet and named, never a stop.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -791,6 +795,65 @@ class TheClassGuard(unittest.TestCase):
                 self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1,
                                  (what, str(caught.exception)))
                 self.assertIn("reads like a slice heading", str(caught.exception), what)
+
+    # A21 (2), look 4's MAJOR: slice B's heading in the numbered slice style, over no label or a bold one, stops at
+    # the heading: (what, [(the text replaced in class_doc, its replacement)], the line the stop names)
+    A21_HEADS = ("## 2. Slice B", "## Next: Slice B", "## 2. Slice B: beta", "## 2. Slice B - beta",
+                 "## 7. Slice 1: the frame")
+    A21_STOPS = []
+    for _head in A21_HEADS:
+        for _label, _pair in A20_UNDER[:2]:
+            A21_STOPS.append(("slice B's heading %r over %s (A21 (2))" % (_head, _label), [(B_HEAD, _head), _pair],
+                              _head))
+    del _head, _label, _pair
+    # A21 (1), look 4's BLOCKER: a line that renders as a `Status:` label outside every slice: (what, [(the text
+    # replaced in class_doc, its replacement)], its marker); each reaches no packet and is named
+    A21_CUTS = (
+        ("a bold label in the header", [(HEADER_AT, HEADER_AT + "\n**Status:** built A21-BOLD-MARKER\n")],
+         "A21-BOLD-MARKER"),
+        ("a code-span label under ## Summary after the slices",
+         [("## Build   assumptions\n", "## Summary\n\n`Status:` built A21-CODE-MARKER\n\n## Build   assumptions\n")],
+         "A21-CODE-MARKER"),
+        ("a bold label under a numbered heading",
+         [("## Build   assumptions\n", "## 3. Rollout\n\n**Status:** built A21-NUMBERED-MARKER\n\n## Build   assumptions\n")],
+         "A21-NUMBERED-MARKER"),
+    )
+
+    def test_every_a21_heading_shape_stops_before_any_packet_naming_its_heading(self):
+        for what, pairs, first in self.A21_STOPS:
+            with self.subTest(shape=what):
+                text = class_doc()
+                for old, new in pairs:
+                    self.assertIn(old, text, what)
+                    text = text.replace(old, new, 1)
+                head = self.recommit_doc(text)
+                with self.assertRaises(specmod.SpecUnreadable) as caught:
+                    packet.Snapshot(self.ws, head, DOC)
+                self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1,
+                                 (what, str(caught.exception)))
+                self.assertIn("reads like a slice heading", str(caught.exception), what)
+
+    def test_every_a21_rendered_label_reaches_no_packet_and_is_named(self):
+        for index, (what, pairs, marker) in enumerate(self.A21_CUTS):
+            with self.subTest(shape=what):
+                text = class_doc()
+                for old, new in pairs:
+                    self.assertIn(old, text, what)
+                    text = text.replace(old, new, 1)
+                line = [n for n, row in enumerate(text.split("\n"), 1) if marker in row]
+                self.assertEqual(len(line), 1, what)
+                self.snap = packet.Snapshot(self.ws, self.recommit_doc(text), DOC)
+                for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                                   ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra",
+                                     "profile": "repo"}, "o"),
+                                   ({"name": "outside-deepseek", "side": "outside", "row": "deepseek",
+                                     "profile": "packet-only"}, "p")):
+                    built, dest = self.cut(spec, "a21-%s-%d" % (name, index))
+                    for path, body in texts_under(dest):
+                        if os.path.basename(path) in ("files.json", "withheld.json"):
+                            continue
+                        self.assertNotIn(marker, body, (what, path))
+                    self.assertIn("%s Status: line %d" % (DOC, line[0]), self.withheld(dest), (what, name))
 
     def test_every_a18_shape_stops_before_any_packet_naming_its_line(self):
         from vertical_core import fences  # noqa: E402
