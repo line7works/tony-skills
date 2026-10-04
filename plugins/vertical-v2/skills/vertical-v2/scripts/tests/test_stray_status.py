@@ -5,8 +5,9 @@ E15 lane contract A18; contract section 5, "Exact labels", "The spec" and "The f
 `Status:` label candidate after the build doc's first level 2 heading and outside every slice's section stops the run
 `doc-unreadable` naming its line, before any ask, request or packet. So a slice heading no reading takes (`## 1. Slice
 B`, `## (1) Slice B`, `## A. Slice B`, `## 1.1 Slice B`, `## SIice B`, `## S1ice B`, `## Next: Slice B`, `## The Slice
-B`, `## ` U+00B2 `Slice B`) over `Status: built` stops at the `Status:` line instead of leaving its `built` slice out of
-the sign-off check. A candidate before the first level 2 heading keeps its handling (the spec removes it), and a
+B`, `## ` U+00B2 `Slice B`) over `Status: built` stops instead of leaving its `built` slice out of the sign-off check:
+since A20 at the heading itself by refusal (b) (`test_slice_behind.py`), except the two lookalikes, which still stop
+at the `Status:` line. A candidate before the first level 2 heading keeps its handling (the spec removes it), and a
 `Status:` line inside an accepted fence is content.
 (2) The withheld-name key maps U+00F0, U+00F8, U+00FE and U+00E6 after the fold, reads every character of Unicode
 category P, S or Z as a space, drops leading numbering (`1`, `1.1`, `1a`, a single letter, a lower-case roman numeral,
@@ -52,8 +53,10 @@ def number_of(text, line):
 # (1) the vanishing slice headings, each over `Status: built`: (what, doc, the line the stop names)
 VANISHING = ("## 1. Slice B", "## (1) Slice B", "## A. Slice B", "## 1.1 Slice B", "## SIice B", "## S1ice B",
              "## Next: Slice B", "## The Slice B", "## ²Slice B")
+LOOKALIKES = ("## SIice B", "## S1ice B")   # since A20 every other heading stops at itself, by refusal (b)
 STRAY_SHAPES = [("%s over Status: built" % heading,
-                 with_b(["Status: built"], heading="%s %s the spinner" % (heading, D)), "Status: built")
+                 with_b(["Status: built"], heading="%s %s the spinner" % (heading, D)),
+                 "Status: built" if heading in LOOKALIKES else "%s %s the spinner" % (heading, D))
                 for heading in VANISHING]
 STRAY_IN_WITHHELD = vlib.build_doc().replace("## Deviations\n", "## Deviations\n- one\n\nStatus: built\n", 1)
 
@@ -102,7 +105,7 @@ class TheReaders(unittest.TestCase):
                 self.assertTrue(all(fences.unlisted(row) is None for row in text.split("\n")), what)
                 problems = fences.read(text).problems
                 self.assertTrue(problems, what)
-                self.assertEqual(problems[0][0], number_of(text, line), (what, problems))
+                self.assertEqual(problems[0][0], number_of(text, "Status: built"), (what, problems))
                 self.assertIn("outside every slice", problems[0][1], what)
                 self.assert_stops(what, text, line)
 

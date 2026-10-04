@@ -11,6 +11,8 @@
     notes_unlisted(text) -> (line, character) for the first heading line of a Markdown file holding a character
         outside the character list, in either reading, or None (A16 (2): the file is a notes candidate, withheld)
     slice_form(level, name), label_heading(name) -> True when a rendered heading meets refusal (b) or (c) below
+    behind_numbering(folded) -> refusal (b)'s A20 reading of a folded name: its leading punctuation, symbols and spaces
+        set aside, then its leading numbering dropped
 
 THE TWO-READINGS RULE (stated once here and once in the contract). vertical-v2 reads the build doc twice: once by its
 line rules (`fences.py`, A8 to A12: strict plain code blocks, no raw HTML lines, exact labels, plain structure, kept
@@ -73,8 +75,17 @@ accept also stops `doc-unreadable`, naming the line, when the second reading fin
     `slice` and is not a level 2 heading whose rendered name matches the build-doc form's slice pattern (C1A8-2: an en
     dash, a hyphen or a colon for the form's dash, no spaces around it, a lower-case `slice`, a zero-width character, a
     level 1 heading; C1A10-1: an accented letter such as `Sl` U+00EF `ce`, a leading curly quote such as U+2018 before
-    `Slice`): no reading would take it as a slice, so its slice would vanish from the sign-off check. A heading of
-    level 3 or more (a `### Slice D <dot> <date>` note) is not touched;
+    `Slice`): no reading would take it as a slice, so its slice would vanish from the sign-off check. Also (A20,
+    C1A12-1 and C1A12-2) a heading of level 1, 2 or 3 whose rendered name, format characters removed and folded, with
+    its leading punctuation, symbols and spaces set aside, then any leading numbering of A18 (2)'s forms dropped
+    (`spec.LEADING`, its marks read as spaces, again and again, and digits joined directly to the name included, so a
+    superscript two folds to `2` and drops: `behind_numbering`), then at most one word ending in a colon dropped,
+    reads as the slice form `slice <name> <dash> ` (`FORM`, the form's own dash) and is not an exact slice heading (a
+    level 2 heading on the form's pattern): `## 1. Slice B <dash> x`, `## (1) Slice B <dash> x`, `## B. Slice B <dash>
+    x`, `## Next: Slice B <dash> x`, `## ` U+00B2 `Slice B <dash> x`, and a level 3 `### Slice B <dash> x` that would
+    lend its card to the slice above. A heading that only mentions a slice later in its name (`## Notes on slice A
+    <dash> what we learned`) is not refused, nor a level 3 heading without the form (a `### Slice D <dot> <date>`
+    note, `### Slice A notes`); a heading of level 4 or more is not touched;
 (c) a heading of any level whose rendered name, with format characters removed, is a label candidate
     (`fences.label_candidate`, A16 (3): `### status: built`, `### Status : built`) (C1A8-3): no reading takes a heading
     as a label, so its words would stand beside the slice's card or the base, unread;
@@ -87,6 +98,7 @@ accept also stops `doc-unreadable`, naming the line, when the second reading fin
 Each refusal reads the rendered heading or line, which for a plain line is its source text, so one rule covers the
 source form and every rendering of it.
 """
+import re
 import unicodedata
 
 from station_core import templates
@@ -102,6 +114,9 @@ ORDER = ("unlisted", "unmapped", "slice-form", "label-heading", "slices", "card"
 SLICE = templates.BUILD["slice"]
 D = templates.D
 LABELS = (fences.STATUS_LABEL, fences.BASE_LABEL)
+FORM = re.compile(r"slice \S+ %s " % D)        # A20: the slice form `slice <name> <dash> `, read folded
+JOINED = re.compile(r"[0-9]+(?=[^\W\d_])")    # A20: digits joined directly to the name (a folded U+00B2 is `2`)
+LABEL_WORD = re.compile(r"[^\s:]+: *")          # A20: one word ending in a colon (`Next:`)
 
 
 def line_reading(doc, sections):
@@ -138,12 +153,33 @@ def set_aside(text):
     return text[at:]
 
 
+def behind_numbering(folded):
+    """Refusal (b)'s A20 reading of a folded name: its leading punctuation, symbols and spaces set aside, then every
+    leading numbering of A18 (2)'s forms (`spec.LEADING`, tested with the name's P, S and Z characters read as spaces)
+    and every run of digits joined directly to the name (`JOINED`) dropped, again and again."""
+    from . import spec   # A18 (2)'s numbering, one statement for both rules
+    text = set_aside(folded)
+    while True:
+        spaced = "".join(" " if unicodedata.category(c)[0] in "PSZ" else c for c in text)
+        match = JOINED.match(text) or spec.LEADING.match(spaced)
+        if match is None or not match.end():
+            return text
+        text = set_aside(text[match.end():])
+
+
 def slice_form(level, name):
     """Refusal (b): a level 1 or 2 heading whose rendered name, format characters removed, folded and its leading
-    punctuation, symbols and spaces set aside, starts with `slice` and is not a level 2 heading on the build-doc form's
-    slice pattern."""
-    if level > 2 or not set_aside(fences.fold(fences.unformatted(name))).startswith("slice"):
+    punctuation, symbols and spaces set aside, starts with `slice`; or (A20) a level 1, 2 or 3 heading whose folded name
+    behind its numbering (`behind_numbering`), with at most one word ending in a colon then dropped, reads as the slice
+    form (`FORM`); in either case unless it is a level 2 heading on the build-doc form's slice pattern."""
+    if level > 3:
         return False
+    folded = fences.fold(fences.unformatted(name))
+    if not (level <= 2 and set_aside(folded).startswith("slice")):
+        rest = behind_numbering(folded)
+        word = LABEL_WORD.match(rest)
+        if not (FORM.match(rest) or (word is not None and FORM.match(rest[word.end():]))):
+            return False
     return not (level == 2 and SLICE.match("## " + name))
 
 
@@ -246,9 +282,10 @@ def _refusal(kind, rendered, level):
                 "whose every rendered line maps to its own source line" % rendered)
     if kind == "slice-form":
         return ("a level %d heading a CommonMark reader renders as %r reads like a slice heading (it starts with "
-                "\"slice\") but is off the build-doc form's slice heading \"## Slice <name> %s <short name>\", so no "
-                "reading takes it as a slice and its slice would vanish from the sign-off check; vertical-v2 reads a "
-                "level 1 or 2 heading that starts with \"slice\" only on that form" % (level, rendered, D))
+                "\"slice\", or reads as \"Slice <name> %s \" behind a number or a one-word label) but is off the "
+                "build-doc form's slice heading \"## Slice <name> %s <short name>\", so no reading takes it as a slice "
+                "and its slice would vanish from the sign-off check; vertical-v2 reads such a level 1, 2 or 3 heading "
+                "only on that form" % (level, rendered, D, D))
     return ("a heading a CommonMark reader renders as %r starts like a Status: or Base: label (read folded), and no "
             "reading takes a heading as a label, so its words would stand beside the slice's card or the base unread; "
             "vertical-v2 reads a label only as a plain paragraph line" % rendered)

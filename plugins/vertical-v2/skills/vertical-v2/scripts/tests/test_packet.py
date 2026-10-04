@@ -61,7 +61,11 @@ withheld section, each stopping at the stray `Status:` line; a left curly quote 
 label above the plain one, a left curly quote before a header `Base:` line, and a `###` heading named like a label
 after a left curly quote, each stopping naming its line; and the withheld names past A17's words (joined by U+201C, a
 full stop or a plus sign, numbered `a)`, `II.` or `#1`, a possessive or plural `Builder`, U+00D0 or U+00D8 for D or
-O), withheld from every packet and named.
+O), withheld from every packet and named. Since A20 (C1A12-1 and C1A12-2) slice B's heading behind a section number
+(`1.`, `(1)`), a letter (`B.`), a one-word label (`Next:`) or U+00B2 stops at that heading, by refusal (b), whatever
+lies under it (no `Status:` line yet, a bold `**Status:** built`, a character-coded `St&auml;tus: built`, or
+`Status: built`, which A18 stopped at the label line); so does a level 3 `### Slice B` heading inside slice A when
+slice A has no label of its own, which lent slice A its card before.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -712,18 +716,19 @@ class TheClassGuard(unittest.TestCase):
             self.assertNotIn("notes/plain.md", whys, name)
 
     # A18 (1) and (3), C1A11-1 and C1A11-3: (what, [(the text replaced in class_doc, its replacement)], the line the
-    # stop names); each written with listed characters only
+    # stop names); each written with listed characters only. Since A20 a heading refusal (b) reads as the slice form
+    # behind a number or a word stops at that heading, ahead of its stray `Status:` line
     B_HEAD = "## Slice B %s the spinner" % D
     B_LABEL = ("Depends on: A\nStatus: signed off", "Depends on: A\nStatus: built")
     A18_STOPS = (
         ("slice B's heading behind a section number, over Status: built (C1A11-1)",
-         [(B_HEAD, "## 1. Slice B %s the spinner" % D), B_LABEL], "Status: built"),
+         [(B_HEAD, "## 1. Slice B %s the spinner" % D), B_LABEL], "## 1. Slice B %s the spinner" % D),
         ("slice B's heading behind a parenthesized number, over Status: built (C1A11-1)",
-         [(B_HEAD, "## (1) Slice B %s the spinner" % D), B_LABEL], "Status: built"),
+         [(B_HEAD, "## (1) Slice B %s the spinner" % D), B_LABEL], "## (1) Slice B %s the spinner" % D),
         ("slice B's heading with a capital I for the l, over Status: built (C1A11-1)",
          [(B_HEAD, "## SIice B %s the spinner" % D), B_LABEL], "Status: built"),
         ("slice B's heading after a word, over Status: built (C1A11-1)",
-         [(B_HEAD, "## Next: Slice B %s the spinner" % D), B_LABEL], "Status: built"),
+         [(B_HEAD, "## Next: Slice B %s the spinner" % D), B_LABEL], "## Next: Slice B %s the spinner" % D),
         ("a Status: line in a withheld section (A18 (1))",
          [("- DEVIATION-MARKER skipped the retry\n", "- DEVIATION-MARKER skipped the retry\n\nStatus: built\n")],
          "Status: built"),
@@ -754,6 +759,38 @@ class TheClassGuard(unittest.TestCase):
         ("bold markup around Punch list (A13's family 3 shape, withheld by both readings since A18 (2))",
          "## **Punch list**", "## Punch list"),
     )
+
+    # A20, C1A12-1 and C1A12-2: (what, [(the text replaced in class_doc, its replacement)], the line the stop names)
+    A20_UNDER = (("no Status: line", ("Depends on: A\nStatus: signed off", "Depends on: A")),
+                 ("**Status:** built", ("Depends on: A\nStatus: signed off", "Depends on: A\n**Status:** built")),
+                 ("St&auml;tus: built", ("Depends on: A\nStatus: signed off", "Depends on: A\nSt&auml;tus: built")))
+    A20_HEADS = ("## 1. Slice B %s the spinner" % D, "## (1) Slice B %s the spinner" % D,
+                 "## B. Slice B %s the spinner" % D, "## Next: Slice B %s the spinner" % D,
+                 "## \u00b2Slice B %s the spinner" % D)
+    A20_STOPS = [("a level 3 slice B heading inside an unlabeled slice A (C1A12-2)",
+                  [("Depends on: nothing\nStatus: signed off", "Depends on: nothing"),
+                   (B_HEAD, "### Slice B %s the spinner" % D)], "### Slice B %s the spinner" % D)]
+    for _head in A20_HEADS:
+        for _label, _pair in A20_UNDER:
+            A20_STOPS.append(("slice B's heading %r over %s (C1A12-1)" % (_head, _label), [(B_HEAD, _head), _pair],
+                              _head))
+    del _head, _label, _pair
+
+    def test_every_a20_shape_stops_before_any_packet_naming_its_heading(self):
+        from vertical_core import fences  # noqa: E402
+        for what, pairs, first in self.A20_STOPS:
+            with self.subTest(shape=what):
+                text = class_doc()
+                for old, new in pairs:
+                    self.assertIn(old, text, what)
+                    text = text.replace(old, new, 1)
+                self.assertTrue(all(fences.unlisted(row) is None for row in text.split("\n")), what)
+                head = self.recommit_doc(text)
+                with self.assertRaises(specmod.SpecUnreadable) as caught:
+                    packet.Snapshot(self.ws, head, DOC)
+                self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1,
+                                 (what, str(caught.exception)))
+                self.assertIn("reads like a slice heading", str(caught.exception), what)
 
     def test_every_a18_shape_stops_before_any_packet_naming_its_line(self):
         from vertical_core import fences  # noqa: E402
