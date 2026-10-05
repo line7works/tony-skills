@@ -1,0 +1,23 @@
+{
+  "case": "S3-01-clean",
+  "role": "executor",
+  "script": [
+    {
+      "do": "visit",
+      "result": "completed",
+      "station": "build-v2",
+      "writes": "card-built"
+    },
+    {
+      "do": "visit",
+      "result": "clean",
+      "station": "signoff-v2",
+      "writes": null
+    },
+    {
+      "do": "report"
+    }
+  ],
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

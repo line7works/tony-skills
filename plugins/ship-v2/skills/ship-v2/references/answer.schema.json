@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/ship-v2/answer.schema.json",
+  "title": "ship-v2 executor files",
+  "description": "The files the executor hands ship-v2 during a run, one schema, four kinds (references/ship-contract.md sections 3.2, 3.5 and 3.7): `hook`, the adapter's Stop-hook reading, taken whole; `fixes`, a lap's fixes against the named findings; `question`, a question to the owner passed through verbatim; `answer`, the owner's answer, his words verbatim, and its effect. Closed at every level.",
+  "type": "object",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "required": ["answer_version", "kind", "harness", "armed", "how", "evidence"],
+      "properties": {
+        "answer_version": {"const": 1},
+        "kind": {"const": "hook"},
+        "harness": {"type": ["string", "null"], "description": "the harness whose adapter read it"},
+        "armed": {"type": "boolean", "description": "whether this session showed the Stop hook's confirmation"},
+        "how": {"type": "string", "minLength": 1, "description": "how the adapter read it, or why it cannot be read"},
+        "evidence": {"type": ["string", "null"], "description": "the harness record that showed it, or null"}
+      }
+    },
+    {
+      "additionalProperties": false,
+      "required": ["answer_version", "kind", "run_id", "lap", "fixes", "spec_change"],
+      "properties": {
+        "answer_version": {"const": 1},
+        "kind": {"const": "fixes"},
+        "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "lap": {"type": "integer", "minimum": 1, "description": "the lap these fixes belong to"},
+        "fixes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["finding", "paths", "summary"],
+            "properties": {
+              "finding": {"type": "string", "minLength": 1, "description": "the id of a finding the lap named"},
+              "paths": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true,
+                        "description": "every workspace-relative path the fix touched or wants to touch"},
+              "summary": {"type": "string", "minLength": 1, "pattern": "^[^\\r\\n]+$", "description": "one line: what changed"}
+            }
+          }
+        },
+        "spec_change": {
+          "type": "array",
+          "description": "a fix that would need the spec changed: stop condition 2",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["finding", "why"],
+            "properties": {
+              "finding": {"type": ["string", "null"]},
+              "why": {"type": "string", "minLength": 1, "pattern": "^[^\\r\\n]+$"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "additionalProperties": false,
+      "required": ["answer_version", "kind", "run_id", "source", "station", "text", "finding"],
+      "properties": {
+        "answer_version": {"const": 1},
+        "kind": {"const": "question"},
+        "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "source": {"enum": ["station", "ship"], "description": "a station's question, or ship-v2's own waive-or-hold question"},
+        "station": {"enum": ["build-v2", "signoff-v2", "recheck-v2", null], "description": "the station that asked, or null for ship-v2's own"},
+        "text": {"type": "string", "minLength": 1, "description": "the question, verbatim"},
+        "finding": {"type": ["string", "null"], "description": "the finding a waive-or-hold question is about"}
+      },
+      "allOf": [
+        {"if": {"properties": {"source": {"const": "station"}}}, "then": {"properties": {"station": {"type": "string"}}}},
+        {"if": {"properties": {"source": {"const": "ship"}}}, "then": {"properties": {"station": {"type": "null"}}}}
+      ]
+    },
+    {
+      "additionalProperties": false,
+      "required": ["answer_version", "kind", "run_id", "pause", "words", "effect"],
+      "properties": {
+        "answer_version": {"const": 1},
+        "kind": {"const": "answer"},
+        "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "pause": {"type": "integer", "minimum": 1, "description": "the pause this answers"},
+        "words": {"type": "string", "minLength": 1, "description": "the owner's answer, verbatim"},
+        "effect": {
+          "oneOf": [
+            {"type": "object", "additionalProperties": false, "required": ["kind"],
+             "properties": {"kind": {"const": "resume"}}},
+            {"type": "object", "additionalProperties": false, "required": ["kind", "finding"],
+             "properties": {"kind": {"enum": ["waive", "reopen"]}, "finding": {"type": "string", "minLength": 1}}}
+          ]
+        }
+      }
+    }
+  ]
+}

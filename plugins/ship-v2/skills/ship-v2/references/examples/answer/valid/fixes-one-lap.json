@@ -1,0 +1,17 @@
+{
+  "answer_version": 1,
+  "fixes": [
+    {
+      "finding": "f1:0123456789abcdef0123",
+      "paths": [
+        "src/widget.py",
+        "tests/test_widget.py"
+      ],
+      "summary": "the widget now counts the double tap"
+    }
+  ],
+  "kind": "fixes",
+  "lap": 1,
+  "run_id": "run-0001",
+  "spec_change": []
+}

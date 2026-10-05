@@ -1,0 +1,13 @@
+{
+  "answer_version": 1,
+  "fixes": [],
+  "kind": "fixes",
+  "lap": 1,
+  "run_id": "run-0001",
+  "spec_change": [
+    {
+      "finding": "f1:0123456789abcdef0123",
+      "why": "the slice asks one turn per tap and the fix needs two"
+    }
+  ]
+}

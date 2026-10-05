@@ -1,0 +1,12 @@
+{
+  "input_version": 2,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-0001"
+  },
+  "run_dir": "/tmp/ship-v2/run-0001",
+  "run_id": "run-0001",
+  "workspace": "/tmp/widget-workspace"
+}

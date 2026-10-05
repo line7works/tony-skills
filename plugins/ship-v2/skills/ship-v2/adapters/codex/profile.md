@@ -1,9 +1,7 @@
 # Adapter profile: ship-v2 on Codex CLI
 
-The ship-v2 adapter for Codex CLI (E15 slice 1, the back frame's skeleton; the E9 seam's profile,
-twelve sections in order, precon-v2's adapters as the pattern). The core is not built yet: every
-phase answers `phase-not-built`. Each section below answers what the back frame fixes; what the
-station itself decides is stated by the hand-back that builds it. Labels follow E9-11
+The ship-v2 adapter for Codex CLI (E15 slice 2; the E9 seam's profile, twelve sections in order, precon-v2's
+adapters as the pattern). Each section answers what this core needs of the harness. Labels follow E9-11
 (`harness-enforced`, `helper-derived`, `instruction-bound`); a claim with no record is not made.
 
 **What the executor types and what it never types.** Run `invocation.py` and copy its `invocation`
@@ -15,12 +13,11 @@ refused (`tests/test_invocation.py`, `SchemaCompositionTest`).
 
 `invocation.harness` is `codex-cli`, this adapter's own name (`helper-derived`). The version, the
 entry and the sandbox are measurement only, read by the helper (`_common.py`, byte for byte
-precon-v2's). No install of this core has been measured yet; the control room's install proofs
-are the record.
+precon-v2's). The control room's install proofs are the record of an install.
 
 ## 2. Model and floor
 
-Does not apply to the input: `invocation` carries no model. Not built yet beyond that.
+Does not apply: `invocation` carries no model, and ship-v2 has no model floor of its own. Each station it visits keeps its own (signoff-v2's Opus-class reviewer floor among them), governed by that station's own `SKILL.md`.
 
 ## 3. Run id and directory
 
@@ -30,8 +27,7 @@ workspace and one that already holds a run (`references/back-loop.md` sections 2
 
 ## 4. The user channel
 
-Not built yet: the owner's words this station records are stated by the hand-back that builds it,
-as data in the input or a recorded answer (`references/back-loop.md` section 3).
+The owner's words arrive as data, verbatim (`instruction-bound`): in the input (`station.minor_fixes`, `station.extra_laps`) and in a pause's answer file (`pause --answer`, kind `answer`: his words and their effect, `resume`, `waive` or `reopen`). The script records them and never stands in for them; a waiver or reopening is a records event carrying them (`references/ship-contract.md` sections 3.7 and 6).
 
 ## 5. `session_wrote_fix`
 
@@ -40,12 +36,11 @@ Does not apply: that is the recheck pilot's field. The helper prints the session
 
 ## 6. Run date
 
-Not built yet: the date this station renders is stated by the hand-back that builds it.
+A grant's `grant_date` is the run's UTC date from its clock (`helper-derived`); the stations keep their own dates.
 
 ## 7. The verifier capability
 
-Not built yet: what this station summons or visits is stated by the hand-back that builds it; every
-visit and summons is a trace line (`references/trace.schema.json`, `scripts/back_core/trace.py`).
+ship-v2 summons no reader; it visits three stations, each reached as a v2 sibling and read through its own CLI before the visit, every visit and refusal a trace line (`references/trace.schema.json`, `scripts/back_core/trace.py`; `references/ship-contract.md` section 3.4). **The Stop-hook check** (ruling E15-12): Codex has no Stop hook and no goal confirmation this adapter can read, so `hook.py` always prints `Hook: NOT armed`, labelled honestly (`armed` false, `evidence` null, `how` saying why), and `ship.py hook` refuses a Codex reading that claims an armed hook. The run proceeds identically; the SHIP: block reads `Hook: NOT armed (run unwrapped)`.
 
 ## 8. Delivery
 
@@ -59,8 +54,8 @@ None (owner pick P5): this station keeps its phrases and commands, so `SKILL.md`
 ## 10. Negative tests
 
 `setups/codex/negative-tests.sh` runs the nine negative installation cases on this core's package,
-each in its own throwaway home; the free half always runs, the live half is behind `--live`. No row
-has been observed for this core yet.
+each in its own throwaway home; the free half always runs, the live half is behind `--live`. The control room's
+install proofs are the record.
 
 ## 11. Installed-package verification
 
@@ -77,5 +72,6 @@ checkout. A snapshot at the moment it runs; equality with this checkout, not cor
 |---|---|---|
 | Report the harness it runs in (`invocation.harness`) | `helper-derived` | this adapter's own name |
 | Report who asked (`invocation.caller`, `invocation.mode`) | `instruction-bound` | `--caller` from a calling station's payload, else `user` / `direct` |
-| Answer every phase with `phase-not-built` until it is built | `helper-derived` | `scripts/back_core/backdriver.py`; `scripts/tests/test_backdriver.py` |
-| Refuse a v1 station before a visit | `helper-derived` | `scripts/back_core/trace.py`; `scripts/tests/test_trace.py` |
+| Read whether the Stop hook is armed | `helper-derived` | `hook.py`: always NOT armed on Codex; `tests/test_hook.py` |
+| Refuse a v1 station before a visit, and a v1 result at its end | `helper-derived` | `scripts/ship_core/stations.py`, `scripts/ship_core/visit.py`; `scripts/tests/test_visit.py` |
+| Hold the lap counter, the stops and the pause | `helper-derived` | `scripts/ship_core/`; `scripts/tests/test_laps.py`, `test_stops.py`, `test_pause.py` |

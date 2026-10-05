@@ -1,0 +1,19 @@
+{
+  "case": "S4-02-station-question",
+  "role": "executor",
+  "script": [
+    {
+      "answered": null,
+      "do": "visit",
+      "question": "The slice carries an open finding. Build on it anyway? (yes/no)",
+      "result": "completed",
+      "station": "build-v2",
+      "writes": "card-built"
+    },
+    {
+      "do": "report"
+    }
+  ],
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

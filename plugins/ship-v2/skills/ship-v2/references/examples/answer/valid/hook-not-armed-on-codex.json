@@ -1,0 +1,8 @@
+{
+  "answer_version": 1,
+  "armed": false,
+  "evidence": null,
+  "harness": "codex-cli",
+  "how": "Hook: NOT armed. Codex has no Stop hook",
+  "kind": "hook"
+}
