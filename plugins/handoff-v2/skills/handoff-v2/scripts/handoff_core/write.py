@@ -15,7 +15,7 @@ Before any write, in this order, each a stop with nothing written:
    set, the branch, the commits ahead and the tree read now, the suite record as photographed; the answer supplies
    no photograph line), the card moves (A23 (2): for each slice a grant of this run names whose card changes by
    v1's rule after the grants, from the card the records and its `Status:` line agree on), and the doc planned with
-   the card moves and the block, which must read cleanly by the line rules, hold every earlier block unchanged, hold
+   the card moves and the block, which must read cleanly by the line rules and the second reading (A25), hold every earlier block unchanged, hold
    one more block, under `## Handoffs`, and differ from the doc only by the inserted lines and the moved `Status:`
    lines (`write-refused`);
 5. the records' tail rule (A23 (1)): when the log holds record lines it imported from the doc, the component's own
@@ -119,7 +119,7 @@ def _check_plan(before, after, inserted, earlier, heading):
     try:
         planned = docmod.read(after)
     except docmod.DocUnreadable as exc:
-        return "the planned doc would not read by the line rules at line %d: %s" % (exc.line, exc.words)
+        return "the planned doc would not read cleanly (the line rules and the second reading) at line %d: %s" % (exc.line, exc.words)
     texts = [docmod.block_text(planned, b).rstrip("\r\n") for b in planned.blocks]
     earlier = [text.rstrip("\r\n") for text in earlier]
     if texts[:len(earlier)] != earlier or len(texts) != len(earlier) + 1:
@@ -170,7 +170,7 @@ def _status_words(path, receipt):
     words = []
     for move in receipt.get("card_moves") or []:
         if lines is None:
-            held = "cannot be read by the line rules now"
+            held = "cannot be read cleanly now"
         elif lines.get(move["slice"]) is None or lines[move["slice"]].get("status_at") is None:
             held = "has no Status: line now"
         else:

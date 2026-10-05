@@ -26,8 +26,10 @@ skills/handoff-v2/SKILL.md          the portable procedure, v1's steps 1 to 8
 skills/handoff-v2/agents/openai.yaml   the Codex sidecar (manual-only, owner pick P5)
 skills/handoff-v2/references/       handoff-contract.md (this core's contract), back-loop.md and back-files.txt
                                     (the back frame), the input, answer, result and trace schemas, examples/
-skills/handoff-v2/scripts/          handoff.py (the phase driver), handoff_core/ (this core's phases, its copy of
-                                    vertical-v2's line rules), back_core/ and station_core/ (the frame), tests/,
+skills/handoff-v2/scripts/          handoff.py (the phase driver), handoff_core/ (this core's phases, its copies of
+                                    vertical-v2's line rules and second reading), vendor/ (vertical-v2's
+                                    vendored CommonMark reader, byte for byte), back_core/ and
+                                    station_core/ (the frame), tests/,
                                     validate-examples.py, validate-result.py, validate-trace.py
 skills/handoff-v2/adapters/         Claude Code (with pointer.py, the memory pointer) and Codex profiles and helpers
 setups/                             install, verify, negative tests, launch, manual-only probe, per harness
@@ -43,6 +45,8 @@ PYTHONDONTWRITEBYTECODE=1 uv run --python /usr/bin/python3 --with jsonschema==4.
 uv run validate-examples.py
 ```
 
-`jsonschema==4.25.1` is the one dependency, supplied by `uv run` (PEP 723); `--help` works without it. Under plain
+`jsonschema==4.25.1` is the one dependency, supplied by `uv run` (PEP 723); `--help` works without it. The
+second reading's CommonMark reader (`markdown-it-py` 3.0.0 and `mdurl` 0.1.2, MIT) is vendored under
+`scripts/vendor/`, vertical-v2's copy byte for byte: nothing is installed and nothing is fetched. Under plain
 `/usr/bin/python3` the suites that drive the CLI skip and say so. The records component (`plugins/records`) must sit
 beside this plugin or be installed beside it.

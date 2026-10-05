@@ -7,7 +7,7 @@
     "session_id": "session-test-1"
   },
   "plugin_version": "0.1.0",
-  "reason": "the planned doc would not read by the line rules at line 40: a raw HTML line; nothing was written",
+  "reason": "the planned doc would not read cleanly (the line rules and the second reading) at line 40: a raw HTML line; nothing was written",
   "report_only": false,
   "run_dir": "/work/example/run",
   "run_id": "run",

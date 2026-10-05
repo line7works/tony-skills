@@ -2,9 +2,9 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a state. Written
 for E15 slice 1, hand-back 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 9 and 12,
-amendments A1, A2, A22, A23 and A24) and the control room's readings CR-11 to CR-17 in the slice 1b brief, as slice
-1b's fix round 1 amended them (A23, and the check's C1B1-3 to C1B1-9) and fix round 2 (A24, and the re-check's
-R1B1-5 to R1B1-7). Where this document
+amendments A1, A2, A22, A23, A24 and A25) and the control room's readings CR-11 to CR-17 in the slice 1b brief, as
+slice 1b's fix round 1 amended them (A23, and the check's C1B1-3 to C1B1-9), fix round 2 (A24, and the re-check's
+R1B1-5 to R1B1-7) and fix round 3 (A25, after Astra's look 5). Where this document
 and that contract differ, the contract is the authority and this document is the defect. `references/back-loop.md`
 is the discipline the three back cores share; this document is this core's own.
 
@@ -41,7 +41,8 @@ and its `Status:` line in the same records transaction build-v2 uses for a card 
 the executor's named
 step outside the script, and the script records the commit it finds (A2, Q2); the memory pointer is the Claude Code
 adapter's step and is absent on Codex (A2, Q3); the vault tier of v1's hunt is dropped (A2, Q4); the kickoff lines
-name the v2 stations (A2, Q5); every line read from the doc goes through vertical-v2's line rules (A22 (1), CR-17).
+name the v2 stations (A2, Q5); every line read from the doc goes through vertical-v2's line rules (A22 (1), CR-17),
+and every doc is then read a second time by vertical-v2's CommonMark reading (A25 (1)).
 
 ## 3. The phases
 
@@ -173,8 +174,8 @@ vertical-v2's file in the checkout, skipped, never passed, in the installed shap
 list checked in both). Its docstring is vertical-v2's statement of A8's strict fences, A9's raw HTML lines, A10 and
 A11's exact labels, A12's plain structure, A16's character list and A18's stray `Status:` line and leading marks,
 quoted as it is (it names vertical-v2's own files where it says where each rule is used). Any problem it names stops
-the run before any write, naming the line (`doc-unreadable`). The second, CommonMark reading of A13 is vertical-v2's
-and is not part of this rule (A22 names the line rules). `templates.parse` decides nothing here.
+the run before any write, naming the line (`doc-unreadable`). The second, CommonMark reading follows them (A25,
+"Two readings" below). `templates.parse` decides nothing here.
 
 On a doc those rules accept, `scripts/handoff_core/doc.py` reads, outside accepted fences only: the sections (every
 `## ` line opens one, which runs to the next plain level 1 or level 2 heading outside an accepted fence, the way
@@ -193,8 +194,36 @@ the handoff blocks (a line reading exactly `### <YYYY-MM-DD> <dash> handoff`, ru
 heading or the doc's end); the record blocks (`### <YYYY-MM-DD> <dash> review: ` or `recheck: `). `<dash>` is U+2014,
 the constant `forms.D` (section 8).
 
-Measured on the 25 real build docs the control room snapshotted (the evidence corpus, never copied here): the line
-rules stop 4, the same 4 vertical-v2's line rules stop, and this core's own reading adds none (the builder's report).
+**Two readings** (A25 (1), after Astra's look 5; the code's statement is `scripts/handoff_core/two_readings.py`,
+"THE HANDOFF TWO-READINGS RULE", read with this paragraph). Every build doc this core decides from is read twice: by
+the line rules and this core's own reading above, then by vertical-v2's second reading (A13), and the first line
+where the two take a decision differently stops the run `doc-unreadable`, naming the line, before any write and
+before the gate (`doc.read` raises at `select`; `photograph` and `write` read through it too). The second reading's
+code is vertical-v2's, byte for byte: `scripts/handoff_core/commonmark.py`, `readings.py` and the two modules it reads
+with, `spec.py` and `notes.py`, over the vendored reader under `scripts/vendor/` (`markdown-it-py` 3.0.0 and `mdurl`
+0.1.2, with `VENDOR.json`); `scripts/tests/test_two_readings.py` holds the four files and the vendored tree equal to
+vertical-v2's (skipped, never passed, in the installed shape where vertical-v2 is absent, as A22's test is) and
+`scripts/tests/test_vendor.py` holds the tree to its manifest in every shape. None of these is a back-frame file
+(`references/back-files.txt` is unchanged; vertical-v2 stays closed). The decisions compared: (1) A13's own, as
+vertical-v2 compares them (the slices, each slice's card, the recorded base, the withheld sections, and the second
+reading's four refusals); (2) the section boundaries: every level 1 or 2 heading by line and level, and which one
+opens `## Handoffs` or `## Punch list` (the source `## ` line's exact name; the rendered level 2 name, exactly
+`Handoffs` or `Punch list`), so the block lands in the same section in both readings: a Setext heading inside
+`## Handoffs`, a Setext `Handoffs` heading and a `## Handoffs ##` closing-hash heading stop at their line, never a
+duplicate section; (3) the earlier handoff blocks and the record blocks, by heading line, kind and end (a marked-up,
+closing-hashed or character-coded block heading stops); (4) this core's own labels in each slice's section: a
+rendered paragraph line that reads as a `Depends on:` or `Questions:` label candidate after the folding vertical-v2
+applies to `Status:` candidates (format characters removed and leading whitespace stripped, the leading listed marks
+set aside, folded) whose source line is not that label in its plain form stops (a bold `**Questions:**`, a code-span
+`` `Depends on:` ``), and so does a plain label the reader renders as no label; (5) such a label line in a paragraph
+whose rendered lines cannot all be mapped to source lines stops, naming the paragraph's first line. The earliest line
+is named; on one line, A13's comparison first, then (2) to (5).
+
+Measured on the 25 real build docs the control room snapshotted (the evidence corpus, never copied here; slice 1b fix
+round 3's report): the line rules stop 4, the same 4 vertical-v2's line rules stop, and this core's own reading adds
+none; the second reading adds 2, the two lane contracts A21 (2) stops on purpose (A13's refusal (b), the numbered
+`Slice <n>:` headings), so this core stops the same 6 vertical-v2's full reading stops, at the same lines; (2) to (5)
+stop none of the 25.
 
 ## 6. The sanctioned writes
 
@@ -369,7 +398,7 @@ The exits are the back loop's: 0, 1, 2, 3, 4, 5, 10 (back-loop section 2). A sto
 | `selection-unnamed` | select | the invocation names nothing to match against: ask the owner |
 | `selection-none` | select | no doc found in the repo's tiers (shared tag) |
 | `selection-several` | select | several docs in one tier, listed, none picked (shared tag) |
-| `doc-unreadable` | select | a line vertical-v2's line rules (or this core's own two labels) refuse, named |
+| `doc-unreadable` | select | a line vertical-v2's line rules (or this core's own two labels) refuse, or the first line where the line rules and the second, CommonMark reading take a decision differently (A25, section 5, "Two readings"), named |
 | `block-misplaced` | select | a handoff block outside `## Handoffs` |
 | `identity-unnamed` | select | no identity derives and the owner named none |
 | `identity-conflict` | select | the owner's name differs from the derived identity |
@@ -403,7 +432,9 @@ import the doc into the log; answer a gate question; read a v1 skill's files.
 
 Commands: `check-input <input.json>`, `select`, `photograph`, `gate`, `record-answer`, `write`, `report` (each with
 `--run-dir D`), `identity <workspace>`, `skill-identity`; `--help` on each, without `jsonschema`. Runtime:
-`/usr/bin/python3` 3.9 syntax, standard library plus `jsonschema==4.25.1` through `uv run` (PEP 723); git 2.50.1.
+`/usr/bin/python3` 3.9 syntax, standard library plus `jsonschema==4.25.1` through `uv run` (PEP 723) and the vendored
+CommonMark reader of the second reading (A25, section 5: vertical-v2's `scripts/vendor/` byte for byte, nothing
+installed and nothing fetched; `handoff_core/commonmark.py` is the only module that imports it); git 2.50.1.
 Run-directory artifacts: `input.json`, `checkpoint.json`, `selection.json`, `doc.json`, `photograph.json`,
 `gate.json`, `answers.json`, `receipt.json` (the write's plan and outcome, read again by a settle), `write.json`,
 `pointer.json`, `pointer-receipt.json` (the adapter's),

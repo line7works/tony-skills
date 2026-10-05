@@ -34,6 +34,14 @@ here. On a doc those rules accept, this module then reads, outside accepted fenc
 - the record blocks: a line reading `### <YYYY-MM-DD> <dash> review: ` or `recheck: ` opens one (the ledger
   home's rule, `home`).
 
+THE SECOND READING (the E15 lane contract A25 (1), after Astra's look 5). On a doc the line rules and this core's
+own reading accept, `read` then asks vertical-v2's second reading (A13, copied byte for byte) and compares the
+decisions above with it: THE HANDOFF TWO-READINGS RULE, stated in `two_readings.py` (A13's slices, cards, base,
+withheld sections and four refusals; the level 1 and 2 headings and the ledger sections they open; the handoff and
+record blocks; this core's own two labels). The first line where the two differ raises DocUnreadable naming it, so
+a Setext heading inside `## Handoffs`, a Setext `Handoffs`, a `## Handoffs ##` or a bold `**Questions:**` stops
+before any write and before the gate.
+
 THE TWO INSERTIONS (CR-13 (1) and (2); `plan`). The block goes at the tail of `## Handoffs`: after the section's
 last non-blank line, one blank line before it and, when a non-blank line follows, one after it; a missing
 `## Handoffs` is created right before `## Punch list`, or at the doc's end when the doc has neither. The rendered
@@ -56,7 +64,7 @@ settle it, naming the line where the refused imported line stands NOW (the slice
 import re
 import unicodedata
 
-from . import fences
+from . import fences, two_readings
 
 D = "\u2014"
 SECTION = "## "
@@ -262,7 +270,33 @@ def read(text):
     doc.blocks, doc.records = blocks, records
     doc.misplaced = [b for b in blocks if doc.handoffs is None or b["section"] != doc.handoffs]
     doc.title = lines[0][2:].strip() if lines and lines[0].startswith("# ") else None
+    differ = two_readings.difference(text, found, _decisions(doc))
+    if differ is not None:
+        raise DocUnreadable(*differ)
     return doc
+
+
+def _decisions(doc):
+    """The line reading's decisions the second reading is compared with (THE HANDOFF TWO-READINGS RULE, 2 to 4,
+    `two_readings.py`): every plain level 1 or 2 heading by line, level and the ledger section it opens; every handoff
+    and record block by heading line, kind and end; this core's own labels in each slice's section, by line."""
+    names = dict((s["line"], s["name"]) for s in doc.sections)
+    tops = {}
+    for number in doc.tops:
+        line = doc.lines[number - 1]
+        name = names.get(number)
+        tops[number] = (len(line) - len(line.lstrip("#")), name if name in (HANDOFFS, PUNCH) else None)
+    blocks = dict((b["line"], ("handoff", b["end"])) for b in doc.blocks)
+    blocks.update((r["line"], ("record", r["end"])) for r in doc.records)
+    own = {}
+    for row in doc.slices:
+        if row["depends_at"] is not None:
+            own.setdefault(row["depends_at"], []).append("depends on")
+        for question in row["questions"]:
+            own.setdefault(question["line"], []).append("questions")
+    for labels in own.values():
+        labels.sort()
+    return {"tops": tops, "blocks": blocks, "own": own}
 
 
 def block_text(doc, block):

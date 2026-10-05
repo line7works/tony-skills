@@ -7,8 +7,9 @@ either matches, then a phase or slice doc under `docs/` or `plan/`. No vault tie
 the invocation names, or the plan this session established when the hunt found none. An invocation that names
 nothing to match against stops and asks (`selection-unnamed`), never the lone doc on disk.
 
-The doc is then read by vertical-v2's line rules (`doc.read`, CR-17): any line they refuse stops the run
-(`doc-unreadable`) before anything else, naming it. A handoff block outside `## Handoffs` stops it
+The doc is then read by vertical-v2's line rules (`doc.read`, CR-17), then by its second, CommonMark reading (the E15
+lane contract A25, `two_readings.py`): any line the rules refuse, or the first line where the two readings differ,
+stops the run (`doc-unreadable`) before anything else, naming it. A handoff block outside `## Handoffs` stops it
 (`block-misplaced`). The identity is derived one way (`doc.identity`); none stops and asks (`identity-unnamed`); an
 owner's name in the input is taken only when none derives, and one that differs from a derived identity stops
 (`identity-conflict`).
@@ -137,8 +138,9 @@ def handler(ctx, args):
                       "reads no other encoding; nothing was written" % (doc, exc), selection=selection)
     except docmod.DocUnreadable as exc:
         report.finish(ctx, run, "stopped", docmod.STOP_TAG,
-                      "the build doc %s cannot be read by vertical-v2's line rules at line %d, so nothing is decided "
-                      "from it and nothing was written: %s. The plan's author edits that line, then run again"
+                      "the build doc %s cannot be read cleanly at line %d (vertical-v2's line rules, then its second, "
+                      "CommonMark reading), so nothing is decided from it and nothing was written: %s. The plan's "
+                      "author edits that line, then run again"
                       % (doc, exc.line, exc.words), selection=selection)
     if parsed.misplaced:
         lines = ", ".join("line %d (%s)" % (b["line"], b["date"]) for b in parsed.misplaced)

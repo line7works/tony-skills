@@ -48,8 +48,9 @@ uv run scripts/handoff.py select --run-dir <run dir> --name <feature>
 `--name` is what the invocation names; `--doc <path>` instead when it names the doc, or when the hunt found none and
 this session established the plan. The hunt is the repo's tiers only. It stops on: nothing named (ask the owner which
 doc, never take the lone doc on disk), nothing found, several found (list them, never pick), a doc line the line rules
-refuse (tell the owner the line to edit), a handoff block outside `## Handoffs`, no identity (ask him to name it, then
-run again with `station.feature`). Report the stop and STOP.
+refuse or the second, CommonMark reading takes differently (tell the owner the line to edit), a handoff block
+outside `## Handoffs`, no identity (ask him to name it, then run again with `station.feature`). Report the stop and
+STOP.
 
 ## Step 2: Read the record
 
