@@ -8,6 +8,19 @@ comes from the record the executor names (`--suite-record`, a build-v2 result re
 recorded". No test suite is ever run. Before any of that: the doc must still hold the bytes `select` read, and every
 handoff block the doc held at HEAD must be unchanged in the working copy (`block-edited`). Writes `photograph.json`
 in the run directory and nothing else.
+
+Two stops come here, before the gate, so no answer is ever given to a run that cannot write:
+
+- `card-drift` (the E15 lane contract A24 (1), build-v2's drift rule, build-contract section 10): a slice whose last
+  `card_set` in the log has an `after` that differs from its `Status:` line, while that line equals the event's
+  `before`, is the state a run leaves when its card event landed and its `Status:` line did not. The run stops,
+  nothing written, naming both values and both ways out: resume the interrupted run's `write` with its run
+  directory (it settles the doc half), or set the line to the card the records hold. A line holding any other value
+  is a hand edit, which is no drift.
+- the records' tail rule (A23 (1), the slice 1b re-check's R1B1-5): when the log holds record lines it imported from
+  the doc, the component's `import-legacy --dry-run` (which writes nothing and takes no lock) must not refuse the
+  doc as it stands with a conflict (exit 7); a doc it refuses stops `write-refused` here, nothing written, the stop
+  ending with the way out (`doc.tail_rule_way_out`). `write` checks the same again.
 """
 import datetime
 import os
@@ -97,6 +110,63 @@ def findings_of(state):
              "location": f["location"]["raw"], "claim": f["claim"]} for f in state.get("findings") or []]
 
 
+def imported_lines(client, ws, doc_rel):
+    """([(line, raw)], {line: heading line}) of every record line the log imported from the doc (`events`: legacy
+    origin, cards left out), with the line of the record block heading each was read under then."""
+    seen, headings = {}, {}
+    for row in client.events(ws, doc_rel).get("results") or []:
+        event = row.get("event") or {}
+        origin = event.get("origin") or {}
+        if origin.get("kind") != "legacy" or origin.get("doc") != doc_rel or event.get("kind") == "card_observed":
+            continue
+        if isinstance(origin.get("line"), int) and isinstance(origin.get("raw"), str):
+            seen.setdefault(origin["line"], origin["raw"])
+            headings.setdefault(origin["line"], origin.get("heading_line"))
+    return sorted(seen.items()), headings
+
+
+def tail_rule_refusal(client, ws, doc_rel, text, imported, headings=None):
+    """The stop reason when the records component's own dry run already refuses the doc with a conflict (exit 7), or
+    None. A dry run refused for another reason is not this rule's, and passes (a write does not cause it)."""
+    try:
+        client.import_legacy(ws, doc_rel, dry_run=True)
+    except records_link.RecordsRefusal as refusal:
+        if refusal.exit_code == 7:
+            return ("the records component already refuses this doc's next levelling pass (records section 11.7: %s), "
+                    "and a write would leave it so; nothing was written. The owner settles the doc first: %s"
+                    % (refusal.sentence(), docmod.tail_rule_way_out(text, imported, refusal.body, headings)))
+    return None
+
+
+def card_drift(rows, view):
+    """The first slice whose `Status:` line reads the `before` of its last `card_set` while that event's `after` is
+    another card, as (slice, the line's card, the event), or None. `rows` are `events --kind card_set` results."""
+    last = {}
+    for row in rows:
+        event = row.get("event") or {}
+        if event.get("kind") == "card_set" and isinstance(event.get("slice"), str):
+            last[event["slice"]] = dict(event, seq=row.get("seq"))
+    for item in view["slices"]:
+        event = last.get(item["name"])
+        if event is None or item.get("status") is None:
+            continue
+        if event.get("after") != item["status"] and item["status"] == event.get("before"):
+            return item["name"], item["status"], event
+    return None
+
+
+def drift_reason(name, line, event):
+    actor = event.get("actor") or {}
+    return ("slice %s's Status: line reads %r, the card the records' last card move for it started from, and that "
+            "move (a card_set at seq %s by %s run %s, %r to %r) is in the log: its event landed and its Status: line did "
+            "not, so the doc contradicts the record and this run writes nothing over it; nothing was written. Two ways "
+            "out: resume the interrupted run's write with its run directory (for a handoff-v2 run, `handoff.py write "
+            "--run-dir <the run directory of run %s>`), which settles the doc half; or set the line to the card the "
+            "records hold, `Status: %s`, by hand. Then run handoff again"
+            % (name, line, event.get("seq"), actor.get("station") or "a station", actor.get("run_id"),
+               event.get("before"), event.get("after"), actor.get("run_id"), event.get("after")))
+
+
 def read_records(ctx, run, ws, doc_rel, records_root, what):
     client = records_link.open_client(common.STATION, records_root=records_root)
     try:
@@ -131,6 +201,18 @@ def handler(ctx, args):
     except records_link.RecordsRefusal as refusal:
         report.finish(ctx, run, "stopped", "records-refused",
                       records_link.refusal_sentence(refusal, "reading the log's head"))
+    try:
+        drift = card_drift(client.events(ws, view["doc"], kind="card_set").get("results") or [], view)
+        imported, headings = imported_lines(client, ws, view["doc"])
+    except records_link.RecordsRefusal as refusal:
+        report.finish(ctx, run, "stopped", "records-refused",
+                      records_link.refusal_sentence(refusal, "reading the card moves and the imported lines"))
+    if drift is not None:
+        report.finish(ctx, run, "stopped", "card-drift", drift_reason(*drift))
+    if imported:
+        why = tail_rule_refusal(client, ws, view["doc"], common.decode(data), imported, headings)
+        if why is not None:
+            report.finish(ctx, run, "stopped", "write-refused", why)
     cards = cards_of(view, state)
     findings = findings_of(state)
     names = [c["name"] for c in cards]

@@ -22,9 +22,10 @@ here. On a doc those rules accept, this module then reads, outside accepted fenc
   any prefix (indent, list-item or block-quote markers) and any leading listed mark, folds (`fences.fold`) to
   `depends on` or `questions`, spaces or tabs, then a colon, is read only when it starts at column 0 with exactly
   `Depends on:` or `Questions:`; any other such line in a slice's section is refused, named; a second
-  `Depends on:` line in one slice is refused, named; a `Questions:` line whose value is empty, `none` or
-  `nothing` followed by a list item in its paragraph (or, when empty, by a list as the next thing in the slice)
-  is refused, named: each open question goes on its own `Questions:` line (C1B1-4); and either label that starts
+  `Depends on:` line in one slice is refused, named; a `Questions:` line whose value is empty is refused, named,
+  always, and one whose value is `none` or `nothing` followed by any non-blank line in its paragraph is refused,
+  named: each open question goes on its own `Questions:` line, or the label reads `Questions: none` (the E15 lane
+  contract A24 (2), the slice 1b re-check's R1B1-2, which widens C1B1-4's list rule); and either label that starts
   inside an inline HTML comment its paragraph opened earlier (`<!--` with no `-->` yet), or sits in a paragraph
   holding a link reference definition, is refused, named, since CommonMark hides it there (C1B1-9);
 - the handoff blocks: a line reading exactly `### <YYYY-MM-DD> <dash> handoff` (the dash `forms.D`, one constant)
@@ -49,7 +50,8 @@ core edits, in the same transaction as the `card_set` event (`write.py`).
 THE TAIL RULE (A23 (1); `levelling_problem`). The records component accepts an imported record line that only
 moved (its raw bytes and its order among the imported lines unchanged, matched in order by its raw text). A
 planned doc keeps every imported record line, in order, and adds no line byte-equal to one, or the write is
-refused before anything is written.
+refused before anything is written. When the component already refuses the doc, `tail_rule_way_out` says how to
+settle it, naming the line where the refused imported line stands NOW (the slice 1b re-check's R1B1-5).
 """
 import re
 import unicodedata
@@ -65,9 +67,10 @@ RECORD = re.compile(r"^### (\d{4}-\d{2}-\d{2}) %s (review|recheck): " % D)
 UPPER_HEADING = re.compile(r"^#{1,3} ")
 OWN = re.compile(r"(depends[ \t]+on|questions)[ \t]*:")
 TOP = re.compile(r"^#{1,2} ")
-LIST_ITEM = re.compile(r"^[ \t]*(?:[-+*]|\d{1,9}[.)])(?:[ \t]|$)")
 LINK_REFERENCE = re.compile(r"^ {0,3}\[[^\]]*\]:")
-NO_QUESTION = ("", "none", "nothing")
+NO_QUESTION = ("none", "nothing")
+QUESTIONS_WAY = "write each open question on its own `Questions:` line, or `Questions: none`"
+TAIL_RULE = "records section 11.7 accepts only lines that moved"
 OWN_EXACT = {"depends on": "Depends on:", "questions": "Questions:"}
 DATED = re.compile(r"^docs/plans/\d{4}-\d{2}-\d{2}-(.+)\.md$")
 FLAT = re.compile(r"^docs/([^/]+)-build-plan\.md$")
@@ -157,10 +160,15 @@ def _comment_open_at(lines, start, number):
 
 
 def _own_label_problem(lines, fenced, number, exact, value, first, last):
-    """C1B1-4 and C1B1-9 for one of this core's labels at line `number` of a slice section [first, last]. C1B1-9 is
+    """C1B1-9 and A24 (2) for one of this core's labels at line `number` of a slice section [first, last]. C1B1-9 is
     read as the check meant it, hiding: the label starts inside an inline HTML comment its paragraph opened earlier
     (a `<!--` not yet closed by `-->`), or its paragraph holds a link reference definition. A comment opened and
-    closed before the label hides nothing, and stops nothing (one of the 25 real plans holds one beside a label)."""
+    closed before the label hides nothing, and stops nothing (one of the 25 real plans holds one beside a label).
+
+    A24 (2), the slice 1b re-check's R1B1-2: a `Questions:` line whose value is empty is refused always (its question
+    may stand on the next line, which CommonMark renders as the label's own text, or anywhere after it); one whose
+    value is `none` or `nothing` is refused when any non-blank line follows it in its paragraph, which CommonMark
+    renders as part of the label's value. This widens C1B1-4's list rule to every line."""
     start, end = _paragraph(lines, fenced, number, first, last)
     opened = _comment_open_at(lines, start, number)
     linked = [other for other in range(start, end + 1) if LINK_REFERENCE.match(lines[other - 1])]
@@ -170,19 +178,15 @@ def _own_label_problem(lines, fenced, number, exact, value, first, last):
             return ("a `%s` line in a paragraph that also holds %s (line %d): CommonMark may hide the label inside "
                     "an inline HTML comment or a link reference definition's title, so handoff-v2 does not read it; "
                     "put the label in a paragraph of its own (the slice 1b check's C1B1-9)" % (exact, hiding, other))
-    if exact != OWN_EXACT["questions"] or value.casefold() not in NO_QUESTION:
+    if exact != OWN_EXACT["questions"]:
         return None
-    listed = [other for other in range(number + 1, end + 1) if LIST_ITEM.match(lines[other - 1])]
-    if not listed and not value:
-        after = number + 1
-        while after <= last and (after in fenced or _blank(lines[after - 1])):
-            after += 1
-        if after <= last and after > end and after not in fenced and LIST_ITEM.match(lines[after - 1]):
-            listed = [after]
-    if listed:
-        return ("a `Questions:` line with no question on it (%r) followed by a list (line %d): write each open "
-                "question on its own `Questions:` line, since handoff-v2 reads one question per line and would read "
-                "this one as none (the slice 1b check's C1B1-4)" % (lines[number - 1], listed[0]))
+    if not value:
+        return ("a `Questions:` line with no question on it (%r): %s, since handoff-v2 reads one question per line "
+                "and an empty label tells it nothing (the E15 lane contract A24 (2))" % (lines[number - 1], QUESTIONS_WAY))
+    if value.casefold() in NO_QUESTION and end > number:
+        return ("a `Questions: %s` line followed by line %d in its paragraph, which CommonMark reads as part of the "
+                "label's value: %s with nothing after it in its paragraph (the E15 lane contract A24 (2))"
+                % (value, number + 1, QUESTIONS_WAY))
     return None
 
 
@@ -431,6 +435,57 @@ def levelling_problem(text, inserted, imported):
                     "(records section 11.7)" % (line, raw))
         at += 1
     return None
+
+
+def _heading_shift(text, old, headings):
+    """How far the record block heading of imported line `old` has moved, or None: the record block headings the
+    imported lines were read under (`headings`, {imported line: its heading's line then}) are matched in order with
+    the doc's record block headings now (new record blocks only ever arrive at the tail, section 11.7)."""
+    then = sorted(set(h for h in (headings or {}).values() if isinstance(h, int)))
+    mine = (headings or {}).get(old)
+    if not isinstance(mine, int) or mine not in then:
+        return None
+    try:
+        now = [r["line"] for r in read(text).records]
+    except DocUnreadable:
+        return None
+    if len(now) < len(then):
+        return None
+    return now[then.index(mine)] - mine
+
+
+def tail_rule_way_out(text, imported, body, headings=None):
+    """How the owner settles a doc the records component's widened section 11.7 refuses (the slice 1b re-check's
+    R1B1-5): `imported` is [(line, raw)] of every record line the log imported from the doc, `headings` {line: the
+    line of the record block heading it was read under then}, `body` the refusal's fields. An imported line that
+    changed, was dropped or was reordered is named at the line where it stands NOW (the component names the number
+    it had when imported): its number then, shifted by as far as its record block heading has moved, or, without one,
+    by as far as its nearest imported neighbour that still reads its imported text has moved. A new record above the
+    imported tail is named where it stands. The words end with the rule."""
+    lines = [fences.bare(raw, number) for number, raw in enumerate(fences.split_lines(text), 1)]
+    raw_of = body.get("imported_raw") if isinstance(body, dict) else None
+    old = body.get("line") if isinstance(body, dict) else None
+    if isinstance(raw_of, str) and isinstance(old, int):
+        shift = _heading_shift(text, old, headings)
+        if shift is not None:
+            return "put line %d back to its imported text %r; %s" % (old + shift, raw_of, TAIL_RULE)
+        where, at = {}, 0
+        for line, raw in sorted(imported):
+            k = at
+            while k < len(lines) and lines[k] != raw:
+                k += 1
+            if k < len(lines):
+                where[line] = k + 1
+                at = k + 1
+        before = [line for line in sorted(where) if line < old]
+        after = [line for line in sorted(where) if line > old]
+        neighbour = before[-1] if before else (after[0] if after else None)
+        now = old + (where[neighbour] - neighbour if neighbour is not None else 0)
+        return "put line %d back to its imported text %r; %s" % (now, raw_of, TAIL_RULE)
+    if isinstance(old, int) and isinstance(body.get("last_imported_line"), int):
+        return ("move the record on line %d below the last imported record line (line %d now), or take it out; %s"
+                % (old, body["last_imported_line"], TAIL_RULE))
+    return "settle the doc against the records log; %s" % TAIL_RULE
 
 
 def additive(old, new, inserted):

@@ -229,26 +229,48 @@ class TheNextLevellingPass(unittest.TestCase):
         body = hlib.records_cli(ws, ["import-legacy", "--workspace", ws, "--doc", hlib.DOC, "--dry-run"])
         self.assertEqual(body["would_import"], 0, body)
 
-    def test_a_write_that_would_leave_a_doc_the_rule_refuses_stops_write_refused(self):
-        doc = dict(slices=[("A", "the counter", "signed off", "nothing"), ("B", "the spinner", "not started", "Slice A")],
-                   punch=hlib.review_block(findings=[("MINOR", "src/turnstile.py:2", "the counter name is vague",
-                                                      "a reader guesses")]))
-        ws, info = hlib.make_repo(self.tmp, hlib.build_doc(**doc), records=True)
-        path = os.path.join(ws, hlib.DOC)
-        testlib.write_text(path, hlib.read_doc(ws).replace("the counter name is vague", "the counter name is fine"))
-        drive, run_dir = hlib.start(self.tmp, ws)
-        hlib.through_gate(self, drive, self.tmp, run_dir)
-        code, out, err = drive(["record-answer", "--run-dir", run_dir, "--answer",
-                                hlib.answers_file(self.tmp, run_dir)])
+    MINOR_DOC = dict(slices=[("A", "the counter", "signed off", "nothing"),
+                             ("B", "the spinner", "not started", "Slice A")],
+                     punch=hlib.review_block(findings=[("MINOR", "src/turnstile.py:2", "the counter name is vague",
+                                                        "a reader guesses")]))
+
+    def refused_at_photograph(self, ws):
+        """R1B1-5, handoff's half: the guard's dry run runs at `photograph` too, so a doc the records component already
+        refuses stops before the gate (no answer is lost), with the way out; nothing written."""
+        before = hlib.snapshot(ws)
+        drive, run_dir = hlib.start(self.tmp, ws, run="refused")
+        code, out, err = drive(["select", "--run-dir", run_dir, "--name", hlib.FEATURE])
         self.assertEqual(code, 0, (out, err))
-        before = hlib.snapshot(ws, run_dir)
-        code, out, err = drive(["write", "--run-dir", run_dir])
+        code, out, err = drive(["photograph", "--run-dir", run_dir])
         self.assertEqual(code, 10, (out, err))
         self.assertEqual(out["stop_tag"], "write-refused", out["reason"])
-        self.assertIn("11.7", out["reason"])
         self.assertTrue(out["wrote_nothing"])
-        now = hlib.snapshot(ws, run_dir)
-        self.assertEqual((now["doc"], now["log"]), (before["doc"], before["log"]))
+        self.assertFalse(os.path.exists(os.path.join(run_dir, "gate.json")), "the stop comes before the gate")
+        self.assertEqual(hlib.snapshot(ws), before)
+        self.assertTrue(out["reason"].endswith("records section 11.7 accepts only lines that moved"), out["reason"])
+        return out["reason"]
+
+    def test_a_doc_the_rule_already_refuses_stops_at_photograph_with_the_way_out(self):
+        ws, info = hlib.make_repo(self.tmp, hlib.build_doc(**self.MINOR_DOC), records=True)
+        path = os.path.join(ws, hlib.DOC)
+        testlib.write_text(path, hlib.read_doc(ws).replace("the counter name is vague", "the counter name is fine"))
+        number = next(i for i, l in enumerate(hlib.read_doc(ws).splitlines(), 1) if "the counter name is fine" in l)
+        reason = self.refused_at_photograph(ws)
+        self.assertIn("put line %d back to its imported text" % number, reason)
+        self.assertIn("the counter name is vague", reason, "the imported text is named")
+
+    def test_on_a_doc_whose_lines_moved_the_way_out_names_where_the_edited_line_stands_now(self):
+        ws, info = hlib.make_repo(self.tmp, hlib.build_doc(**self.MINOR_DOC), records=True)
+        drive, run_dir = hlib.start(self.tmp, ws)
+        hlib.through_write(self, drive, self.tmp, run_dir)
+        path = os.path.join(ws, hlib.DOC)
+        text = hlib.read_doc(ws)
+        at = text.rindex("the counter name is vague")   # the punch-list line, not the block's `- Open:` line
+        testlib.write_text(path, text[:at] + "the counter name is fine" + text[at + len("the counter name is vague"):])
+        number = next(i for i, l in enumerate(hlib.read_doc(ws).splitlines(), 1) if "the counter name is fine" in l)
+        self.assertGreater(number, 40, "the line moved down under the handoff block")
+        reason = self.refused_at_photograph(ws)
+        self.assertIn("put line %d back to its imported text" % number, reason)
 
 
 class TheGuard(unittest.TestCase):
@@ -270,6 +292,31 @@ class TheGuard(unittest.TestCase):
     def test_an_imported_line_the_plan_lost_is_a_problem(self):
         text = "a\n## Punch list\n- something else\n"
         self.assertIsNotNone(docmod.levelling_problem(text, [], [(3, self.LINE)]))
+
+    def test_r1b1_5_the_way_out_names_where_the_changed_line_stands_now(self):
+        """Imported at lines 3 and 4; two lines were inserted above them since, and the second was edited: its
+        neighbour stands two lines lower now, so the way out names line 6, never the old number 4."""
+        other = self.LINE.replace("a vague name", "a short name")
+        text = "a\nb\nc\n## Punch list\n%s\n%s\n" % (other, self.LINE.replace("vague", "fine"))
+        found = docmod.tail_rule_way_out(text, [(3, other), (4, self.LINE)],
+                                         {"line": 4, "imported_raw": self.LINE})
+        self.assertTrue(found.startswith("put line 6 back to its imported text"), found)
+        self.assertIn(repr(self.LINE), found)
+        self.assertTrue(found.endswith("records section 11.7 accepts only lines that moved"), found)
+
+    def test_r1b1_5_one_imported_line_is_named_by_how_far_its_record_heading_moved(self):
+        """One imported line, no neighbour to measure by: its record block heading, read then at line 3, stands at
+        line 6 now, so the changed line imported at line 4 is named at line 7."""
+        heading = "### 2026-09-24 %s review: Slice A" % hlib.D
+        text = "# T\n\na\nb\nc\n%s\n%s\n" % (heading, self.LINE.replace("vague", "fine"))
+        found = docmod.tail_rule_way_out(text, [(4, self.LINE)], {"line": 4, "imported_raw": self.LINE}, {4: 3})
+        self.assertTrue(found.startswith("put line 7 back to its imported text"), found)
+
+    def test_r1b1_5_a_new_record_above_the_tail_names_its_own_way_out(self):
+        found = docmod.tail_rule_way_out("a\n", [(3, self.LINE)], {"line": 2, "current_raw": "x",
+                                                                    "last_imported_line": 3})
+        self.assertIn("line 2", found)
+        self.assertTrue(found.endswith("records section 11.7 accepts only lines that moved"), found)
 
 
 if __name__ == "__main__":

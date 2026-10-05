@@ -227,6 +227,15 @@ class TheRefusals(unittest.TestCase):
         testlib.git(ws, ["commit", "-q", "--allow-empty", "-m", "handoff checkpoint (local): nothing"])
         self.stops(ws, drive, run_dir, "photograph-moved")
 
+    def test_r1b1_6_an_empty_checkpoint_on_a_dirty_tree_is_refused(self):
+        """The slice 1b re-check's R1B1-6: an empty `handoff checkpoint` commit holds none of the photographed dirt,
+        so the block would say `checkpointed` for a commit that checkpointed nothing; `changed_between` must be
+        non-empty."""
+        ws, drive, run_dir = self.answered(hlib.build_doc(), dirt={"notes.txt": "loose work\n"})
+        testlib.git(ws, ["commit", "-q", "--allow-empty", "-m", "handoff checkpoint (local): nothing"])
+        out = self.stops(ws, drive, run_dir, "photograph-moved")
+        self.assertIn("changes no path", out["reason"])
+
     def test_c1b1_8_a_checkpoint_of_exactly_the_photographed_dirt_is_taken(self):
         ws, drive, run_dir = self.answered(hlib.build_doc(), dirt={"notes.txt": "loose work\n"})
         testlib.git(ws, ["add", "-A"])

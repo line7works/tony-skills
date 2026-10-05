@@ -64,9 +64,11 @@
         "gate-open",
         "photograph-moved",
         "write-refused",
+        "card-drift",
+        "outside-edit",
         null
       ],
-      "description": "the stop's one tag; null on a completion. The shared tags: `selection-none`, `selection-several`, `records-refused`. This core's own: `selection-unnamed`, `doc-unreadable`, `block-misplaced`, `identity-unnamed`, `identity-conflict`, `not-git`, `block-edited`, `slice-unknown`, `gate-open`, `photograph-moved`, `write-refused`."
+      "description": "the stop's one tag; null on a completion. The shared tags: `selection-none`, `selection-several`, `records-refused`. This core's own: `selection-unnamed`, `doc-unreadable`, `block-misplaced`, `identity-unnamed`, `identity-conflict`, `not-git`, `block-edited`, `slice-unknown`, `gate-open`, `photograph-moved`, `write-refused`, `card-drift`, `outside-edit` (the E15 lane contract A24 (1))."
     },
     "reason": {
       "type": "string",
@@ -700,7 +702,37 @@
           "items": {
             "type": "object",
             "description": "an event as this run handed it to `records.py append` (references/handoff-contract.md section 6; the component's event schema is its own)"
-          }
+          },
+          "if": {
+            "contains": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "card_set"
+                }
+              }
+            }
+          },
+          "then": {
+            "contains": {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "waived",
+                    "reopened"
+                  ]
+                }
+              }
+            }
+          },
+          "description": "a card_set is written only with the grant that moves the card (the E15 lane contract A23 (2)): events holding a card_set hold a waived or a reopened event too"
         },
         "cards_after": {
           "oneOf": [

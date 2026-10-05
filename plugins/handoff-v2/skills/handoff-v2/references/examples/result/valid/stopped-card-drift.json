@@ -1,0 +1,70 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-test-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "slice A's Status: line reads 'signed off with conditions', the card the records' last card move for it started from, and that move (a card_set at seq 7 by handoff-v2 run first, 'signed off with conditions' to 'signed off') is in the log: its event landed and its Status: line did not, so the doc contradicts the record and this run writes nothing over it; nothing was written. Two ways out: resume the interrupted run's write with its run directory (for a handoff-v2 run, `handoff.py write --run-dir <the run directory of run first>`), which settles the doc half; or set the line to the card the records hold, `Status: signed off`, by hand. Then run handoff again",
+  "report_only": false,
+  "run_dir": "/work/example/run",
+  "run_id": "run",
+  "selection": {
+    "candidates": [
+      "docs/plans/2026-09-20-turnstile.md"
+    ],
+    "doc": "docs/plans/2026-09-20-turnstile.md",
+    "how": "file-name",
+    "name": "turnstile",
+    "outcome": "one",
+    "searched": [
+      {
+        "found": [
+          "/work/example/workspace/docs/plans/2026-09-20-turnstile.md"
+        ],
+        "given": true,
+        "globs": [
+          "docs/plans/*-{name}.md",
+          "docs/plans/{name}.md"
+        ],
+        "home": "repo-plans",
+        "root": "workspace",
+        "tier": 1
+      },
+      {
+        "found": [],
+        "given": true,
+        "globs": [
+          "docs/{name}-build-plan.md"
+        ],
+        "home": "repo-flat",
+        "root": "workspace",
+        "tier": 2
+      }
+    ]
+  },
+  "station": "handoff-v2",
+  "station_result": {
+    "after": null,
+    "answers": null,
+    "block": null,
+    "cards_after": null,
+    "chat": null,
+    "checkpoint": null,
+    "doc": "docs/plans/2026-09-20-turnstile.md",
+    "events": [],
+    "feature": "turnstile",
+    "identity_how": "dated-plan",
+    "next_move": null,
+    "photograph": null,
+    "pointer": null,
+    "questions": null
+  },
+  "status": "stopped",
+  "stop_tag": "card-drift",
+  "trace": null,
+  "writes": [],
+  "wrote_nothing": true
+}

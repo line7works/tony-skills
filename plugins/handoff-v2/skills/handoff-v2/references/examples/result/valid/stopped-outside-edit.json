@@ -1,0 +1,136 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-test-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the build doc /work/example/workspace/docs/plans/2026-09-20-turnstile.md is at neither the bytes this run read (89acac9bb50d) nor the bytes its write produces (not planned yet); it hashes to 2200e4bc70a8: the doc was edited after this run planned its write. On disk, slice A reads `Status: signed off with conditions` (this run's card_set moved the card from 'signed off with conditions' to 'signed off'). This run's events landed in the records log (seq 6 waived, seq 7 card_set) and are reported as landed; the doc is left as it is, neither written by this run nor reverted. Read the doc and the log: set each moved slice's Status: line to the card the records hold and add the grant lines `records.py render --run-id run` gives, then run handoff again",
+  "report_only": false,
+  "run_dir": "/work/example/run",
+  "run_id": "run",
+  "selection": {
+    "candidates": [
+      "docs/plans/2026-09-20-turnstile.md"
+    ],
+    "doc": "docs/plans/2026-09-20-turnstile.md",
+    "how": "file-name",
+    "name": "turnstile",
+    "outcome": "one",
+    "searched": [
+      {
+        "found": [
+          "/work/example/workspace/docs/plans/2026-09-20-turnstile.md"
+        ],
+        "given": true,
+        "globs": [
+          "docs/plans/*-{name}.md",
+          "docs/plans/{name}.md"
+        ],
+        "home": "repo-plans",
+        "root": "workspace",
+        "tier": 1
+      },
+      {
+        "found": [],
+        "given": true,
+        "globs": [
+          "docs/{name}-build-plan.md"
+        ],
+        "home": "repo-flat",
+        "root": "workspace",
+        "tier": 2
+      }
+    ]
+  },
+  "station": "handoff-v2",
+  "station_result": {
+    "after": "B",
+    "answers": {
+      "answered": 1,
+      "as_ledger_lines": 1,
+      "asked": 1,
+      "in_block": 0
+    },
+    "block": null,
+    "cards_after": null,
+    "chat": null,
+    "checkpoint": null,
+    "doc": "docs/plans/2026-09-20-turnstile.md",
+    "events": [],
+    "feature": "turnstile",
+    "identity_how": "dated-plan",
+    "next_move": null,
+    "photograph": {
+      "cards": [
+        {
+          "card": "signed off with conditions",
+          "card_derived": "signed off with conditions",
+          "name": "A",
+          "source": "records",
+          "status_line": "signed off with conditions"
+        },
+        {
+          "card": "signed off",
+          "card_derived": "signed off",
+          "name": "B",
+          "source": "records",
+          "status_line": "signed off"
+        }
+      ],
+      "open": [
+        {
+          "claim": "the counter skips a turn",
+          "id": "f1:639752f141f2c0ee94fa",
+          "location": "src/turnstile.py:2",
+          "severity": "MAJOR",
+          "slice": "A",
+          "status": "open"
+        }
+      ],
+      "records": {
+        "events": 6,
+        "exists": true,
+        "head": "0e29c6b46f60bf53ea1352f0a5a9aab63be9b07504dc3935721e4a842f760133",
+        "log": "docs/records/docs__plans__2026-09-20-turnstile.events.jsonl"
+      },
+      "repo": {
+        "ahead": 2,
+        "base": "main",
+        "branch": "feat",
+        "checkpoint": null,
+        "dirt": [],
+        "head": "46f1f56685894e8c714023d6cad3a49adfe7b0fd",
+        "tree": "clean"
+      },
+      "suite": {
+        "path": null,
+        "provenance": null,
+        "sha256": null,
+        "state": "none recorded"
+      }
+    },
+    "pointer": null,
+    "questions": [
+      {
+        "id": "q1",
+        "source": "chat-ruling",
+        "text": "the grant"
+      }
+    ]
+  },
+  "status": "stopped",
+  "stop_tag": "outside-edit",
+  "trace": null,
+  "writes": [
+    {
+      "kind": "records_log",
+      "path": "/work/example/workspace/docs/records/docs__plans__2026-09-20-turnstile.events.jsonl",
+      "sha256_after": "4d16e97df13b7a8b20e270da1e0ae94fb2871da76b9e7441ccbb181e204bcffa",
+      "sha256_before": "85f1b18435df8c2ff7560c77939572a89803fc03b9bf5bb8b75c69044cc393c6"
+    }
+  ],
+  "wrote_nothing": false
+}

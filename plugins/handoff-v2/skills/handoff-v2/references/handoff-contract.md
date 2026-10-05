@@ -2,8 +2,9 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a state. Written
 for E15 slice 1, hand-back 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 9 and 12,
-amendments A1, A2, A22 and A23) and the control room's readings CR-11 to CR-17 in the slice 1b brief, as slice 1b's
-fix round 1 amended them (A23, and the check's C1B1-3 to C1B1-9). Where this document
+amendments A1, A2, A22, A23 and A24) and the control room's readings CR-11 to CR-17 in the slice 1b brief, as slice
+1b's fix round 1 amended them (A23, and the check's C1B1-3 to C1B1-9) and fix round 2 (A24, and the re-check's
+R1B1-5 to R1B1-7). Where this document
 and that contract differ, the contract is the authority and this document is the defect. `references/back-loop.md`
 is the discipline the three back cores share; this document is this core's own.
 
@@ -80,6 +81,18 @@ working copy byte for byte, in order (`block-edited`). The cards and the open se
 for the doc (the latest-record rule the component implements, never recomputed here). A slice's card is its
 `card_observed` (its text when the value is not one of the component's six) when the log observed or set one, else
 its `Status:` line as the line rules read it; `source` says which. The open set is every finding `state` holds `open`.
+Then two stops, each with nothing written, before the gate so no answer is ever given to a run that cannot write:
+**`card-drift`** (A24 (1), build-v2's drift rule, its contract section 10): a slice whose last `card_set` in the log
+(`events --kind card_set`) has an `after` that differs from its `Status:` line while that line equals the event's
+`before` is the state a run leaves when its card event landed and its `Status:` line did not; the stop names the
+slice, both values, the event (its seq, station and run id) and both ways out (resume the interrupted run's `write`
+with its run directory, which settles it, section 6; or set the line to the card the records hold); a line holding
+any other value is a hand edit and no drift; and **the records' tail rule** (A23 (1), the re-check's R1B1-5): when
+the log holds record lines it imported from the doc, the component's `import-legacy --dry-run` must not refuse the doc
+as it stands with a conflict (exit 7), else `write-refused`, the stop ending with the way out: "put line N back to its
+imported text; records section 11.7 accepts only lines that moved", N being where the refused imported line stands
+NOW (its number when imported, shifted by as far as its record block heading has moved, or, without one, its nearest
+imported neighbour; the component's own sentence names the old number). `write` checks the same again.
 The repo: the branch (`git symbolic-ref`), HEAD, the default branch (the remote's HEAD, else `main`, else `master`)
 and the commits ahead of it (`git rev-list --count`), the tree (`git status --porcelain`: `clean` or `dirty` with the
 paths). The suite: `--suite-record` names the last-recorded suite state, read with its provenance (a build-v2
@@ -128,7 +141,8 @@ optionally, `asserts` (what the executor believes of the photograph). In order:
 ### 3.5 `write --run-dir D [--records-root DIR]`
 
 CR-13 and CR-14, in the order of section 6. Prints the next move, the block, the writes with their hashes, the events
-and the pointer.
+and the pointer. A `write` that finds this run's own receipt settles it first (section 6, "The crash window"), and
+says so (`settled`).
 
 ### 3.6 `report --run-dir D --bottom-line TEXT [--skill-note TEXT]`
 
@@ -170,10 +184,11 @@ C1B1-3), `## Handoffs` and `## Punch list` by their exact names (a second of eit
 read the plain way A12 reads a label (a line that, after any prefix and any leading listed mark, folds to `depends
 on` or `questions`, spaces or tabs, then a colon, is read only when it starts at column 0 with exactly `Depends on:`
 or `Questions:`; any other such line stops, named; a second `Depends on:` in one slice stops, named; a `Questions:`
-line whose value is empty, `none` or `nothing` followed by a list item in its paragraph, or an empty one whose next
-non-blank line in the slice is a list item, stops, named, since each open question goes on its own `Questions:`
-line, C1B1-4; either label in a paragraph that also holds `<!--` or a link reference definition stops, named, since
-CommonMark may hide the label there, C1B1-9);
+line whose value is empty stops, named, always, and one whose value is `none` or `nothing` followed by any non-blank
+line in its paragraph stops, named ("write each open question on its own `Questions:` line, or `Questions: none`"):
+A24 (2), the re-check's R1B1-2, widening C1B1-4's list rule, since CommonMark renders a following line as part of the
+label's value; so a `Questions: none` stands in a paragraph of its own; either label in a paragraph that also holds
+`<!--` or a link reference definition stops, named, since CommonMark may hide the label there, C1B1-9);
 the handoff blocks (a line reading exactly `### <YYYY-MM-DD> <dash> handoff`, running to the next level 1 to 3
 heading or the doc's end); the record blocks (`### <YYYY-MM-DD> <dash> review: ` or `recheck: `). `<dash>` is U+2014,
 the constant `forms.D` (section 8).
@@ -192,8 +207,9 @@ none).
 **Before any write**, each a stop with nothing written: every handoff block `select` read is still there byte for byte
 (`block-edited`); the doc still holds the bytes `select` read (`photograph-moved`); the branch is the photographed one
 and HEAD is the photographed commit or exactly one commit on it whose subject starts `handoff checkpoint`, taken on
-a tree the photograph saw dirty and changing only paths it saw dirty (`git diff --name-only`, read-only; the slice 1b
-check's C1B1-8) (else `photograph-moved`, naming the extra paths); the records log's head is the photographed one
+a tree the photograph saw dirty, changing at least one path (an empty commit checkpoints nothing: the re-check's
+R1B1-6) and only paths it saw dirty (`git diff --name-only`, read-only; the slice 1b check's C1B1-8) (else
+`photograph-moved`, naming the extra paths); the records log's head is the photographed one
 (`photograph-moved`); every card move (section 7) starts from the card the records and its `Status:` line agree on,
 on a slice that has one (`write-refused`); the block renders, and the doc planned with the card moves and the block
 reads cleanly by the line rules, holds every earlier block unchanged and exactly one more, under `## Handoffs` and
@@ -218,20 +234,43 @@ form's separator ` · `, every character on vertical-v2's character list, so the
    event shape), ALL in one `records.py append` against the photographed head, all or none (a refusal stops,
    `records-refused`: the component writes nothing and the doc is not written, so both stay byte-equal); the
    outcome in the receipt. The grant lines are the ones `records.py render --run-id <run id>` returns for this run
-   (a `card_set` renders no line).
+   (a `card_set` renders no line). The receipt's plan also holds the seq and head the append expects, and the block
+   and record it renders, so a later pass can finish the doc half without reading anything afresh.
 2. **The doc, once** (CR-13 (1) and (2)): each moved card's `Status:` line set to the new card (its prefix, trailing
    spaces and ending kept), the rendered grant lines directly after the last non-blank line of the
    ledger home (the section holding the latest-dated record block, a date tie going to the later in the file; else
    `## Punch list`; else a `## Punch list` created at the doc's end), and the block at the tail of `## Handoffs` (after
    its last non-blank line, a blank line before it and, when a non-blank line follows, one after it), created right
    before `## Punch list` when missing, or at the doc's end when the doc has neither. The plan is checked again as
-   above, and the doc's bytes again; then the doc is replaced whole (a temporary file and a rename). A check that
-   fails after the events landed stops `write-refused` with the receipt saying so.
+   above, and the doc's bytes again; the final doc's hash goes in the receipt; then the doc is replaced whole (a
+   temporary file and a rename). A check that fails after the events landed stops `write-refused` with the receipt
+   saying so; a doc that moved after the events landed stops `outside-edit` (below).
 3. **The checkpoint commit** (CR-13 (3)): never made by the script (A2, Q2). The executor's named step, between
    `record-answer` and `write`, when the photograph showed a dirty tree; `write` records the commit it finds (`commit`,
    `parent`, `subject`) and the block's `Repo:` line reads `checkpointed <commit>`.
 4. **The pointer** (CR-13 (4)): `write` leaves its text in `pointer.json`; the Claude Code adapter's `pointer.py`
    writes it (section 11).
+
+**The crash window** (A24 (1): build-v2's two rules for its own card write, its contract sections 9 and 10, applied
+to this transaction). A `write` that finds a receipt of its own run settles it before any other check:
+
+- a refusal the component returned, or a stop after the append, is definitive and is given again, never retried;
+- **an intent with no outcome is the crash window**, settled against the head the receipt names, never against a
+  head read afresh: this run's events found there (each at the seq the plan named, the first carrying the receipt's
+  head as its `prev`, every one this station's under this run's id and of its planned kind, finding, slice and
+  cards) are recorded in the receipt as landed; not found there, the log either still stands at the receipt's head
+  (the append never landed: the run plans again from the top, every check above included) or moved for another
+  reason (`photograph-moved`, nothing of this run's written);
+- **the doc half is finished against the receipt's doc hash**: at the bytes the run read, the doc takes the moved
+  `Status:` lines, the grant lines the component renders for this run and the block from the receipt, checked as
+  above; at the bytes the final plan produced (or with the write in the receipt), the doc already holds this run's
+  write, which is not made again; at any other bytes the run stops **`outside-edit`**, naming what each moved slice's
+  `Status:` line holds on disk, the events reported as landed (`records_log` in `writes`), and the doc left as it is,
+  neither written nor reverted.
+
+Once the log holds this run's events no stop says that nothing was written. A run another station levels before
+handoff runs again (build-v2's own levelling pass reads the stale line as a hand edit) is not caught here: records and
+build-v2 are frozen, and that case is on the E15 punch list (A24).
 
 A report-only run plans and checks everything, leaves `planned-doc.md` (the block alone; the grant lines are the
 component's and only a real append renders them), `events.json` and `pointer.json` (`for_adapter` false) in the run
@@ -304,7 +343,8 @@ grants (with the component's `card_derived` beside each, read after the append),
 Reached through the resolver snippet and the CLI only (`station_core/records_client.py`, `records_link.py`), confirmed
 at `interface_version` 2; exit 3 when missing or at another version. Read: `state` and `verify` (the photograph),
 `identity` (the source of a waiver and a card move), `render` (the grant lines), `events` and `import-legacy
---dry-run` (the A23 (1) guard, section 6; a dry run writes nothing and takes no lock). Written: one `append` of the
+--dry-run` (the A23 (1) guard, at `photograph` and at `write`, section 6; a dry run writes nothing and takes no
+lock), `events --kind card_set` (the drift check, section 3.2) and `events --from <seq>` (a settle, section 6). Written: one `append` of the
 `waived` and `reopened` events and the `card_set` events they carry (ruling E15-9 as A23 (2) amends it). Never a
 levelling pass: a doc whose hand-written records the log does not hold is photographed as the log holds it. Never a
 log file opened.
@@ -337,9 +377,11 @@ The exits are the back loop's: 0, 1, 2, 3, 4, 5, 10 (back-loop section 2). A sto
 | `block-edited` | photograph, write | an earlier handoff block changed |
 | `slice-unknown` | photograph | the input names a finished slice the doc does not hold |
 | `records-refused` | photograph, write | the records component refused a call, its sentence carried (shared tag) |
+| `card-drift` | photograph | a slice's last `card_set` landed and its `Status:` line still reads the card it moved from (A24 (1)): both values and both ways out |
 | `gate-open` | record-answer | a question unanswered: nothing written, the gate-open form |
-| `photograph-moved` | photograph, write | the doc, git or the log moved since it was read, or the checkpoint commit is not the photographed dirt |
-| `write-refused` | write | the plan does not hold, a card cannot move from the card the records and the line agree on, or the write would leave a doc the records' tail rule refuses (section 6) |
+| `photograph-moved` | photograph, write | the doc, git or the log moved since it was read, or the checkpoint commit is not the photographed dirt (or is empty) |
+| `write-refused` | photograph, write | the plan does not hold, a card cannot move from the card the records and the line agree on, or the doc is one the records' tail rule refuses (at `photograph` already, with the way out) or a write would leave so (section 6) |
+| `outside-edit` | write | this run's events landed and the doc is at neither the bytes the run read nor the bytes its write produces (A24 (1)): the events reported as landed, the `Status:` lines named, nothing reverted |
 
 `phase-not-built` and `station-refused` are the frame's shared tags; this core uses neither.
 
@@ -363,6 +405,7 @@ Commands: `check-input <input.json>`, `select`, `photograph`, `gate`, `record-an
 `--run-dir D`), `identity <workspace>`, `skill-identity`; `--help` on each, without `jsonschema`. Runtime:
 `/usr/bin/python3` 3.9 syntax, standard library plus `jsonschema==4.25.1` through `uv run` (PEP 723); git 2.50.1.
 Run-directory artifacts: `input.json`, `checkpoint.json`, `selection.json`, `doc.json`, `photograph.json`,
-`gate.json`, `answers.json`, `receipt.json`, `write.json`, `pointer.json`, `pointer-receipt.json` (the adapter's),
+`gate.json`, `answers.json`, `receipt.json` (the write's plan and outcome, read again by a settle), `write.json`,
+`pointer.json`, `pointer-receipt.json` (the adapter's),
 `records-events.json` (the append's input), `planned-doc.md` and `events.json` (report-only), `chat.md`,
 `result.json`.

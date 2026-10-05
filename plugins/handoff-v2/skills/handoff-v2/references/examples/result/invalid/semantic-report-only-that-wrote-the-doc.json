@@ -63,11 +63,13 @@
       {
         "after": null,
         "card": "signed off",
+        "moved": false,
         "name": "A"
       },
       {
         "after": null,
         "card": "not started",
+        "moved": false,
         "name": "B"
       }
     ],

@@ -49,38 +49,65 @@
   "station_result": {
     "after": "A",
     "answers": {
-      "answered": 0,
-      "as_ledger_lines": 0,
-      "asked": 0,
+      "answered": 1,
+      "as_ledger_lines": 1,
+      "asked": 1,
       "in_block": 0
     },
     "block": {
       "heading": "### 2026-10-04 \u2014 handoff",
       "line": 35,
-      "text": "### 2026-10-04 \u2014 handoff\n- Next: /ship-v2 B docs/plans/2026-09-20-turnstile.md \u00b7 by hand: /build-v2 B docs/plans/2026-09-20-turnstile.md\n- Cards: A signed off \u00b7 B not started\n- Open: none\n- Repo: feat \u00b7 2 ahead of main \u00b7 checkpointed f01378d214ee\n- Suite: none recorded\n- Perishable: the bench clock drifts\n"
+      "text": "### 2026-10-04 \u2014 handoff\n- Next: /ship-v2 B docs/plans/2026-09-20-turnstile.md \u00b7 by hand: /build-v2 B docs/plans/2026-09-20-turnstile.md\n- Cards: A signed off (set by this run's grants; was signed off with conditions) \u00b7 B not started\n- Open: none\n- Repo: feat \u00b7 2 ahead of main \u00b7 clean\n- Suite: none recorded\n- Perishable: the bench clock drifts\n"
     },
     "cards_after": [
       {
-        "after": null,
-        "card": "signed off",
-        "moved": false,
+        "after": "signed off",
+        "card": "signed off with conditions",
+        "component": "signed off",
+        "moved": true,
         "name": "A"
       },
       {
         "after": null,
         "card": "not started",
+        "component": "signed off",
         "moved": false,
         "name": "B"
       }
     ],
-    "chat": "HANDOFF: turnstile \u2014 after A\nDoc: docs/plans/2026-09-20-turnstile.md  \u00b7  Next: /ship-v2 B docs/plans/2026-09-20-turnstile.md\nRepo: feat \u00b7 2 ahead of main \u00b7 checkpointed f01378d214ee  \u00b7  Suite: none recorded\nQuestions: 0 asked \u00b7 0 answered \u00b7 none  \u00b7  Perishables: 1 carried\n\nBottom line: Slice A is signed off and slice B is next. Clear the thread and type the kickoff line.\n\nThread is safe to clear.\n",
-    "checkpoint": {
-      "commit": "f01378d214eeedd6f6ead4d014d106affe8f5c95",
-      "parent": "de0971697b212a2680b482ecf07db54ef1432a57",
-      "subject": "handoff checkpoint (local): turnstile after A"
-    },
+    "chat": "HANDOFF: turnstile \u2014 after A\nDoc: docs/plans/2026-09-20-turnstile.md  \u00b7  Next: /ship-v2 B docs/plans/2026-09-20-turnstile.md\nRepo: feat \u00b7 2 ahead of main \u00b7 clean  \u00b7  Suite: none recorded\nQuestions: 1 asked \u00b7 1 answered \u00b7 1 as ledger lines  \u00b7  Perishables: 1 carried\n\nBottom line: Slice A is signed off and slice B is next. Clear the thread and type the kickoff line.\n\nThread is safe to clear.\n",
+    "checkpoint": null,
     "doc": "docs/plans/2026-09-20-turnstile.md",
-    "events": [],
+    "events": [
+      {
+        "actor": {
+          "harness": "claude-code",
+          "run_id": "run",
+          "station": "handoff-v2"
+        },
+        "after": "signed off",
+        "at": "2026-10-04T12:00:00Z",
+        "before": "signed off with conditions",
+        "kind": "card_set",
+        "ledger_doc": "docs/plans/2026-09-20-turnstile.md",
+        "origin": {
+          "kind": "native"
+        },
+        "slice": "A",
+        "source": {
+          "identity": {
+            "commit": "d49a879f3854cda9a6e2a7a64347fefd8f419dd0",
+            "dirty": false,
+            "submodules": [],
+            "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "untracked": [],
+            "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "known": true
+        },
+        "v": 1
+      }
+    ],
     "feature": "turnstile",
     "identity_how": "dated-plan",
     "next_move": {
@@ -95,37 +122,44 @@
     "photograph": {
       "cards": [
         {
-          "card": "signed off",
-          "card_derived": null,
+          "card": "signed off with conditions",
+          "card_derived": "signed off with conditions",
           "name": "A",
-          "source": "status-line",
-          "status_line": "signed off"
+          "source": "records",
+          "status_line": "signed off with conditions"
         },
         {
           "card": "not started",
-          "card_derived": null,
+          "card_derived": "signed off",
           "name": "B",
-          "source": "status-line",
+          "source": "records",
           "status_line": "not started"
         }
       ],
-      "open": [],
+      "open": [
+        {
+          "claim": "the counter skips a turn",
+          "id": "f1:639752f141f2c0ee94fa",
+          "location": "src/turnstile.py:2",
+          "severity": "MAJOR",
+          "slice": "A",
+          "status": "open"
+        }
+      ],
       "records": {
-        "events": 0,
-        "exists": false,
-        "head": "0000000000000000000000000000000000000000000000000000000000000000",
+        "events": 6,
+        "exists": true,
+        "head": "ac5ba7d943def90ecd8754ee55679a4ad50d7fd2beec796e73ebdc1505bd4f48",
         "log": "docs/records/docs__plans__2026-09-20-turnstile.events.jsonl"
       },
       "repo": {
-        "ahead": 1,
+        "ahead": 2,
         "base": "main",
         "branch": "feat",
         "checkpoint": null,
-        "dirt": [
-          "notes.txt"
-        ],
-        "head": "de0971697b212a2680b482ecf07db54ef1432a57",
-        "tree": "dirty"
+        "dirt": [],
+        "head": "d49a879f3854cda9a6e2a7a64347fefd8f419dd0",
+        "tree": "clean"
       },
       "suite": {
         "path": null,
@@ -149,17 +183,29 @@
       "text": "---\nname: handoff-turnstile\ndescription: the build loop's kickoff pointer for docs/plans/2026-09-20-turnstile.md\ntype: project\n---\n\nBuild doc: docs/plans/2026-09-20-turnstile.md\nHandoff block: 2026-10-04\nKickoff: /ship-v2 B docs/plans/2026-09-20-turnstile.md\n",
       "written": false
     },
-    "questions": []
+    "questions": [
+      {
+        "id": "q1",
+        "source": "chat-ruling",
+        "text": "the owner said waive the double tap MAJOR"
+      }
+    ]
   },
   "status": "completed",
-  "stop_tag": "gate-open",
+  "stop_tag": null,
   "trace": null,
   "writes": [
     {
+      "kind": "records_log",
+      "path": "/work/example/workspace/docs/records/docs__plans__2026-09-20-turnstile.events.jsonl",
+      "sha256_after": "15d0205083e6d4732c576f9fe586776ed796c57b6766189a41679a4982912397",
+      "sha256_before": "8d6cfe8046ed6c4d2e2fef246a37ce595dcf9d147eb7419e9411621d0f7ddf30"
+    },
+    {
       "kind": "build_doc",
       "path": "/work/example/workspace/docs/plans/2026-09-20-turnstile.md",
-      "sha256_after": "76dc5216f958ad33679d6754ba18b260e33309714ed048c85814caac74378aee",
-      "sha256_before": "714d22c8693e65969efa9ffaa224bf1ba05adc5f38c8e18eeb566ed98e6eba95"
+      "sha256_after": "0488a0578f57f1ff7736dc95de3ee4710451ec7992049a0ee600437e138ef945",
+      "sha256_before": "9e861450c42858c780ef9dd9a25ef2fb1fc19e6fb9a062f05a48308a3c18c4f2"
     }
   ],
   "wrote_nothing": false

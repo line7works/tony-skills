@@ -59,7 +59,9 @@ uv run scripts/handoff.py photograph --run-dir <run dir> [--suite-record <the la
 
 Every card and the open set come from the records component, the branch, the commits ahead and the tree from git,
 read now. Pass `--suite-record` only when this session has a recorded suite run (a station's `result.json`); never run
-the suite.
+the suite. It stops, before any question is asked, when a card move landed in the records and its `Status:` line did
+not (`card-drift`: tell the owner both values and the two ways out it names), or when the records component already
+refuses the doc's next levelling pass (tell the owner the line to put back).
 
 ## Step 3: The question gate
 
@@ -125,9 +127,12 @@ once, by hand); an open card gives the fix list, then `/recheck-v2`; a complete 
 the grants through the records component, each with the card it moves (a `card_set` and the slice's `Status:` line,
 in the one transaction a card takes, all or none), then writes one dated block at the tail of `## Handoffs`
 (created before `## Punch list` when missing), recording the checkpoint commit it finds. It stops, writing nothing,
-when anything moved since the photograph, an earlier block was edited, the checkpoint commit carries more than the
-photographed dirt, a moved card's `Status:` line disagrees with the records, or the write would leave a doc the
-records component's next levelling pass refuses.
+when anything moved since the photograph, an earlier block was edited, the checkpoint commit is empty or carries more
+than the photographed dirt, a moved card's `Status:` line disagrees with the records, or the write would leave a doc
+the records component's next levelling pass refuses. A `write` that was interrupted (a closed lid, a timeout, Ctrl-C)
+is finished by running the same command again with the same run directory: it settles what landed and writes the
+rest, never twice; if the doc was edited in between it stops `outside-edit`, naming the `Status:` lines and the events
+that landed, and the owner settles the doc.
 
 **The memory pointer.** On Claude Code, the adapter's step: `python3 adapters/claude-code/pointer.py --run-dir <run
 dir> --memory-dir <this project's auto-memory folder>`. On Codex there is none: the block is the pointer, and the

@@ -63,11 +63,13 @@
       {
         "after": null,
         "card": "signed off with conditions",
+        "moved": false,
         "name": "A"
       },
       {
         "after": null,
         "card": "not started",
+        "moved": false,
         "name": "B"
       }
     ],
@@ -127,7 +129,7 @@
       "records": {
         "events": 6,
         "exists": true,
-        "head": "671de1fc2c43a2a18fd92cc470b52ce1b3c62469841c35dfc909c1687556840b",
+        "head": "a3191e87b6d5dea0982e59eb27c9ef8a9c4ee1d5380dd3b485a3f11a9fe3db8e",
         "log": "docs/records/docs__plans__2026-09-20-turnstile.events.jsonl"
       },
       "repo": {
@@ -136,7 +138,7 @@
         "branch": "feat",
         "checkpoint": null,
         "dirt": [],
-        "head": "b03a9253145d51b35bd748cac97e259ca1b7dca6",
+        "head": "3b9ec96a0891b0a5b9eff5a1c583b6dd938d308a",
         "tree": "clean"
       },
       "suite": {
