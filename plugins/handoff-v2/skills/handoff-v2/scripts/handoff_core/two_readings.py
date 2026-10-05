@@ -39,11 +39,30 @@ write and before the gate (`doc.read` raises; `select` stops). The decisions com
 5. one refusal of the second reading's own, refusal (a)'s shape for this core's labels: a rendered paragraph line in
    a slice's section that reads as a `Depends on:` or `Questions:` candidate (as in 4) in a paragraph whose rendered
    lines cannot all be mapped to source lines (`commonmark.paragraph_spans` marks it not exact) stops, naming the
-   paragraph's first line: which source line holds which label cannot be told there.
+   paragraph's first line: which source line holds which label cannot be told there;
+6. THE ONE LABEL RULE (the E15 lane contract A26, after Astra's look 5b; stated once here and once in the contract,
+   section 5, "Two readings"): inside a slice's section (from the slice's heading to its next rendered heading of
+   level 1 or 2), every rendered block of any kind (a heading of any level, a paragraph line, a list item, a block
+   quote, a table cell, a wrapped line) whose rendered text reads as a `Depends on:` or `Questions:` label
+   candidate (as in 4) must come from that label in its plain form on one source line, with its value on the same
+   line; anything else stops `doc-unreadable` naming the line, before any write. The plain form is a paragraph line
+   that starts at column 0 with exactly `Depends on:` or `Questions:` (the line rules, `doc.read`). So: a rendered
+   heading that reads as a label stops at its line (`### Questions: Which mode?`, which the line rules never read as
+   a label); a rendered label line that runs over more than one source line (an inline HTML tag or comment holding
+   its line ending, `commonmark.paragraph_spans`) stops at its first line; a list item, a block quote and a marked-up
+   label already stop by 4 and the line rules; and a `Depends on:` line whose value is empty stops at its line as an
+   empty `Questions:` does (A24 (2); the line rules' half, `doc._own_label_problem`), so a value on the next line is
+   never read as no dependency; and, the value on the label's own line (the control room's send-back 1), a
+   `Depends on:` or `Questions:` line whose paragraph continues on the next source line with a line that is not
+   `Status:`, `Base:`, `Depends on:` or `Questions:` at column 0 stops at the label line (`Depends on: Slice A,`
+   then `Slice B`; `Depends on: nothing` then a sentence; `Questions: Which mode,` then `and why?`), the line rules'
+   half again; it only adds stops, and A24 (2)'s `none` and `nothing` rule stands as it is. A table cell is held to
+   the rule where the reader renders one; the pinned `commonmark` preset renders no table, so a pipe row is paragraph
+   text and reads as a label candidate only when the row's own text does.
 
-When several differ, the earliest line is named; on one line, A13's comparison first, then the order above. A doc
-both readings take the same way runs exactly as the line rules alone run it. A13's words name vertical-v2, whose
-rule they are; the words of 2 to 5 are this core's.
+When several differ, the earliest line is named; on one line, A13's comparison first, then the order above (the
+refusals of 5 and 6 together, last). A doc both readings take the same way runs exactly as the line rules alone run
+it. A13's words name vertical-v2, whose rule they are; the words of 2 to 6 are this core's.
 """
 import re
 
@@ -57,6 +76,18 @@ NAMED = {"Handoffs": "## Handoffs", "Punch list": "## Punch list"}
 LABEL = {"depends on": "Depends on:", "questions": "Questions:"}
 RULE = ("handoff-v2 runs only on a doc vertical-v2's line rules and a CommonMark reader take the same way (the E15 "
         "lane contract A25)")
+PLAIN = ("handoff-v2 reads its own labels only in their plain form: a paragraph line that starts at column 0 with "
+         "exactly `Depends on:` or `Questions:`, its value on the same line (THE ONE LABEL RULE, the E15 lane contract "
+         "A26)")
+UNMAPPED = ("a CommonMark reader renders %r here, a `Depends on:` or `Questions:` label line in a paragraph whose "
+            "rendered lines it cannot map to source lines (a code span, a link destination or a link title runs over a "
+            "line ending), so which line holds which label cannot be told; handoff-v2 reads its labels only in a "
+            "paragraph whose every rendered line maps to its own source line (the E15 lane contract A25)")
+HEADED = ("a CommonMark reader renders a level %d heading %r here, which reads as a `%s` label: a label in a heading "
+          "is never read, so its question would go unasked or its dependency unread; %s")
+WRAPPED = ("a CommonMark reader renders %r here as one line running over more than one source line (to line %d: an "
+           "inline HTML tag or comment holds its line ending), a `%s` label line whose value the line rules read only "
+           "in part; %s")
 
 
 def own_candidate(rendered):
@@ -67,8 +98,8 @@ def own_candidate(rendered):
 
 
 def second(text, total, slices):
-    """The second reading's decisions of 2 to 5: {"tops": {line: (level, opens)}, "names": {line: rendered name},
-    "blocks": {line: (kind, end)}, "own": {line: [label]}, "refused": [(line, rendered)]}; `slices` is A13's second
+    """The second reading's decisions of 2 to 6: {"tops": {line: (level, opens)}, "names": {line: rendered name},
+    "blocks": {line: (kind, end)}, "own": {line: [label]}, "refused": [(line, words)]}; `slices` is A13's second
     reading's slices ({heading line: name})."""
     stream = commonmark.tokens(text)
     heads = commonmark.headings(stream)
@@ -87,16 +118,26 @@ def second(text, total, slices):
             blocks[line] = (kind, next((at for at in upper if at > line), total + 1))
     ends = sorted(tops)
     reach = [(line, next((at for at in ends if at > line), total + 1)) for line in sorted(slices)]
+
+    def inside(line):
+        return any(start < line < end for start, end in reach)
+
     own, refused = {}, []
+    for level, name, line in heads:
+        key = own_candidate(name)
+        if key is not None and inside(line):
+            refused.append((line, HEADED % (level, name, LABEL[key], PLAIN)))
     for line, last, rendered, exact in commonmark.paragraph_spans(stream):
-        if not any(start < line < end for start, end in reach):
+        if not inside(line):
             continue
         key = own_candidate(rendered)
         if key is None:
             continue
         if not exact:
-            refused.append((line, rendered))
+            refused.append((line, UNMAPPED % rendered))
             continue
+        if last != line:
+            refused.append((line, WRAPPED % (rendered, last, LABEL[key], PLAIN)))
         own.setdefault(line, []).append(key)
     for labels in own.values():
         labels.sort()
@@ -158,12 +199,8 @@ def difference(text, found, first):
                              "read %s and a CommonMark reader, from the rendered text, reads %s; handoff-v2 reads a "
                              "`Depends on:` or `Questions:` label only in its plain form, at column 0 with no markup; "
                              "%s" % (_own(first["own"].get(line)), _own(mine["own"].get(line)), RULE)))
-    for line, rendered in mine["refused"]:
-        out.append((line, 4, "a CommonMark reader renders %r here, a `Depends on:` or `Questions:` label line in a "
-                             "paragraph whose rendered lines it cannot map to source lines (a code span, a link "
-                             "destination or a link title runs over a line ending), so which line holds which label "
-                             "cannot be told; handoff-v2 reads its labels only in a paragraph whose every rendered "
-                             "line maps to its own source line (the E15 lane contract A25)" % rendered))
+    for line, words in mine["refused"]:
+        out.append((line, 4, words))
     if not out:
         return None
     line, rank, words = min(out)

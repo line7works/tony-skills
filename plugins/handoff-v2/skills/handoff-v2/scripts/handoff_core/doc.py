@@ -25,7 +25,13 @@ here. On a doc those rules accept, this module then reads, outside accepted fenc
   `Depends on:` line in one slice is refused, named; a `Questions:` line whose value is empty is refused, named,
   always, and one whose value is `none` or `nothing` followed by any non-blank line in its paragraph is refused,
   named: each open question goes on its own `Questions:` line, or the label reads `Questions: none` (the E15 lane
-  contract A24 (2), the slice 1b re-check's R1B1-2, which widens C1B1-4's list rule); and either label that starts
+  contract A24 (2), the slice 1b re-check's R1B1-2, which widens C1B1-4's list rule); a `Depends on:` line whose
+  value is empty is refused, named, always, as an empty `Questions:` is: the slices it depends on go on the label's
+  own line, or it reads `Depends on: nothing` (A26, THE ONE LABEL RULE's line-rules half, `two_readings.py`, so a
+  value on the next line is never read as no dependency); either label whose paragraph continues on the next
+  source line with a line that is not `Status:`, `Base:`, `Depends on:` or `Questions:` at column 0 is refused,
+  named (A26, the same rule, its value on the label's own line; it only adds stops, after A24 (2)'s); and either
+  label that starts
   inside an inline HTML comment its paragraph opened earlier (`<!--` with no `-->` yet), or sits in a paragraph
   holding a link reference definition, is refused, named, since CommonMark hides it there (C1B1-9);
 - the handoff blocks: a line reading exactly `### <YYYY-MM-DD> <dash> handoff` (the dash `forms.D`, one constant)
@@ -38,9 +44,10 @@ THE SECOND READING (the E15 lane contract A25 (1), after Astra's look 5). On a d
 own reading accept, `read` then asks vertical-v2's second reading (A13, copied byte for byte) and compares the
 decisions above with it: THE HANDOFF TWO-READINGS RULE, stated in `two_readings.py` (A13's slices, cards, base,
 withheld sections and four refusals; the level 1 and 2 headings and the ledger sections they open; the handoff and
-record blocks; this core's own two labels). The first line where the two differ raises DocUnreadable naming it, so
-a Setext heading inside `## Handoffs`, a Setext `Handoffs`, a `## Handoffs ##` or a bold `**Questions:**` stops
-before any write and before the gate.
+record blocks; this core's own two labels; THE ONE LABEL RULE of A26, after Astra's look 5b). The first line where
+the two differ, or the second reading refuses, raises DocUnreadable naming it, so a Setext heading inside
+`## Handoffs`, a Setext `Handoffs`, a `## Handoffs ##`, a bold `**Questions:**`, a `### Questions:` heading in a
+slice or a label line wrapped over two source lines stops before any write and before the gate.
 
 THE TWO INSERTIONS (CR-13 (1) and (2); `plan`). The block goes at the tail of `## Handoffs`: after the section's
 last non-blank line, one blank line before it and, when a non-blank line follows, one after it; a missing
@@ -78,6 +85,8 @@ TOP = re.compile(r"^#{1,2} ")
 LINK_REFERENCE = re.compile(r"^ {0,3}\[[^\]]*\]:")
 NO_QUESTION = ("none", "nothing")
 QUESTIONS_WAY = "write each open question on its own `Questions:` line, or `Questions: none`"
+DEPENDS_WAY = "write the slices it depends on on the label's own line, or `Depends on: nothing`"
+FOLLOWERS = ("Status:", "Base:", "Depends on:", "Questions:")
 TAIL_RULE = "records section 11.7 accepts only lines that moved"
 OWN_EXACT = {"depends on": "Depends on:", "questions": "Questions:"}
 DATED = re.compile(r"^docs/plans/\d{4}-\d{2}-\d{2}-(.+)\.md$")
@@ -176,7 +185,11 @@ def _own_label_problem(lines, fenced, number, exact, value, first, last):
     A24 (2), the slice 1b re-check's R1B1-2: a `Questions:` line whose value is empty is refused always (its question
     may stand on the next line, which CommonMark renders as the label's own text, or anywhere after it); one whose
     value is `none` or `nothing` is refused when any non-blank line follows it in its paragraph, which CommonMark
-    renders as part of the label's value. This widens C1B1-4's list rule to every line."""
+    renders as part of the label's value. This widens C1B1-4's list rule to every line.
+
+    A26 (THE ONE LABEL RULE, `two_readings.py`), after Astra's look 5b: a `Depends on:` line whose value is empty is
+    refused always, as an empty `Questions:` is (its dependency may stand on the next line, which the reading would
+    otherwise take as no dependency, and kick off a slice whose prerequisite is unfinished)."""
     start, end = _paragraph(lines, fenced, number, first, last)
     opened = _comment_open_at(lines, start, number)
     linked = [other for other in range(start, end + 1) if LINK_REFERENCE.match(lines[other - 1])]
@@ -186,8 +199,12 @@ def _own_label_problem(lines, fenced, number, exact, value, first, last):
             return ("a `%s` line in a paragraph that also holds %s (line %d): CommonMark may hide the label inside "
                     "an inline HTML comment or a link reference definition's title, so handoff-v2 does not read it; "
                     "put the label in a paragraph of its own (the slice 1b check's C1B1-9)" % (exact, hiding, other))
-    if exact != OWN_EXACT["questions"]:
-        return None
+    if exact == OWN_EXACT["depends on"]:
+        if not value:
+            return ("a `Depends on:` line with no dependency on it (%r): %s, since handoff-v2 reads a label's value "
+                    "only on the label's own line and an empty one would read as no dependency (the E15 lane contract "
+                    "A26, as A24 (2) stops an empty `Questions:`)" % (lines[number - 1], DEPENDS_WAY))
+        return _continued(lines, number, end, exact, DEPENDS_WAY)
     if not value:
         return ("a `Questions:` line with no question on it (%r): %s, since handoff-v2 reads one question per line "
                 "and an empty label tells it nothing (the E15 lane contract A24 (2))" % (lines[number - 1], QUESTIONS_WAY))
@@ -195,7 +212,20 @@ def _own_label_problem(lines, fenced, number, exact, value, first, last):
         return ("a `Questions: %s` line followed by line %d in its paragraph, which CommonMark reads as part of the "
                 "label's value: %s with nothing after it in its paragraph (the E15 lane contract A24 (2))"
                 % (value, number + 1, QUESTIONS_WAY))
-    return None
+    return _continued(lines, number, end, exact, QUESTIONS_WAY)
+
+
+def _continued(lines, number, end, exact, way):
+    """A26, the control room's send-back 1: a label whose paragraph continues on the next source line with a line
+    that is not one of `FOLLOWERS` at column 0 (`Status:`, `Base:`, `Depends on:` or `Questions:`) is refused, since
+    CommonMark reads that line as part of the label's value and handoff-v2 reads the value only on the label's own
+    line. Only adds stops: A24 (2)'s `none` and `nothing` rule runs first, unchanged."""
+    if end <= number or lines[number].startswith(FOLLOWERS):
+        return None
+    return ("a `%s` line whose paragraph continues on the next source line (line %d), which CommonMark reads as part "
+            "of the label's value: %s; a label's paragraph may go on only with a `Status:`, `Base:`, `Depends on:` or "
+            "`Questions:` line, since handoff-v2 reads a label's value only on the label's own line (the E15 lane "
+            "contract A26)" % (exact, number + 1, way))
 
 
 def read(text):

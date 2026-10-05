@@ -2,9 +2,10 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a state. Written
 for E15 slice 1, hand-back 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 9 and 12,
-amendments A1, A2, A22, A23, A24 and A25) and the control room's readings CR-11 to CR-17 in the slice 1b brief, as
-slice 1b's fix round 1 amended them (A23, and the check's C1B1-3 to C1B1-9), fix round 2 (A24, and the re-check's
-R1B1-5 to R1B1-7) and fix round 3 (A25, after Astra's look 5). Where this document
+amendments A1, A2, A22, A23, A24, A25 and A26) and the control room's readings CR-11 to CR-17 in the slice 1b brief,
+as slice 1b's fix round 1 amended them (A23, and the check's C1B1-3 to C1B1-9), fix round 2 (A24, and the re-check's
+R1B1-5 to R1B1-7), fix round 3 (A25, after Astra's look 5) and fix round 4 (A26, after Astra's look 5b). Where this
+document
 and that contract differ, the contract is the authority and this document is the defect. `references/back-loop.md`
 is the discipline the three back cores share; this document is this core's own.
 
@@ -188,8 +189,11 @@ or `Questions:`; any other such line stops, named; a second `Depends on:` in one
 line whose value is empty stops, named, always, and one whose value is `none` or `nothing` followed by any non-blank
 line in its paragraph stops, named ("write each open question on its own `Questions:` line, or `Questions: none`"):
 A24 (2), the re-check's R1B1-2, widening C1B1-4's list rule, since CommonMark renders a following line as part of the
-label's value; so a `Questions: none` stands in a paragraph of its own; either label in a paragraph that also holds
-`<!--` or a link reference definition stops, named, since CommonMark may hide the label there, C1B1-9);
+label's value; so a `Questions: none` stands in a paragraph of its own; a `Depends on:` line whose value is empty
+stops, named, always, as an empty `Questions:` does ("write the slices it depends on on the label's own line, or
+`Depends on: nothing`"): A26, the line rules' half of "Two readings" (6) below, which also stops a label whose
+paragraph goes on with any other line than a `Status:`, `Base:` or own label line; either label in a paragraph that
+also holds `<!--` or a link reference definition stops, named, since CommonMark may hide the label there, C1B1-9);
 the handoff blocks (a line reading exactly `### <YYYY-MM-DD> <dash> handoff`, running to the next level 1 to 3
 heading or the doc's end); the record blocks (`### <YYYY-MM-DD> <dash> review: ` or `recheck: `). `<dash>` is U+2014,
 the constant `forms.D` (section 8).
@@ -216,14 +220,33 @@ rendered paragraph line that reads as a `Depends on:` or `Questions:` label cand
 applies to `Status:` candidates (format characters removed and leading whitespace stripped, the leading listed marks
 set aside, folded) whose source line is not that label in its plain form stops (a bold `**Questions:**`, a code-span
 `` `Depends on:` ``), and so does a plain label the reader renders as no label; (5) such a label line in a paragraph
-whose rendered lines cannot all be mapped to source lines stops, naming the paragraph's first line. The earliest line
-is named; on one line, A13's comparison first, then (2) to (5).
+whose rendered lines cannot all be mapped to source lines stops, naming the paragraph's first line; (6)
+THE ONE LABEL RULE (A26, after Astra's look 5b; the code's statement is item 6 of `two_readings.py`'s): inside a
+slice's section, every rendered block of any kind (a heading of any level, a paragraph line, a list item, a block
+quote, a table cell, a wrapped line) whose rendered text reads as a `Depends on:` or `Questions:` label candidate
+(the folding of (4)) must come from that label in its plain form on one source line (a paragraph line starting at
+column 0 with exactly `Depends on:` or `Questions:`), with its value on the same line; anything else stops
+`doc-unreadable` naming the line, before any write. So a `### Questions:` heading in a slice stops at its line, a
+rendered label line that runs over more than one source line (an inline HTML tag or comment holding its line ending)
+stops at its first line, a list item, a block quote and a marked-up label stop by (4) and the line rules, and an empty
+`Depends on:` stops as an empty `Questions:` does (above), so a dependency written on the next line is never read as
+none; and, the value on the label's own line (the control room's send-back 1 on A26), a `Depends on:` or `Questions:`
+line whose paragraph continues on the next source line with a line that is not `Status:`, `Base:`, `Depends on:` or
+`Questions:` at column 0 stops `doc-unreadable` at the label line, before any write (`Depends on: Slice A,` then
+`Slice B`; `Depends on: nothing` then a sentence; `Questions: Which mode,` then `and why?`): this only adds stops, and
+A24 (2)'s `none` and `nothing` rule above stands as it is. A table cell is held to the rule where the reader renders
+one: the pinned `commonmark` preset renders no table, so a pipe row is paragraph text and reads as a label candidate
+only when the row's own text does. The earliest line is named; on one line, A13's comparison first, then (2) to (4),
+then the refusals of (5) and (6).
 
 Measured on the 25 real build docs the control room snapshotted (the evidence corpus, never copied here; slice 1b fix
 round 3's report): the line rules stop 4, the same 4 vertical-v2's line rules stop, and this core's own reading adds
 none; the second reading adds 2, the two lane contracts A21 (2) stops on purpose (A13's refusal (b), the numbered
 `Slice <n>:` headings), so this core stops the same 6 vertical-v2's full reading stops, at the same lines; (2) to (5)
-stop none of the 25.
+stop none of the 25. A26 (slice 1b fix round 4's report) changes none of it: the same 6 stop at the same lines and
+the other 19 read; in those 19, 0 label headings, 0 wrapped label lines and 0 empty `Depends on:` lines stand in a
+slice's section, and the 37 plain `Depends on:` lines read as before, each one's paragraph going on only with its
+`Status:` line, so the send-back 1 continuation rule stops none of them.
 
 ## 6. The sanctioned writes
 
@@ -398,7 +421,7 @@ The exits are the back loop's: 0, 1, 2, 3, 4, 5, 10 (back-loop section 2). A sto
 | `selection-unnamed` | select | the invocation names nothing to match against: ask the owner |
 | `selection-none` | select | no doc found in the repo's tiers (shared tag) |
 | `selection-several` | select | several docs in one tier, listed, none picked (shared tag) |
-| `doc-unreadable` | select | a line vertical-v2's line rules (or this core's own two labels) refuse, or the first line where the line rules and the second, CommonMark reading take a decision differently (A25, section 5, "Two readings"), named |
+| `doc-unreadable` | select | a line vertical-v2's line rules (or this core's own two labels) refuse, or the first line where the line rules and the second, CommonMark reading take a decision differently (A25, section 5, "Two readings"), or a label form "Two readings" (6) refuses (A26), named |
 | `block-misplaced` | select | a handoff block outside `## Handoffs` |
 | `identity-unnamed` | select | no identity derives and the owner named none |
 | `identity-conflict` | select | the owner's name differs from the derived identity |
