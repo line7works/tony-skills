@@ -128,6 +128,55 @@ class TheAnswer(unittest.TestCase):
             {"question": "r-next", "answered": True, "words": "C first", "effect": {"kind": "next-slice", "slice": "C"}}])
         self.assertEqual(code, 0, (out, err))
 
+    def owner_names(self, c_lines, slice_name="C"):
+        text = hlib.build_doc(slices=[("A", "the counter", "signed off", "nothing"),
+                                      ("B", "the spinner", "signed off", "Slice A")])
+        text = text.replace("\n## Build assumptions", "\n" + "\n".join(c_lines) + "\n\n## Build assumptions", 1)
+        ws, _ = hlib.make_repo(self.tmp, text)
+        drive, run_dir = hlib.start(self.tmp, ws)
+        gate = hlib.through_gate(self, drive, self.tmp, run_dir)
+        code, out, err = self.answer(drive, run_dir, answers=[
+            {"question": "r-next", "answered": True, "words": "%s is next" % slice_name,
+             "effect": {"kind": "next-slice", "slice": slice_name}}])
+        return ws, drive, run_dir, gate, (code, out, err)
+
+    def test_c1b1_5_the_owner_names_a_slice_whose_chain_does_not_read(self):
+        """The check's p07 7a: slice C has no `Depends on:` line, so the record finds no candidate; the owner's
+        answer naming C, a slice of the doc that can start, is taken, and the block says it came from him."""
+        c = ["", "## Slice C %s the encoder" % hlib.D, "Goal: the encoder.", "Footprint: src/enc.py",
+             "Status: not started"]
+        ws, drive, run_dir, gate, (code, out, err) = self.owner_names(c)
+        asked = next(q for q in gate["questions"] if q["id"] == "r-next")
+        self.assertEqual(asked["candidates"], [])
+        self.assertEqual(code, 0, (out, err))
+        code, out, err = drive(["write", "--run-dir", run_dir])
+        self.assertEqual(code, 0, (out, err))
+        self.assertEqual((out["next_move"]["shape"], out["next_move"]["slice"], out["next_move"]["how"]),
+                         ("clean-boundary", "C", "owner"))
+        self.assertEqual(out["next_move"]["kickoff"], "/ship-v2 C %s" % hlib.DOC)
+        next_line = next(l for l in hlib.read_doc(ws).splitlines() if l.startswith("- Next: /ship-v2 C"))
+        self.assertIn("the owner", next_line)
+
+    def test_c1b1_5_the_owner_names_a_slice_whose_chain_is_prose(self):
+        c = ["", "## Slice C %s the encoder" % hlib.D, "Goal: the encoder.", "Footprint: src/enc.py",
+             "Depends on: the counter API from Slice A", "Status: not started"]
+        ws, drive, run_dir, gate, (code, out, err) = self.owner_names(c)
+        self.assertEqual(code, 0, (out, err))
+
+    def test_c1b1_5_a_slice_that_cannot_start_is_refused(self):
+        c = ["", "## Slice C %s the encoder" % hlib.D, "Goal: the encoder.", "Footprint: src/enc.py",
+             "Status: not started"]
+        ws, drive, run_dir, gate, (code, out, err) = self.owner_names(c, slice_name="A")
+        self.assertEqual(code, 5, (out, err))
+        self.assertIn("signed off", out["reason"])
+
+    def test_c1b1_5_a_slice_the_doc_does_not_hold_is_refused(self):
+        c = ["", "## Slice C %s the encoder" % hlib.D, "Goal: the encoder.", "Footprint: src/enc.py",
+             "Status: not started"]
+        ws, drive, run_dir, gate, (code, out, err) = self.owner_names(c, slice_name="Z")
+        self.assertEqual(code, 5, (out, err))
+        self.assertIn("does not hold", out["reason"])
+
     def test_an_answer_to_a_question_never_asked_is_refused(self):
         ws, drive, run_dir, gate = self.ready()
         code, out, err = self.answer(drive, run_dir, answers=[

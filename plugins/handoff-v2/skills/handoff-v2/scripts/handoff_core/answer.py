@@ -8,7 +8,10 @@ believes of the photograph (`asserts`). In this order:
    card, open item, branch, commits-ahead count or tree state that the script's read contradicts (the record over
    the recollection); an answer to a question the gate never asked, or two to one; a waiver of a finding the log
    does not hold `open` or `fixed`, a reopening of one it does not hold `waived` or `fixed`, two grants on one
-   finding, or a grant on a record question; a next-slice answer naming no candidate; words, a perishable or a
+   finding, or a grant on a record question; a next-slice answer naming no slice of the doc that can start (the
+   slice must be the doc's and stand `not started` or `in progress`, a candidate of the record or not: the slice 1b
+   check's C1B1-5, since a chain the record cannot read leaves the owner's word the only way to name it); words, a
+   perishable or a
    question that cannot land in the doc (`gate.text_problem`); and a set of answers whose grants leave the next move
    unresolved with no answer to `r-next` (the answer file then carries the owner's answer to that question, which
    the refusal names).
@@ -64,6 +67,19 @@ def post_grant_open(photo, grants):
     return out
 
 
+def next_slice_problem(name, photo, view):
+    """Why the owner's answer naming slice `name` as next cannot be taken, or None: the doc must hold the slice and
+    its card stand `not started` or `in progress` (C1B1-5: whether or not the record found it a candidate)."""
+    rows = dict((r["name"], r) for r in gatemod.rows_of(photo, view))
+    if name not in rows:
+        return ("the answer names slice %r, which the build doc does not hold (it holds %s)"
+                % (name, ", ".join(rows) or "none"))
+    if rows[name]["card"] not in nextmove.STARTABLE:
+        return ("the answer names slice %r, which stands %s: the next slice is one of the doc that can start (%s)"
+                % (name, rows[name]["card"], " or ".join(nextmove.STARTABLE)))
+    return None
+
+
 def resolve_after(photo, view, grants, owner):
     rows = gatemod.rows_of(photo, view, post_grant_open(photo, grants))
     return rows, nextmove.resolve(rows, view["doc"], finished=photo["finished"], owner=owner)
@@ -114,9 +130,8 @@ def handler(ctx, args):
         if effect["kind"] == "next-slice":
             if qid not in questions:
                 late_next = entry
-            elif effect["slice"] is not None and effect["slice"] not in question["candidates"]:
-                refusals.append({"rule": "next-slice", "why": "the answer names slice %r, which is not a candidate (%s)"
-                                 % (effect["slice"], ", ".join(question["candidates"]) or "none")})
+            elif effect["slice"] is not None and next_slice_problem(effect["slice"], photo, view):
+                refusals.append({"rule": "next-slice", "why": next_slice_problem(effect["slice"], photo, view)})
             owner = {"slice": effect["slice"], "words": entry["words"]}
             continue
         if effect["kind"] in GRANTS:
@@ -156,9 +171,9 @@ def handler(ctx, args):
         elif late_next is not None and move["shape"] != "unresolved":
             refusals.append({"rule": "unknown-question", "why": "the gate asked no question r-next, and the record "
                                                                "resolves the next move without one"})
-        elif late_next is not None and owner["slice"] is not None and owner["slice"] not in move["candidates"]:
-            refusals.append({"rule": "next-slice", "why": "the answer names slice %r, which is not a candidate after "
-                             "this run's grants (%s)" % (owner["slice"], ", ".join(move["candidates"]) or "none")})
+        elif late_next is not None and owner["slice"] is not None and \
+                next_slice_problem(owner["slice"], photo, view):
+            refusals.append({"rule": "next-slice", "why": next_slice_problem(owner["slice"], photo, view)})
     if refusals:
         return ctx.emit(ctx.envelope(accepted=False, run_id=run.checkpoint["run_id"],
                                      reason="; ".join(r["why"] for r in refusals) + "; nothing was written and the run "

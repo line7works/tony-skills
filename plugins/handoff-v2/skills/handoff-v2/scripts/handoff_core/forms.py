@@ -77,6 +77,8 @@ def next_move_text(move):
     shape, doc = move["shape"], move["doc"]
     if shape == "clean-boundary":
         line = "%s%sby hand: %s" % (kickoff(move["slice"], doc), SEP, by_hand(move["slice"], doc))
+        if move.get("how") == "owner":
+            line += "%sthe owner named slice %s" % (SEP, move["slice"])
         return {"line": line, "kickoff": kickoff(move["slice"], doc), "alternative": by_hand(move["slice"], doc)}
     if shape == "open-card":
         count = len(move.get("fix_list") or [])
@@ -98,6 +100,13 @@ def next_move_text(move):
 # ---- the block ------------------------------------------------------------------------------------------
 
 def card_text(card):
+    """A slice's card. A card this run's grants moved (A23 (2): its `card_set` and `Status:` line written in this
+    run's transaction) reads as the new card, naming the one it moved from; a card the records derive otherwise
+    than it stands, which no grant of this run moved, keeps v1's report of the card after the grants."""
+    if card.get("moved") and card.get("after"):
+        return "%s %s (set by this run's grants; was %s)" % (field(card["name"], "a slice name"),
+                                                              field(card["after"], "a card"),
+                                                              field(card["card"], "a card"))
     text = "%s %s" % (field(card["name"], "a slice name"), field(card["card"], "a card"))
     if card.get("after") and card["after"] != card["card"]:
         text += " (after this run's grants: %s)" % field(card["after"], "a card")

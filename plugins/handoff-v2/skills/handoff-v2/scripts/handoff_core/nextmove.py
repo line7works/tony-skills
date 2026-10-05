@@ -26,8 +26,9 @@ THE SHAPES, in this order (v1's Step 7):
    The move is the fix list (every open BLOCKER and MAJOR, slices in document order) then `recheck-v2` on each such
    slice. No kickoff line to ship.
 2. `loop-complete`: the doc holds slices and every one stands `signed off`. No kickoff line.
-3. the owner's answer to the next-slice question: a slice name gives `clean-boundary` on that slice (it must be a
-   slice of the doc: never a slice that does not exist); null gives `owner-holds`, no kickoff line.
+3. the owner's answer to the next-slice question: a slice name gives `clean-boundary` on that slice, `how` owner (it
+   must be a slice of the doc: never a slice that does not exist; `record-answer` takes only one that stands `not
+   started` or `in progress`, a candidate or not, C1B1-5); null gives `owner-holds`, no kickoff line.
 4. `clean-boundary`: the just-finished slice (if any) stands `signed off` and exactly one candidate exists.
 5. otherwise `unresolved`, with the candidates: the record does not yield exactly one answer, which is the
    next-slice question the gate asks (and `record-answer` refuses a set of answers that leaves the move here).

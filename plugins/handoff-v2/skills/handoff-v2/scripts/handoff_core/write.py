@@ -5,24 +5,35 @@ Before any write, in this order, each a stop with nothing written:
 1. the doc: every handoff block `select` read is still there byte for byte (`block-edited`), and the doc still
    holds the bytes `select` read (`photograph-moved`);
 2. git: the branch is the photographed one, and HEAD is the photographed commit or exactly one commit on it whose
-   subject starts `handoff checkpoint` (the executor's named step, A2 Q2: read and recorded here, never made);
-   anything else moved (`photograph-moved`);
+   subject starts `handoff checkpoint` (the executor's named step, A2 Q2: read and recorded here, never made), taken
+   on a tree the photograph saw dirty and changing only paths the photograph saw dirty (the slice 1b check's
+   C1B1-8); anything else moved (`photograph-moved`, naming the extra paths);
 3. the records: the log's head is the photographed one (`photograph-moved`);
 4. the plan: the next move resolved from the record after this run's grants (`nextmove.resolve`; an unresolved move
    never reaches here, `record-answer` refuses it), the block rendered from the script's reads (the cards, the open
    set, the branch, the commits ahead and the tree read now, the suite record as photographed; the answer supplies
-   no photograph line), and the doc planned with the block alone, which must read cleanly by the line rules, hold
-   every earlier block unchanged, hold one more block, under `## Handoffs`, and differ from the doc only by the
-   inserted lines (`write-refused`).
+   no photograph line), the card moves (A23 (2): for each slice a grant of this run names whose card changes by
+   v1's rule after the grants, from the card the records and its `Status:` line agree on), and the doc planned with
+   the card moves and the block, which must read cleanly by the line rules, hold every earlier block unchanged, hold
+   one more block, under `## Handoffs`, and differ from the doc only by the inserted lines and the moved `Status:`
+   lines (`write-refused`);
+5. the records' tail rule (A23 (1)): when the log holds record lines it imported from the doc, the component's own
+   `import-legacy --dry-run` (which writes nothing and takes no lock) must not refuse the doc as it stands with a
+   conflict, and the planned doc must keep every imported line in its order and add no line byte-equal to one
+   (`doc.levelling_problem`); a write that would leave a doc the widened rule refuses is `write-refused`.
 
-Then the writes, in order, each with its hash before and after in `receipt.json` and the result: (1) the `waived` and
-`reopened` events, all or none, through `records.py append` against the photographed head, each with the owner's
-words; their lines as the component renders them (`render --run-id`); (2) the doc, once: the grant lines at the
-ledger home's tail and the block at the tail of `## Handoffs`, checked again as in 4, then replaced whole. The
-pointer's text is left in the run directory (`pointer.json`) for the Claude Code adapter's step; on Codex, and on a
-report-only run, it says no memory pointer is written. Nothing else is written, ever: no earlier block, no punch-list
-history, no `Status:` line, no card event (E15-9). A report-only run plans and checks everything, leaves the plan in
-the run directory (`planned-doc.md`, `events.json`) and writes nothing else.
+Then the writes, in order, each with its hash before and after in `receipt.json` and the result, in the one records
+transaction build-v2 uses for a card (its contract sections 9 and 10: the whole plan in the receipt before the
+append, one append all or none against the photographed head, the outcome in the receipt, then the doc): (1) the
+`waived` and `reopened` events, each with the owner's words, and after them one `card_set` per card move, all in ONE
+`records.py append`; the grant lines as the component renders them (`render --run-id`); (2) the doc, once: the moved
+`Status:` lines, the grant lines at the ledger home's tail and the block at the tail of `## Handoffs`, checked again
+as in 4 and 5, then replaced whole. A refusal of the append writes nothing anywhere: the doc and the log stay
+byte-equal. The pointer's text is left in the run directory (`pointer.json`) for the Claude Code adapter's step; on
+Codex, and on a report-only run, it says no memory pointer is written. Nothing else is written, ever: no earlier
+block, no punch-list history, no `Status:` line but a moved card's, no event but the grants and their card moves
+(E15-9 as A23 amends it). A report-only run plans and checks everything, leaves the plan in the run directory
+(`planned-doc.md`, `events.json`) and writes nothing else.
 """
 import os
 
@@ -52,15 +63,59 @@ def _bare(text, index):
     return fences.bare(fences.split_lines(text)[index])
 
 
+def _card_event(run, move, identity, at, doc_rel):
+    """build-v2's card event shape (its `card_event`): the card a grant of this run moved."""
+    return {"v": 1, "kind": "card_set", "at": at, "ledger_doc": doc_rel,
+            "actor": records_link.actor(common.STATION, run.checkpoint["run_id"], common.harness(run)),
+            "origin": {"kind": "native"}, "source": {"known": True, "identity": identity},
+            "slice": move["slice"], "before": move["before"], "after": move["after"]}
+
+
+def card_moves(rows, view, grants):
+    """A23 (2): [{slice, line, before, after}] for each slice a grant of this run names whose card after the grants
+    (v1's rule, `nextmove.effective`) differs from the card it stands at; or (None, why) when one cannot move: its
+    `Status:` line is missing or does not read the card the records hold."""
+    granted = set(g["slice"] for g in grants)
+    lines = dict((s["name"], s) for s in view["slices"])
+    out = []
+    for row in rows:
+        if row["name"] not in granted or row["card"] == row["observed"]:
+            continue
+        item = lines.get(row["name"])
+        if item is None or item.get("status_at") is None:
+            return None, "slice %s has no Status: line for the card this run's grants move" % row["name"]
+        if item.get("status") != row["observed"]:
+            return None, ("slice %s's Status: line reads %r and the records hold the card %r: the card a grant moves "
+                          "is the one the line and the records agree on, so the owner settles the line first"
+                          % (row["name"], item.get("status"), row["observed"]))
+        out.append({"slice": row["name"], "line": item["status_at"], "before": row["observed"], "after": row["card"]})
+    return out, None
+
+
+def _imported(client, ws, doc_rel):
+    """[(line, raw)] of every record line the log imported from the doc (`events`: legacy origin, cards left out)."""
+    seen = {}
+    for row in client.events(ws, doc_rel).get("results") or []:
+        event = row.get("event") or {}
+        origin = event.get("origin") or {}
+        if origin.get("kind") != "legacy" or origin.get("doc") != doc_rel or event.get("kind") == "card_observed":
+            continue
+        if isinstance(origin.get("line"), int) and isinstance(origin.get("raw"), str):
+            seen.setdefault(origin["line"], origin["raw"])
+    return sorted(seen.items())
+
+
 def _check_plan(before, after, inserted, earlier, heading):
-    """Why the planned doc does not hold (section 4 of this module's docstring), or None."""
+    """Why the planned doc does not hold (section 4 of this module's docstring), or None. `before` is the doc with
+    this run's card moves already set, so every other difference must be an inserted line."""
     if not docmod.additive(before, after, inserted):
         return "the plan changes a line it did not insert"
     try:
         planned = docmod.read(after)
     except docmod.DocUnreadable as exc:
         return "the planned doc would not read by the line rules at line %d: %s" % (exc.line, exc.words)
-    texts = [docmod.block_text(planned, b) for b in planned.blocks]
+    texts = [docmod.block_text(planned, b).rstrip("\r\n") for b in planned.blocks]
+    earlier = [text.rstrip("\r\n") for text in earlier]
     if texts[:len(earlier)] != earlier or len(texts) != len(earlier) + 1:
         return "the planned doc does not hold every earlier block unchanged and exactly one more"
     new = planned.blocks[-1]
@@ -112,6 +167,15 @@ def handler(ctx, args):
             _stop(ctx, run, "photograph-moved", "HEAD moved from %s to %s, which is not one commit on it labelled as a "
                   "handoff checkpoint (subject %r): the checkpoint is the one commit a handoff takes; nothing was "
                   "written" % (was["head"][:12], repo["head"][:12], subject))
+        if was["tree"] != "dirty":
+            _stop(ctx, run, "photograph-moved", "HEAD moved from %s to %s, a handoff checkpoint taken on a tree the "
+                  "photograph saw clean: there was nothing to checkpoint, so the commit is not the photographed "
+                  "dirt; nothing was written" % (was["head"][:12], repo["head"][:12]))
+        extra = [path for path in gitio.changed_between(ws, was["head"], repo["head"]) if path not in was["dirt"]]
+        if extra:
+            _stop(ctx, run, "photograph-moved", "the handoff checkpoint %s changes paths the photograph did not see "
+                  "dirty (%s): work landed after the photograph, so the checkpoint is not the photographed tree; "
+                  "nothing was written. Run handoff again" % (repo["head"][:12], ", ".join(extra)))
         checkpoint = {"commit": repo["head"], "parent": was["head"], "subject": subject}
         repo["checkpoint"] = repo["head"]
     # 3. the records
@@ -128,8 +192,17 @@ def handler(ctx, args):
     rows, move = answermod.resolve_after(photo, view, grants, answers.get("owner_next"))
     text_of = forms.next_move_text(move)
     open_after = answermod.post_grant_open(photo, grants)
-    cards = [{"name": r["name"], "card": r["observed"], "after": r["card"] if r["card"] != r["observed"] else None}
-             for r in rows]
+    moves, why = card_moves(rows, view, grants)
+    if why is None:
+        try:
+            carded = docmod.set_statuses(text, [(m["line"], m["before"], m["after"]) for m in moves])
+        except ValueError as exc:
+            why = "the card moves cannot be set on the doc (%s)" % exc
+    if why:
+        _stop(ctx, run, "write-refused", "%s; nothing was written" % why)
+    moved = set(m["slice"] for m in moves)
+    cards = [{"name": r["name"], "card": r["observed"], "after": r["card"] if r["card"] != r["observed"] else None,
+              "moved": r["name"] in moved} for r in rows]
     date = common.date_of(run)
     fields = {"date": date, "next": move, "cards": cards, "open": open_after, "repo": repo, "suite": photo["suite"],
               "questions": [{"question": a["text"], "answer": a["words"], "landed": "block"}
@@ -140,10 +213,26 @@ def handler(ctx, args):
     except forms.FormError as exc:
         _stop(ctx, run, "write-refused", "the block cannot be rendered (%s); nothing was written" % exc)
     heading = block[0]
-    planned, inserted = docmod.plan(text, block, [])
-    why = _check_plan(text, planned, inserted, earlier, heading)
+    planned, inserted = docmod.plan(carded, block, [])
+    why = _check_plan(carded, planned, inserted, earlier, heading)
     if why:
         _stop(ctx, run, "write-refused", "%s; nothing was written" % why)
+    try:
+        imported = _imported(client, ws, doc_rel)
+    except records_link.RecordsRefusal as refusal:
+        _stop(ctx, run, "records-refused", records_link.refusal_sentence(refusal, "reading the imported lines"))
+    if imported:
+        try:
+            client.import_legacy(ws, doc_rel, dry_run=True)
+        except records_link.RecordsRefusal as refusal:
+            if refusal.exit_code == 7:
+                _stop(ctx, run, "write-refused", "the records component already refuses this doc's next levelling "
+                      "pass (records section 11.7: %s), and a write would leave it so: the owner settles the doc "
+                      "first; nothing was written" % refusal.sentence())
+        why = docmod.levelling_problem(planned, inserted, imported)
+        if why:
+            _stop(ctx, run, "write-refused", "%s: a write that would leave a doc the records' tail rule refuses is "
+                  "never made; nothing was written" % why)
     move_out = dict(move, line=text_of["line"], kickoff=text_of["kickoff"], alternative=text_of["alternative"])
     feature = view["feature"]
     for_adapter = common.harness(run) == "claude-code" and not common.report_only(run)
@@ -169,9 +258,11 @@ def handler(ctx, args):
             _stop(ctx, run, "records-refused", records_link.refusal_sentence(refusal, "reading the source identity"))
         at = common.now()
         events = [_event(run, g, identity, at, date, doc_rel) for g in grants]
+        events += [_card_event(run, m, identity, at, doc_rel) for m in moves]
     record = {"next_move": move_out, "repo": repo, "checkpoint": checkpoint, "open_after": open_after,
               "cards_after": cards, "pointer": pointer, "events": events, "writes": [],
               "block": {"heading": heading, "text": "\n".join(block) + "\n", "line": None}}
+    record["card_moves"] = moves
     if common.report_only(run):
         common.write_text(run, "planned-doc.md", planned)
         common.write(run, "events.json", events)
@@ -187,7 +278,9 @@ def handler(ctx, args):
                                      events=events, pointer=pointer))
     receipt = {"receipt_version": 1, "run_id": run.checkpoint["run_id"], "doc": doc_path,
                "doc_sha256_before": view["sha256"], "log": None, "log_sha256_before": None,
-               "expect_head": photo["records"]["head"], "events": events, "appended": None, "doc_written": False}
+               "expect_head": photo["records"]["head"], "events": events, "card_moves": moves,
+               "doc_sha256_carded": fsio.sha256_bytes(carded.encode("utf-8")), "appended": None,
+               "doc_written": False}
     writes = []
     grant_lines = []
     if events:
@@ -213,10 +306,12 @@ def handler(ctx, args):
         grant_lines = [g.rstrip("\r\n") for g in rendered.get("grants") or []]
     else:
         common.write(run, "receipt.json", receipt)
-    final, inserted = docmod.plan(text, block, grant_lines)
-    why = _check_plan(text, final, inserted, earlier, heading)
+    final, inserted = docmod.plan(carded, block, grant_lines)
+    why = _check_plan(carded, final, inserted, earlier, heading)
     if why is None and sum(1 for i in inserted if _bare(final, i) in grant_lines) < len(grant_lines):
         why = "the final plan does not hold every rendered grant line"
+    if why is None and imported:
+        why = docmod.levelling_problem(final, inserted, imported)
     if why is None and fsio.sha256_file(doc_path) != view["sha256"]:
         why = "the build doc changed while the events were appended"
     if why:

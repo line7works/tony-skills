@@ -1,18 +1,25 @@
 """Read-only git, run inside the workspace with a fixed environment (contract section 4, "The photograph").
 
 Every call is an argv list; a caller value is one argv item, never shell text. Every subcommand here reads:
-`rev-parse`, `symbolic-ref`, `rev-list`, `status`, `show`, `log`, `cat-file`. No command here changes a branch, an
-index or a worktree (the E15 lane contract A2, Q2): the checkpoint commit is the executor's named step, outside the
-script, and the script only reads the commit it finds afterwards (`tests/test_static.py` holds this).
+`rev-parse`, `symbolic-ref`, `rev-list`, `status`, `show`, `log`, `cat-file`, `diff`. No command here changes a
+branch, an index or a worktree (the E15 lane contract A2, Q2): the checkpoint commit is the executor's named step,
+outside the script, and the script only reads the commit it finds afterwards. `run` holds that at run time: a first
+argv item outside `READ_ONLY` is refused (`GitRefused`) before git starts, however the argv was built
+(`tests/test_static.py` plants one through a variable; the slice 1b check's C1B1-6).
 """
 import os
 import subprocess
 
 ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
+READ_ONLY = ("rev-parse", "symbolic-ref", "rev-list", "status", "show", "log", "cat-file", "diff")
 
 
 class GitFailed(RuntimeError):
     """A git command that failed; carries its argv tail and stderr."""
+
+
+class GitRefused(ValueError):
+    """A git argv whose subcommand is not a read this core makes: refused before git starts."""
 
 
 def _env():
@@ -23,6 +30,10 @@ def _env():
 
 
 def run(workspace, args, check=True):
+    args = list(args)
+    if not args or args[0] not in READ_ONLY:
+        raise GitRefused("git %r is not a read this core makes (%s); nothing ran"
+                         % (args[:1], ", ".join(READ_ONLY)))
     proc = subprocess.run(["git", "-C", workspace] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           env=_env())
     if check and proc.returncode != 0:
@@ -113,3 +124,10 @@ def parents(workspace, commit):
 
 def subject(workspace, commit):
     return text(workspace, ["log", "-1", "--format=%s", commit]).strip()
+
+
+def changed_between(workspace, old, new):
+    """Every path the commits from `old` to `new` change (`git diff --name-only --no-renames -z`), sorted: a rename
+    names both of its paths, as `dirt` does."""
+    raw = run(workspace, ["diff", "--name-only", "--no-renames", "-z", old, new]).stdout.decode("utf-8", "replace")
+    return sorted(set(part for part in raw.split("\0") if part))

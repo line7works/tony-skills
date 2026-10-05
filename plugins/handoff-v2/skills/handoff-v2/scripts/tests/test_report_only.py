@@ -34,7 +34,8 @@ class ReportOnly(unittest.TestCase):
         self.assertEqual(code, 0, (out, err))
         self.assertEqual(hlib.snapshot(ws), before)
         self.assertTrue(os.path.isfile(os.path.join(run_dir, "planned-doc.md")))
-        self.assertEqual([e["kind"] for e in testlib.load_json(os.path.join(run_dir, "events.json"))], ["waived"])
+        self.assertEqual([e["kind"] for e in testlib.load_json(os.path.join(run_dir, "events.json"))],
+                         ["waived", "card_set"], "the planned grant and the card it moves (A23 (2))")
         code, out, err = drive(["report", "--run-dir", run_dir, "--bottom-line", "Report only; nothing written."])
         self.assertEqual(code, 10, (out, err))
         self.assertTrue(out["report_only"])

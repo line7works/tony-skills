@@ -161,7 +161,8 @@ def handler(ctx, args):
                       "slug): ask the owner to name it, and run again with his name in station.feature; never "
                       "guessed" % doc, selection=selection)
     view = {"doc": doc, "sha256": fsio.sha256_bytes(data), "feature": feature, "identity_how": how, "notes": notes,
-            "slices": [{"name": s["name"], "line": s["line"], "status": s["status"], "depends": s["depends"],
+            "slices": [{"name": s["name"], "line": s["line"], "status": s["status"], "status_at": s["status_at"],
+                        "depends": s["depends"],
                         "questions": s["questions"]} for s in parsed.slices],
             "blocks": [{"date": b["date"], "line": b["line"], "text": docmod.block_text(parsed, b)}
                        for b in parsed.blocks],

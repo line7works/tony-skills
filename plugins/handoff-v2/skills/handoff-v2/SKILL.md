@@ -86,8 +86,9 @@ behalf, and never write around one.
 
 Write the answers file (kind `answers`): per question its id, `answered`, his words verbatim and the effect: `note`
 (lands in the block as question and answer), `waive` or `reopen` with the finding's id from the gate's output (the
-records event with his words and its dated ledger line), `next-slice` with the slice he named, or null when he holds
-the next move. Step 5's perishables go in the same file. Put in `asserts` what you believe of the photograph only if
+records event with his words and its dated ledger line, and the card update it carries), `next-slice` with the slice
+he named (one of the doc's slices that stands `not started` or `in progress`, whether or not the record listed it),
+or null when he holds the next move. Step 5's perishables go in the same file. Put in `asserts` what you believe of the photograph only if
 you want it checked.
 
 ```sh
@@ -121,9 +122,12 @@ uv run scripts/handoff.py write --run-dir <run dir>
 
 The script resolves the next move from the record: a clean boundary gives `/ship-v2 <slice> <doc>` (and `/build-v2`
 once, by hand); an open card gives the fix list, then `/recheck-v2`; a complete loop gives no kickoff line. It appends
-the grants through the records component, then writes one dated block at the tail of `## Handoffs` (created before
-`## Punch list` when missing), recording the checkpoint commit it finds. It stops, writing nothing, when anything
-moved since the photograph or an earlier block was edited.
+the grants through the records component, each with the card it moves (a `card_set` and the slice's `Status:` line,
+in the one transaction a card takes, all or none), then writes one dated block at the tail of `## Handoffs`
+(created before `## Punch list` when missing), recording the checkpoint commit it finds. It stops, writing nothing,
+when anything moved since the photograph, an earlier block was edited, the checkpoint commit carries more than the
+photographed dirt, a moved card's `Status:` line disagrees with the records, or the write would leave a doc the
+records component's next levelling pass refuses.
 
 **The memory pointer.** On Claude Code, the adapter's step: `python3 adapters/claude-code/pointer.py --run-dir <run
 dir> --memory-dir <this project's auto-memory folder>`. On Codex there is none: the block is the pointer, and the
@@ -144,7 +148,8 @@ thread is safe to clear. The skill never runs a clear, never starts the next sli
 2. **Nothing is written before the gate resolves.** An abandoned gate leaves the doc, the ledger and memory as found.
 3. **The record over the recollection.** Cards, open items and repo state come from the script's read, never yours.
 4. **The block is ledger, never spec.** Requirements live in the slices alone.
-5. **Additive only.** The sanctioned writes, exhaustively: the grant events and their lines, the one block, the
-   checkpoint commit (yours), the memory pointer (the Claude Code adapter's).
+5. **Additive only.** The sanctioned writes, exhaustively: the grant events and their lines, the card each grant
+   moves (its event and its `Status:` line), the one block, the checkpoint commit (yours), the memory pointer (the
+   Claude Code adapter's).
 6. **The git gates are the owner's.** Local checkpoint commits only; never push, open a pull request, or merge.
 7. **Report faithfully.** The kickoff line matches the record; an open card's fix list is never rounded up.

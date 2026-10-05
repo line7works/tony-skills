@@ -724,6 +724,10 @@
                   "card": {
                     "type": "string"
                   },
+                  "moved": {
+                    "type": "boolean",
+                    "description": "this run's grants moved the card: its card_set event and Status: line were written in the run's records transaction (the E15 lane contract A23 (2))"
+                  },
                   "after": {
                     "type": [
                       "string",

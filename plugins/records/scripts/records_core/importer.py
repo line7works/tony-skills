@@ -45,7 +45,13 @@ Readings this module takes where the contract left a choice; each is in the slic
   last `card_observed` in the log, or when the log holds none for it. A slice whose `Status:`
   line is gone appends nothing, and a pass whose only news is one flipped card appends
   `import_started`, that `card_observed`, and `import_finished`. RECORD lines keep section 11.7
-  exactly as written.
+  as the E15 lane contract A23 (1) widened it (`match_moved`, below).
+- E15 lane contract A23 (1): an imported RECORD line that only MOVED (its raw bytes unchanged and its
+  order among the imported lines unchanged, matched in order by `origin.raw` among the document's
+  record lines) is still the line an earlier pass imported, so a station that writes above the
+  punch list no longer makes every later import refuse the document. A changed, dropped or
+  reordered imported line still refuses (exit 7), and the tail rule is read where the imported
+  lines stand NOW.
 - E13 amendment A4: a record line that is byte-equal to what `render` produces for a NATIVE event
   this log already holds, and a `Status:` line whose text equals the last card a native `card_set`
   or `card_observed` holds for that slice, are ALREADY RECORDED. The pass counts them under
@@ -497,26 +503,43 @@ def split_already_recorded(units, natives, cards_seen, doc, findings=None):
     return kept, recognised
 
 
-def check_only_grown(seen, lines, doc, log_rel):
-    """Section 11.7: re-read every previously imported line and match its raw text and number.
+def match_moved(seen, lines, record_lines, doc, log_rel):
+    """Section 11.7, as the E15 lane contract A23 (1) widened it: {imported line: the line it stands on now}.
 
-    A line that changed or moved is exit 7 (`conflict`) naming the first such line; nothing is
-    written and the owner decides what happened.
+    `seen` is `previously_imported`'s {line: raw}; `record_lines` the 1-based numbers of the lines the
+    reader classifies as records now (cards excluded), in file order. When every imported line still
+    reads its raw text on its own number, nothing moved and each line stands where it was (the rule
+    as E12 built it). Otherwise the imported lines are matched IN ORDER by their raw text among the
+    record lines: each to the first record line below the previous match that reads it byte for
+    byte. A line that only moved (raw bytes unchanged, order among the imported lines unchanged) is
+    matched; a changed, dropped or reordered one is not, and that is exit 7 (`conflict`) naming the
+    first such imported line; nothing is written and the owner decides what happened.
     """
-    for line in sorted(seen):
-        raw = seen[line]
-        current = lines[line - 1] if 0 < line <= len(lines) else None
-        if current == raw:
-            continue
-        _fail(7, "conflict",
-              "line %d of %s was imported as %r and now reads %r; a document whose imported lines "
-              "changed or moved is not an append (section 11.7). Nothing was written."
-              % (line, doc, raw, current),
-              line=line, imported_raw=raw, current_raw=current, doc=doc, log=log_rel)
+    ordered = sorted(seen.items())
+    if all(0 < line <= len(lines) and lines[line - 1] == raw for line, raw in ordered):
+        return dict((line, line) for line, _ in ordered)
+    out, at = {}, 0
+    for line, raw in ordered:
+        position = at
+        while position < len(record_lines) and lines[record_lines[position] - 1] != raw:
+            position += 1
+        if position == len(record_lines):
+            current = lines[line - 1] if 0 < line <= len(lines) else None
+            _fail(7, "conflict",
+                  "line %d of %s was imported as %r and now reads %r, and no record line below the "
+                  "imported lines before it reads %r: a document whose imported lines changed or "
+                  "moved out of their order (changed, dropped or reordered) is not an append "
+                  "(section 11.7; a line that only moved is accepted, E15 A23). Nothing was written."
+                  % (line, doc, raw, current, raw),
+                  line=line, imported_raw=raw, current_raw=current, doc=doc, log=log_rel)
+        out[line] = record_lines[position]
+        at = position + 1
+    return out
 
 
-def high_water_line(existing_events, doc):
-    """The highest line of `doc` an earlier pass imported as a RECORD, or None.
+def high_water_line(existing_events, doc, moved=None):
+    """The highest line of `doc` an earlier pass imported as a RECORD, or None; with `moved`
+    (`match_moved`'s answer, E15 A23 (1)), the highest line those records stand on now.
 
     A `card_observed` is left out in both directions: a `Status:` line sits above every record of
     its document and would make the mark useless, and a `Status:` line that appears or moves is
@@ -531,6 +554,8 @@ def high_water_line(existing_events, doc):
         if origin.get("doc") != doc or event.get("kind") == "card_observed":
             continue
         line = origin.get("line")
+        if isinstance(line, int) and moved is not None:
+            line = moved.get(line, line)
         if isinstance(line, int) and (highest is None or line > highest):
             highest = line
     return highest
@@ -539,9 +564,10 @@ def high_water_line(existing_events, doc):
 def check_only_grew_at_the_tail(units, highest, doc, log_rel):
     """Section 11.7 and E12-4: a record that appeared ABOVE the imported tail is not an append.
 
-    `check_only_grown` proves the lines an earlier pass read are still where they were and still
-    say what they said. It cannot see a record written into the gap above them, which would land
-    in the log after records that sit below it in the file, and file order is time order (E12-4).
+    `match_moved` proves the lines an earlier pass read still say what they said, in their order,
+    on the lines they stand on now (E15 A23 (1)). It cannot see a record written into the gap above
+    them, which would land in the log after records that sit below it in the file, and file order
+    is time order (E12-4).
     A new record line below the mark is therefore exit 7 (`conflict`) naming the first one;
     nothing is written and the owner decides what happened.
 
@@ -573,14 +599,17 @@ class Finding(object):
         self.claim_key = claim_key
 
 
-def findings_from_log(events, doc):
-    """The findings an earlier pass of this importer already raised for this document."""
+def findings_from_log(events, doc, moved=None):
+    """The findings an earlier pass of this importer already raised for this document; with `moved`
+    (`match_moved`'s answer, E15 A23 (1)), each named at the line its raise stands on now."""
     out = []
     for event in events:
         if event.get("kind") not in events_mod.RAISE_KINDS:
             continue
         origin = event.get("origin")
         line_no = origin.get("line") if isinstance(origin, dict) else None
+        if isinstance(line_no, int) and moved is not None:
+            line_no = moved.get(line_no, line_no)
         # Amendment A9 (2): the join key is the CLAIM key. A finding with no claim has an
         # empty one, so a recheck line whose claim happens to repeat that finding's scenario
         # text no longer joins to it as `exact`; section 7 still builds the ID from the
@@ -670,14 +699,17 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     existing_events = list(existing_events or [])
     log_rel = events_mod.log_relpath(doc)
     seen = previously_imported(existing_events, doc)
-    check_only_grown(seen, lines, doc, log_rel)
+    every_unit = units_of(parsed, doc)
+    moved = match_moved(seen, lines, [u.line_no for u in every_unit if u.kind != "card"], doc,
+                        log_rel)
+    standing = set(moved.values())
     blame = blame_commits(workspace, doc)
     cards_seen = last_card_values(existing_events, doc)
-    units = [u for u in units_of(parsed, doc) if u.line_no not in seen]
+    units = [u for u in every_unit if u.line_no not in standing]
     units, native_rendered = split_already_recorded(
         units, native_lines(doc, existing_events), cards_seen, doc,
-        findings_from_log(existing_events, doc))
-    check_only_grew_at_the_tail(units, high_water_line(existing_events, doc), doc, log_rel)
+        findings_from_log(existing_events, doc, moved))
+    check_only_grew_at_the_tail(units, high_water_line(existing_events, doc, moved), doc, log_rel)
     try:
         answers = answers_by_line(resolutions)
     except events_mod.RecordsError as exc:
@@ -690,7 +722,7 @@ def plan_import(workspace, doc, resolutions=None, now=None, existing_events=None
     ambiguities = []
     out = []
     counts = {}
-    candidates = findings_from_log(existing_events, doc)
+    candidates = findings_from_log(existing_events, doc, moved)
     by_id = dict((f.id, f) for f in candidates)
     run_id = run_id_for(doc, moment)
     actor = {"station": STATION, "run_id": run_id, "harness": None}

@@ -12,15 +12,21 @@ A10 and A11's exact labels, A12's plain structure, A16's character list, A18's s
 marks). Any problem it names stops the run before any write, naming the line. `templates.parse` decides nothing
 here. On a doc those rules accept, this module then reads, outside accepted fences only:
 
-- the sections: every `## ` line (a plain level-2 heading); `## Handoffs` and `## Punch list` by their exact
-  names, at most one of each (a second is refused, named);
+- the sections: every `## ` line (a plain level-2 heading) opens one, which runs to the next plain level 1 or
+  level 2 heading outside an accepted fence (the way vertical-v2's spec ends a withheld section; the slice 1b
+  check's C1B1-3), so a `# Appendix` after the ledger is no part of it; `## Handoffs` and `## Punch list` by their
+  exact names, at most one of each (a second is refused, named);
 - the slices: `fences.read`'s slices (the build-doc form's `## Slice <name> <dash> <short>` heading and its one
-  exact `Status:` label), each section running to the next `## ` line;
+  exact `Status:` label), each running to its section's end;
 - in each slice's section, this core's own two labels, read the plain way A12 reads a label: a line that, after
   any prefix (indent, list-item or block-quote markers) and any leading listed mark, folds (`fences.fold`) to
   `depends on` or `questions`, spaces or tabs, then a colon, is read only when it starts at column 0 with exactly
   `Depends on:` or `Questions:`; any other such line in a slice's section is refused, named; a second
-  `Depends on:` line in one slice is refused, named;
+  `Depends on:` line in one slice is refused, named; a `Questions:` line whose value is empty, `none` or
+  `nothing` followed by a list item in its paragraph (or, when empty, by a list as the next thing in the slice)
+  is refused, named: each open question goes on its own `Questions:` line (C1B1-4); and either label that starts
+  inside an inline HTML comment its paragraph opened earlier (`<!--` with no `-->` yet), or sits in a paragraph
+  holding a link reference definition, is refused, named, since CommonMark hides it there (C1B1-9);
 - the handoff blocks: a line reading exactly `### <YYYY-MM-DD> <dash> handoff` (the dash `forms.D`, one constant)
   opens a block, which runs to the next level 1, 2 or 3 heading or the doc's end; a block in any section other
   than `## Handoffs` is reported (`Doc.misplaced`), never moved;
@@ -32,7 +38,18 @@ last non-blank line, one blank line before it and, when a non-blank line follows
 `## Handoffs` is created right before `## Punch list`, or at the doc's end when the doc has neither. The rendered
 grant lines go directly after the last non-blank line of the ledger home: the section holding the latest-dated
 record block (a date tie: the later in the file), else `## Punch list`, else a `## Punch list` created at the doc's
-end. Every other line keeps its bytes and its order; the caller holds the plan to that (`additive`).
+end. Every other line keeps its bytes and its order; the caller holds the plan to that (`additive`). A record block
+outside every named section (at the doc's top, or under a level 1 heading) is homed in the run of lines between the
+plain level 1 or level 2 headings around it.
+
+THE CARD (the E15 lane contract A23 (2); `set_statuses`). A grant that moves a slice's card rewrites that slice's
+one exact `Status:` line to the new card, keeping the line's prefix, trailing spaces and ending: the one line this
+core edits, in the same transaction as the `card_set` event (`write.py`).
+
+THE TAIL RULE (A23 (1); `levelling_problem`). The records component accepts an imported record line that only
+moved (its raw bytes and its order among the imported lines unchanged, matched in order by its raw text). A
+planned doc keeps every imported record line, in order, and adds no line byte-equal to one, or the write is
+refused before anything is written.
 """
 import re
 import unicodedata
@@ -47,6 +64,10 @@ BLOCK = re.compile(r"^### (\d{4}-\d{2}-\d{2}) %s handoff$" % D)
 RECORD = re.compile(r"^### (\d{4}-\d{2}-\d{2}) %s (review|recheck): " % D)
 UPPER_HEADING = re.compile(r"^#{1,3} ")
 OWN = re.compile(r"(depends[ \t]+on|questions)[ \t]*:")
+TOP = re.compile(r"^#{1,2} ")
+LIST_ITEM = re.compile(r"^[ \t]*(?:[-+*]|\d{1,9}[.)])(?:[ \t]|$)")
+LINK_REFERENCE = re.compile(r"^ {0,3}\[[^\]]*\]:")
+NO_QUESTION = ("", "none", "nothing")
 OWN_EXACT = {"depends on": "Depends on:", "questions": "Questions:"}
 DATED = re.compile(r"^docs/plans/\d{4}-\d{2}-\d{2}-(.+)\.md$")
 FLAT = re.compile(r"^docs/([^/]+)-build-plan\.md$")
@@ -73,24 +94,96 @@ def _blank(line):
     return not line.strip(" \t")
 
 
+def _tops(lines, fenced):
+    """The 1-based numbers of every plain level 1 or level 2 heading outside an accepted fence."""
+    return [number for number, line in enumerate(lines, 1) if number not in fenced and TOP.match(line)]
+
+
 def _sections(lines, fenced):
+    """Every `## ` section, each running to the next plain level 1 or level 2 heading outside an accepted fence, or
+    the doc's end (C1B1-3)."""
+    tops = _tops(lines, fenced)
     out = []
-    for number, line in enumerate(lines, 1):
-        if number in fenced or not line.startswith(SECTION):
-            continue
-        out.append({"name": line.rstrip(" \t"), "line": number, "end": None})
-    for index, section in enumerate(out):
-        section["end"] = out[index + 1]["line"] if index + 1 < len(out) else len(lines) + 1
+    for index, number in enumerate(tops):
+        if lines[number - 1].startswith(SECTION):
+            end = tops[index + 1] if index + 1 < len(tops) else len(lines) + 1
+            out.append({"name": lines[number - 1].rstrip(" \t"), "line": number, "end": end})
     return out
 
 
 def _section_of(sections, number):
-    """The index of the `## ` section holding 1-based line `number`, or -1 before the first."""
-    found = -1
+    """The index of the `## ` section holding 1-based line `number`, or -1 when no section holds it (before the
+    first, or under a level 1 heading after a section's end)."""
     for index, section in enumerate(sections):
-        if section["line"] <= number:
-            found = index
-    return found
+        if section["line"] <= number < section["end"]:
+            return index
+    return -1
+
+
+def _paragraph(lines, fenced, number, first, last):
+    """(start, end) 1-based inclusive of the paragraph holding line `number` within [first, last]: the run of
+    non-blank lines outside accepted fences around it, a heading ending it."""
+    def inside(n):
+        if n < first or n > last or n in fenced:
+            return False
+        line = lines[n - 1]
+        return not _blank(line) and not fences.ATX_HEADING.match(line)
+    start = end = number
+    while inside(start - 1):
+        start -= 1
+    while inside(end + 1):
+        end += 1
+    return start, end
+
+
+def _comment_open_at(lines, start, number):
+    """The 1-based line where an inline HTML comment still open at the start of line `number` opened, scanning the
+    paragraph's lines from `start` (a `<!--` with no `-->` after it before that line), or None."""
+    inside = None
+    for other in range(start, number):
+        line, at = lines[other - 1], 0
+        while True:
+            if inside is None:
+                found = line.find("<!--", at)
+                if found < 0:
+                    break
+                inside, at = other, found + 4
+            else:
+                found = line.find("-->", at)
+                if found < 0:
+                    break
+                inside, at = None, found + 3
+    return inside
+
+
+def _own_label_problem(lines, fenced, number, exact, value, first, last):
+    """C1B1-4 and C1B1-9 for one of this core's labels at line `number` of a slice section [first, last]. C1B1-9 is
+    read as the check meant it, hiding: the label starts inside an inline HTML comment its paragraph opened earlier
+    (a `<!--` not yet closed by `-->`), or its paragraph holds a link reference definition. A comment opened and
+    closed before the label hides nothing, and stops nothing (one of the 25 real plans holds one beside a label)."""
+    start, end = _paragraph(lines, fenced, number, first, last)
+    opened = _comment_open_at(lines, start, number)
+    linked = [other for other in range(start, end + 1) if LINK_REFERENCE.match(lines[other - 1])]
+    for other, hiding in ([(opened, "`<!--` (an inline HTML comment still open at the label)")] if opened else []) + \
+            [(n, "a link reference definition") for n in linked[:1]]:
+        if hiding is not None:
+            return ("a `%s` line in a paragraph that also holds %s (line %d): CommonMark may hide the label inside "
+                    "an inline HTML comment or a link reference definition's title, so handoff-v2 does not read it; "
+                    "put the label in a paragraph of its own (the slice 1b check's C1B1-9)" % (exact, hiding, other))
+    if exact != OWN_EXACT["questions"] or value.casefold() not in NO_QUESTION:
+        return None
+    listed = [other for other in range(number + 1, end + 1) if LIST_ITEM.match(lines[other - 1])]
+    if not listed and not value:
+        after = number + 1
+        while after <= last and (after in fenced or _blank(lines[after - 1])):
+            after += 1
+        if after <= last and after > end and after not in fenced and LIST_ITEM.match(lines[after - 1]):
+            listed = [after]
+    if listed:
+        return ("a `Questions:` line with no question on it (%r) followed by a list (line %d): write each open "
+                "question on its own `Questions:` line, since handoff-v2 reads one question per line and would read "
+                "this one as none (the slice 1b check's C1B1-4)" % (lines[number - 1], listed[0]))
+    return None
 
 
 def read(text):
@@ -104,6 +197,7 @@ def read(text):
     sections = _sections(lines, fenced)
     doc = Doc()
     doc.raw, doc.lines, doc.fenced, doc.sections = lines_raw, lines, fenced, sections
+    doc.tops = _tops(lines, fenced)
     doc.handoffs = doc.punch = None
     for index, section in enumerate(sections):
         for name, attr in ((HANDOFFS, "handoffs"), (PUNCH, "punch")):
@@ -117,6 +211,7 @@ def read(text):
     for item in found.slices:
         index = _section_of(sections, item["line"])
         row = dict(item, end=sections[index]["end"], depends=None, depends_at=None, questions=[])
+        last = row["end"] - 1
         for number in range(item["line"] + 1, row["end"]):
             if number in fenced:
                 continue
@@ -130,6 +225,9 @@ def read(text):
             if at != 0 or not line.startswith(exact):
                 raise DocUnreadable(number, OFF_OWN % (exact, exact))
             value = line[len(exact):].strip(" \t")
+            problem = _own_label_problem(lines, fenced, number, exact, value, item["line"] + 1, last)
+            if problem is not None:
+                raise DocUnreadable(number, problem)
             if key == "depends on":
                 if row["depends_at"] is not None:
                     raise DocUnreadable(number, "a second `Depends on:` line in slice %s (the first is line %d)"
@@ -277,12 +375,61 @@ def home(doc):
         latest = max(doc.records, key=lambda r: (r["date"], r["line"]))
         index = latest["section"]
         if index < 0:
-            return 0, (doc.sections[0]["line"] - 1 if doc.sections else len(doc.raw))
+            return _region(doc, latest["line"])
         section = doc.sections[index]
         return section["line"] - 1, section["end"] - 1
     if doc.punch is not None:
         section = doc.sections[doc.punch]
         return section["line"] - 1, section["end"] - 1
+    return None
+
+
+def _region(doc, number):
+    """(start, end) 0-based of the run of lines holding 1-based line `number` between the plain level 1 or level 2
+    headings around it (the doc's top or end where there is none)."""
+    before = [top for top in doc.tops if top <= number]
+    after = [top for top in doc.tops if top > number]
+    return (before[-1] - 1 if before else 0), (after[0] - 1 if after else len(doc.raw))
+
+
+def set_statuses(text, changes):
+    """The text with each slice's one exact `Status:` line set to its new card, every other byte kept: `changes` is
+    [(1-based line, the card the line reads, the new card)]. A line that does not read exactly `Status: <the card>`
+    raises ValueError (A23 (2): the card moves only from the card the line and the records agree on)."""
+    raw = fences.split_lines(text)
+    for number, before, after in changes:
+        if not 0 < number <= len(raw):
+            raise ValueError("line %d is not a line of the doc" % number)
+        line = raw[number - 1]
+        bare = fences.bare(line, number)
+        match = fences.STATUS_EXACT.match(bare)
+        if match is None or match.group(1) != before:
+            raise ValueError("line %d reads %r, not `Status: %s`" % (number, bare, before))
+        ending = line[len(line.rstrip("\r\n")):]
+        raw[number - 1] = "Status: %s%s%s" % (after, bare[match.end(1):], ending)
+    return "".join(raw)
+
+
+def levelling_problem(text, inserted, imported):
+    """Why the planned `text` would leave a doc the records component's widened section 11.7 refuses, or None (A23
+    (1)). `imported` is [(line, raw)] of every record line the log imported from the doc; `inserted` the 0-based
+    indexes of the lines the plan adds. The importer matches the imported lines in order by their raw text, so the
+    plan adds no line byte-equal to one (it would take that line's place), and every one still stands in the doc,
+    in its order."""
+    raws = set(raw.rstrip("\r") for _, raw in imported)
+    lines = fences.split_lines(text)
+    for index in sorted(inserted):
+        if index < len(lines) and fences.bare(lines[index]) in raws:
+            return ("the write would add line %d, byte-equal to a record line the log imported, and the importer "
+                    "matches imported lines by their bytes, in order (records section 11.7)" % (index + 1))
+    rows, at = text.split("\n"), 0
+    for line, raw in sorted(imported):
+        while at < len(rows) and rows[at] != raw:
+            at += 1
+        if at == len(rows):
+            return ("the record line the log imported from line %d (%r) would not stand in the doc in its order "
+                    "(records section 11.7)" % (line, raw))
+        at += 1
     return None
 
 

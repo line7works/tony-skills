@@ -2,7 +2,8 @@
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a state. Written
 for E15 slice 1, hand-back 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 9 and 12,
-amendments A1, A2 and A22) and the control room's readings CR-11 to CR-17 in the slice 1b brief. Where this document
+amendments A1, A2, A22 and A23) and the control room's readings CR-11 to CR-17 in the slice 1b brief, as slice 1b's
+fix round 1 amended them (A23, and the check's C1B1-3 to C1B1-9). Where this document
 and that contract differ, the contract is the authority and this document is the defect. `references/back-loop.md`
 is the discipline the three back cores share; this document is this core's own.
 
@@ -25,7 +26,8 @@ whose words they are.
 Kept from v1 (ruling E15-1): photograph, never gate (open cards change the output, never stop the run); the question
 gate as the one pause, its four sources, one batch, and nothing written while any question is unanswered; the record
 over the recollection; the dated `WAIVED (per user)` and `REOPENED (per user)` lines for an answer that waives or
-reopens, placed at the ledger home's tail; one additive block per run at the tail of `## Handoffs`, created before
+reopens, placed at the ledger home's tail, with the card update they carry (v1's step 4, restored by A23 (2)); one
+additive block per run at the tail of `## Handoffs`, created before
 `## Punch list` when missing; the three shapes of the next move; the checkpoint commit, local only; the memory
 pointer, one per feature, overwritten each run; the feature identity derived one way; the `HANDOFF:` block and the
 gate-open form; report and stop.
@@ -33,7 +35,9 @@ gate-open form; report and stop.
 What moved: the deterministic half is a script; the photograph is the script's read, never the executor's (CR-11),
 and an answer that asserts a photograph fact the read contradicts is refused; the cards and the open set come from the
 records component's `state` (ruling E15-9); a waiver or a reopening is a records event written through
-`records.py append`, its line the one the component renders (`render`); the checkpoint commit is the executor's named
+`records.py append`, its line the one the component renders (`render`), and a card it moves is a `card_set` event
+and its `Status:` line in the same records transaction build-v2 uses for a card (A23 (2)); the checkpoint commit is
+the executor's named
 step outside the script, and the script records the commit it finds (A2, Q2); the memory pointer is the Claude Code
 adapter's step and is absent on Codex (A2, Q3); the vault tier of v1's hunt is dropped (A2, Q4); the kickoff lines
 name the v2 stations (A2, Q5); every line read from the doc goes through vertical-v2's line rules (A22 (1), CR-17).
@@ -111,7 +115,9 @@ optionally, `asserts` (what the executor believes of the photograph). In order:
    question answered twice; a `next-slice` effect on any question but `r-next`, or any other effect on it; a waiver or
    reopening on a record question; a waiver of a finding the log holds neither `open` nor `fixed`, a reopening of one
    it holds neither `waived` nor `fixed` (the component's admissions), two grants on one finding; a `next-slice`
-   answer naming no candidate; words, a perishable that cannot land (section 6); and a set of answers whose grants
+   answer naming no slice of the doc that can start (the slice must be the doc's and stand `not started` or `in
+   progress`, a candidate of the record or not: a chain the record cannot read leaves the owner's word the only way
+   to name it, the slice 1b check's C1B1-5); words, a perishable that cannot land (section 6); and a set of answers whose grants
    leave the next move unresolved (section 7) with no answer to `r-next`: the refusal names the candidates, and the
    corrected file carries the owner's answer as `r-next` even when the gate did not ask it.
 2. **Any question unanswered**, some or all: the run ends (exit 10, `gate-open`) with nothing written anywhere (the
@@ -157,11 +163,17 @@ the run before any write, naming the line (`doc-unreadable`). The second, Common
 and is not part of this rule (A22 names the line rules). `templates.parse` decides nothing here.
 
 On a doc those rules accept, `scripts/handoff_core/doc.py` reads, outside accepted fences only: the sections (every
-`## ` line), `## Handoffs` and `## Punch list` by their exact names (a second of either stops, naming it); the slices
-(the line rules' slices, each section running to the next `## ` line); this core's own two labels in each slice's
-section, read the plain way A12 reads a label (a line that, after any prefix and any leading listed mark, folds to
-`depends on` or `questions`, spaces or tabs, then a colon, is read only when it starts at column 0 with exactly
-`Depends on:` or `Questions:`; any other such line stops, named; a second `Depends on:` in one slice stops, named);
+`## ` line opens one, which runs to the next plain level 1 or level 2 heading outside an accepted fence, the way
+vertical-v2's spec ends a withheld section, so a `# Appendix` after the ledger is no part of it: the slice 1b check's
+C1B1-3), `## Handoffs` and `## Punch list` by their exact names (a second of either stops, naming it); the slices
+(the line rules' slices, each running to its section's end); this core's own two labels in each slice's section,
+read the plain way A12 reads a label (a line that, after any prefix and any leading listed mark, folds to `depends
+on` or `questions`, spaces or tabs, then a colon, is read only when it starts at column 0 with exactly `Depends on:`
+or `Questions:`; any other such line stops, named; a second `Depends on:` in one slice stops, named; a `Questions:`
+line whose value is empty, `none` or `nothing` followed by a list item in its paragraph, or an empty one whose next
+non-blank line in the slice is a list item, stops, named, since each open question goes on its own `Questions:`
+line, C1B1-4; either label in a paragraph that also holds `<!--` or a link reference definition stops, named, since
+CommonMark may hide the label there, C1B1-9);
 the handoff blocks (a line reading exactly `### <YYYY-MM-DD> <dash> handoff`, running to the next level 1 to 3
 heading or the doc's end); the record blocks (`### <YYYY-MM-DD> <dash> review: ` or `recheck: `). `<dash>` is U+2014,
 the constant `forms.D` (section 8).
@@ -171,27 +183,44 @@ rules stop 4, the same 4 vertical-v2's line rules stop, and this core's own read
 
 ## 6. The sanctioned writes
 
-CR-13, exhaustively. Nothing else is ever written: no earlier block, no punch-list history, no `Status:` line, no card
-event (ruling E15-9: handoff writes only the `waived` and `reopened` events its answers carry).
+CR-13, exhaustively. Nothing else is ever written: no earlier block, no punch-list history, no `Status:` line but a
+card this run's grants moved, no event but the grants and their card moves (ruling E15-9 as A23 (2) amends it for
+handoff-v2: for each grant the `waived` or `reopened` event and, when the slice's card changes by v1's rule after the
+grants, a `card_set` event and its `Status:` line, in the same records transaction build-v2 uses for a card, all or
+none).
 
 **Before any write**, each a stop with nothing written: every handoff block `select` read is still there byte for byte
 (`block-edited`); the doc still holds the bytes `select` read (`photograph-moved`); the branch is the photographed one
-and HEAD is the photographed commit or exactly one commit on it whose subject starts `handoff checkpoint` (else
-`photograph-moved`); the records log's head is the photographed one (`photograph-moved`); the block renders, and the
-doc planned with the block alone reads cleanly by the line rules, holds every earlier block unchanged and exactly one
-more, under `## Handoffs` and last there, and differs from the doc only by the inserted lines (`write-refused`).
+and HEAD is the photographed commit or exactly one commit on it whose subject starts `handoff checkpoint`, taken on
+a tree the photograph saw dirty and changing only paths it saw dirty (`git diff --name-only`, read-only; the slice 1b
+check's C1B1-8) (else `photograph-moved`, naming the extra paths); the records log's head is the photographed one
+(`photograph-moved`); every card move (section 7) starts from the card the records and its `Status:` line agree on,
+on a slice that has one (`write-refused`); the block renders, and the doc planned with the card moves and the block
+reads cleanly by the line rules, holds every earlier block unchanged and exactly one more, under `## Handoffs` and
+last there, and differs from the doc only by the inserted lines and the moved `Status:` lines (`write-refused`); and
+the records' tail rule (A23 (1)): when the log holds record lines it imported from the doc (`events`, legacy
+origin), the component's `import-legacy --dry-run`, which writes nothing and takes no lock, must not refuse the doc as
+it stands with a conflict (exit 7), and the planned doc must keep every imported line in its order and add no line
+byte-equal to one (`doc.levelling_problem`), or the run stops `write-refused` with nothing written: a write that would
+leave a doc the widened section 11.7 still refuses is never made.
 
 **Text that lands** in the doc (a question, an answer's words, a perishable) is one non-blank line, without the line
 form's separator ` · `, every character on vertical-v2's character list, so the doc stays readable by the line rules.
 
 **The writes, in order**, each in `receipt.json` and the result with its hash before and after:
 
-1. **The grants** (CR-13 (1)): one `waived` (with the finding's severity, `verified_source` the workspace identity
-   the component computes now, `join_basis` null) or `reopened` event per waiver or reopening, each with the owner's
-   words, `grant_date` the run's date, `actor` this station, this run's id and the harness, appended all or none by
-   `records.py append` against the photographed head (a refusal stops, `records-refused`: the component writes
-   nothing). Their lines are the ones `records.py render --run-id <run id>` returns for this run.
-2. **The doc, once** (CR-13 (1) and (2)): the rendered grant lines directly after the last non-blank line of the
+1. **The grants and their card moves** (CR-13 (1), A23 (2)), the one records transaction build-v2 uses for a card
+   (its contract sections 9 and 10): the whole plan in `receipt.json` first (the events, the card moves, the doc's
+   hash before and with the moves set), then one `waived` (with the finding's severity, `verified_source` the
+   workspace identity the component computes now, `join_basis` null) or `reopened` event per waiver or reopening,
+   each with the owner's words, `grant_date` the run's date, `actor` this station, this run's id and the harness,
+   and after them one `card_set` per card move (`slice`, `before`, `after`, `source` that identity, build-v2's
+   event shape), ALL in one `records.py append` against the photographed head, all or none (a refusal stops,
+   `records-refused`: the component writes nothing and the doc is not written, so both stay byte-equal); the
+   outcome in the receipt. The grant lines are the ones `records.py render --run-id <run id>` returns for this run
+   (a `card_set` renders no line).
+2. **The doc, once** (CR-13 (1) and (2)): each moved card's `Status:` line set to the new card (its prefix, trailing
+   spaces and ending kept), the rendered grant lines directly after the last non-blank line of the
    ledger home (the section holding the latest-dated record block, a date tie going to the later in the file; else
    `## Punch list`; else a `## Punch list` created at the doc's end), and the block at the tail of `## Handoffs` (after
    its last non-blank line, a blank line before it and, when a non-blank line follows, one after it), created right
@@ -208,8 +237,9 @@ A report-only run plans and checks everything, leaves `planned-doc.md` (the bloc
 component's and only a real append renders them), `events.json` and `pointer.json` (`for_adapter` false) in the run
 directory, and writes nothing else.
 
-**The block** is the script's render of its own reads (CR-11): `- Next:` (section 7), `- Cards:` (each slice's card,
-and the card after this run's grants where it differs), `- Open:` (one line per finding open after the grants, or
+**The block** is the script's render of its own reads (CR-11): `- Next:` (section 7), `- Cards:` (each slice's card:
+a card this run's grants moved reads as the new card, naming the one it moved from; otherwise the card, and the card
+after this run's grants where the records derive another), `- Open:` (one line per finding open after the grants, or
 `none`), `- Repo:` (branch, commits ahead of the default branch, `clean`, `checkpointed <commit>` or `dirty (N paths)`,
 read at `write`), `- Suite:`, then `- Question:` (question, answer, where it landed) per answer that lands in the block,
 and `- Perishable:` per perishable. No line comes from the answer but the questions, the answers and the perishables.
@@ -218,8 +248,9 @@ and `- Perishable:` per perishable. No line comes from the answer but the questi
 
 CR-14, `scripts/handoff_core/nextmove.py`, resolved from the record after this run's grants.
 
-**The card after the grants** (v1's update rule, which the component's `card_derived` implements; reported, never
-written): where the log names the slice, a verdict card (`rejected`, `signed off with conditions`, `signed off`) takes
+**The card after the grants** (v1's update rule, which the component's `card_derived` implements; for a slice a grant
+of this run names, written as section 6 says, A23 (2); for any other slice, reported only): where the log names the
+slice, a verdict card (`rejected`, `signed off with conditions`, `signed off`) takes
 the card its open findings give, waived ones excluded (a BLOCKER open: `rejected`; else a MAJOR: `signed off with
 conditions`; else `signed off`); any other card is kept (a rebuilt slice never takes a verdict from a grant). A
 `Status:` line the log never saw is the card as written. **The candidates**: the slices whose card is `not started` or
@@ -231,7 +262,8 @@ slice no candidate).
 BLOCKER or MAJOR open: the fix list (every open BLOCKER and MAJOR), then `/recheck-v2 <slice> <doc>` per such slice,
 no kickoff line; (2) **loop complete**, the doc holds slices and every one stands `signed off`: no kickoff line, the
 next move the owner's; (3) **the owner's answer** to `r-next`: a slice gives a clean boundary on it (never a slice the
-doc does not hold), null gives **owner holds**, no kickoff line; (4) **clean boundary**, the just-finished slice
+doc does not hold; `record-answer` takes only one that stands `not started` or `in progress`, and the block's `Next:`
+line and the result's `how` say the slice came from the owner's words), null gives **owner holds**, no kickoff line; (4) **clean boundary**, the just-finished slice
 stands `signed off` (or no slice has started) and exactly one candidate exists: the kickoff `/ship-v2 <slice> <doc>`
 and, stated once, the by-hand alternative `/build-v2 <slice> <doc>`; (5) otherwise unresolved, which never reaches
 `write` (section 3.4). Never `/ship-v2` of a slice that does not exist.
@@ -271,9 +303,11 @@ grants (with the component's `card_derived` beside each, read after the append),
 
 Reached through the resolver snippet and the CLI only (`station_core/records_client.py`, `records_link.py`), confirmed
 at `interface_version` 2; exit 3 when missing or at another version. Read: `state` and `verify` (the photograph),
-`identity` (a waiver's source), `render` (the grant lines). Written: `append` of the `waived` and `reopened` events
-alone (ruling E15-9). Never `import-legacy`: levelling the log is not a sanctioned write here, so a doc whose
-hand-written records the log does not hold is photographed as the log holds it. Never a log file opened.
+`identity` (the source of a waiver and a card move), `render` (the grant lines), `events` and `import-legacy
+--dry-run` (the A23 (1) guard, section 6; a dry run writes nothing and takes no lock). Written: one `append` of the
+`waived` and `reopened` events and the `card_set` events they carry (ruling E15-9 as A23 (2) amends it). Never a
+levelling pass: a doc whose hand-written records the log does not hold is photographed as the log holds it. Never a
+log file opened.
 
 ## 11. The harness seams
 
@@ -304,8 +338,8 @@ The exits are the back loop's: 0, 1, 2, 3, 4, 5, 10 (back-loop section 2). A sto
 | `slice-unknown` | photograph | the input names a finished slice the doc does not hold |
 | `records-refused` | photograph, write | the records component refused a call, its sentence carried (shared tag) |
 | `gate-open` | record-answer | a question unanswered: nothing written, the gate-open form |
-| `photograph-moved` | photograph, write | the doc, git or the log moved since it was read |
-| `write-refused` | write | the plan does not hold (section 6) |
+| `photograph-moved` | photograph, write | the doc, git or the log moved since it was read, or the checkpoint commit is not the photographed dirt |
+| `write-refused` | write | the plan does not hold, a card cannot move from the card the records and the line agree on, or the write would leave a doc the records' tail rule refuses (section 6) |
 
 `phase-not-built` and `station-refused` are the frame's shared tags; this core uses neither.
 
@@ -320,7 +354,8 @@ T1 no v1 import (lane contract section 12), each with a case where nothing is pl
 Run a test suite; run a git command that changes a branch, an index or a worktree (`scripts/tests/test_static.py`);
 commit, push, open a pull request or merge; invoke a station or summon a reader; write a trace; write outside the
 workspace and the run directory (the pointer is the adapter's); edit an earlier block, the punch-list history or a
-`Status:` line; write a card event or import the doc into the log; answer a gate question; read a v1 skill's files.
+`Status:` line other than a card this run's grants moved; write a card event other than a grant's card move, or
+import the doc into the log; answer a gate question; read a v1 skill's files.
 
 ## 15. Interface
 

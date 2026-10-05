@@ -1,9 +1,11 @@
 """`write` (CR-13): the sanctioned writes, exhaustively, each alone on its fixture: (1) a `waived` or `reopened`
-event through `records.py append` with the owner's words and its rendered line placed at the ledger home's tail;
-(2) one block `### <date> <dash> handoff` at the tail of `## Handoffs`, created before `## Punch list` when
-missing; (3) the checkpoint commit, read and recorded, never made; (4) the pointer, carried as text for the Claude
-Code adapter. Nothing else, ever: an earlier block, the punch-list history and a `Status:` line are never edited,
-and every write has its hash before and after. An edited earlier block, a block outside `## Handoffs` and a record
+event through `records.py append` with the owner's words and its rendered line placed at the ledger home's tail,
+and, when the grant moves the slice's card by v1's rule, its `card_set` and `Status:` line in the same transaction
+(the E15 lane contract A23 (2); `test_card_with_grant.py` holds the rest); (2) one block `### <date> <dash>
+handoff` at the tail of `## Handoffs`, created before `## Punch list` when missing; (3) the checkpoint commit, read
+and recorded, never made; (4) the pointer, carried as text for the Claude Code adapter. Nothing else, ever: an
+earlier block, the punch-list history and any other `Status:` line are never edited, and every write has its hash
+before and after. An edited earlier block, a block outside `## Handoffs` and a record
 that moved since the photograph stop before any write.
 """
 import json
@@ -100,16 +102,20 @@ class TheSanctionedWrites(unittest.TestCase):
                       "effect": {"kind": "waive", "finding": "src/turnstile.py:2"}}])
         self.assertEqual(code, 0, (out, err))
         new = [e for e in hlib.events(ws) if e["actor"]["station"] == "handoff-v2"]
-        self.assertEqual([(e["kind"], e["words"], e["severity"]) for e in new],
+        self.assertEqual([(e["kind"], e["words"], e["severity"]) for e in new[:1]],
                          [("waived", "ship it, the double tap is rare", "MAJOR")])
-        self.assertEqual(hlib.events(ws)[-1], new[0])
+        self.assertEqual([(e["kind"], e["before"], e["after"]) for e in new[1:]],
+                         [("card_set", "signed off with conditions", "signed off")], "the card moves with the grant")
+        self.assertEqual(hlib.events(ws)[-2:], new)
         after_doc = hlib.read_doc(ws)
-        added = inserted(before_doc, after_doc)
+        added = inserted(before_doc.replace("Status: signed off with conditions\n", "Status: signed off\n", 1),
+                         after_doc)
         grant = [l for l in added if "WAIVED (per user)" in l]
         self.assertEqual(len(grant), 1)
         self.assertGreater(after_doc.index(grant[0]), after_doc.index("## Punch list"))
         self.assertIn('"ship it, the double tap is rare"', grant[0])
-        self.assertIn("Status: signed off with conditions\n", after_doc, "a Status: line is never edited")
+        self.assertNotIn("Status: signed off with conditions\n", after_doc, "the moved card's line is set (A23 (2))")
+        self.assertIn("Status: signed off\n", after_doc[after_doc.index("## Slice A"):after_doc.index("## Slice B")])
         kinds = [w["kind"] for w in out["writes"] if w["kind"] != "run_artifact"]
         self.assertEqual(kinds, ["records_log", "build_doc"])
 
@@ -128,8 +134,10 @@ class TheSanctionedWrites(unittest.TestCase):
             answers=[{"question": "q1", "answered": True, "words": "it came back on the bench",
                       "effect": {"kind": "reopen", "finding": waived}}])
         self.assertEqual(code, 0, (out, err))
-        self.assertEqual(hlib.events(ws)[-1]["kind"], "reopened")
-        added = inserted(before_doc, hlib.read_doc(ws))
+        self.assertEqual([(e["kind"], e.get("after")) for e in hlib.events(ws)[-2:]],
+                         [("reopened", None), ("card_set", "signed off with conditions")])
+        added = inserted(before_doc.replace("Status: signed off\n", "Status: signed off with conditions\n", 1),
+                         hlib.read_doc(ws))
         self.assertEqual(len([l for l in added if "REOPENED (per user)" in l]), 1)
 
     def test_the_checkpoint_commit_is_read_and_recorded_never_made(self):
@@ -167,8 +175,8 @@ class TheRefusals(unittest.TestCase):
         self.tmp = testlib.make_scratch("handoff-refuse-")
         self.addCleanup(testlib.rmtree, self.tmp)
 
-    def answered(self, text, records=False):
-        ws, info = hlib.make_repo(self.tmp, text, records=records)
+    def answered(self, text, records=False, dirt=None):
+        ws, info = hlib.make_repo(self.tmp, text, records=records, dirt=dirt)
         drive, run_dir = hlib.start(self.tmp, ws)
         hlib.through_gate(self, drive, self.tmp, run_dir)
         code, out, err = drive(["record-answer", "--run-dir", run_dir, "--answer",
@@ -205,6 +213,27 @@ class TheRefusals(unittest.TestCase):
         testlib.git(ws, ["add", "-A"])
         testlib.git(ws, ["commit", "-q", "-m", "more work"])
         self.stops(ws, drive, run_dir, "photograph-moved")
+
+    def test_c1b1_8_a_checkpoint_carrying_changes_made_after_the_photograph_is_refused(self):
+        ws, drive, run_dir = self.answered(hlib.build_doc(), dirt={"notes.txt": "loose work\n"})
+        testlib.write_text(os.path.join(ws, "src", "turnstile.py"), "def spin(count):\n    return count + 2\n")
+        testlib.git(ws, ["add", "-A"])
+        testlib.git(ws, ["commit", "-q", "-m", "handoff checkpoint (local): turnstile after A"])
+        out = self.stops(ws, drive, run_dir, "photograph-moved")
+        self.assertIn("src/turnstile.py", out["reason"])
+
+    def test_c1b1_8_an_empty_checkpoint_on_a_clean_tree_is_refused(self):
+        ws, drive, run_dir = self.answered(hlib.build_doc())
+        testlib.git(ws, ["commit", "-q", "--allow-empty", "-m", "handoff checkpoint (local): nothing"])
+        self.stops(ws, drive, run_dir, "photograph-moved")
+
+    def test_c1b1_8_a_checkpoint_of_exactly_the_photographed_dirt_is_taken(self):
+        ws, drive, run_dir = self.answered(hlib.build_doc(), dirt={"notes.txt": "loose work\n"})
+        testlib.git(ws, ["add", "-A"])
+        testlib.git(ws, ["commit", "-q", "-m", "handoff checkpoint (local): turnstile after A"])
+        code, out, err = drive(["write", "--run-dir", run_dir])
+        self.assertEqual(code, 0, (out, err))
+        self.assertIsNotNone(out["checkpoint"])
 
     def test_a_log_that_moved_since_the_photograph_is_refused(self):
         text = hlib.build_doc(punch=hlib.review_block())
