@@ -70,6 +70,7 @@ class ThePause(unittest.TestCase):
     def through_findings(self, drive, run_dir):
         slib.visit(self, drive, run_dir, "build-v2", "completed", self.ws)
         finding = slib.raise_finding(self.tmp, self.ws)
+        slib.set_status(self.ws, "A", "signed off with conditions")     # signoff-v2's own card, both halves
         code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "findings", self.ws)
         self.assertEqual((code, out["next"]), (0, "fix"), (out, err))
         return finding
@@ -90,7 +91,7 @@ class ThePause(unittest.TestCase):
         code, out, err = self.waive(drive, run_dir, finding, words)
         self.assertEqual(code, 0, (out, err))
         added = slib.log_lines(self.ws)[before:]
-        self.assertEqual([e["kind"] for e in added], ["waived"])
+        self.assertEqual([e["kind"] for e in added], ["waived", "card_set"], "the card moves with it (A27 (1))")
         event = added[0]
         self.assertEqual((event["finding"], event["words"], event["actor"]["station"]), (finding, words, "ship-v2"))
         self.assertEqual(event["actor"]["run_id"], "run")
@@ -119,6 +120,7 @@ class ThePause(unittest.TestCase):
         drive, run_dir = self.begin(report_only=True)
         slib.visit(self, drive, run_dir, "build-v2", "report-only", self.ws)
         finding = slib.raise_finding(self.tmp, self.ws)
+        slib.set_status(self.ws, "A", "signed off with conditions")
         code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "report-only", self.ws)
         self.assertEqual((code, out["next"]), (0, "fix"), (out, err))
         before = slib.snapshot(self.ws)
@@ -126,7 +128,8 @@ class ThePause(unittest.TestCase):
         self.assertEqual(code, 0, (out, err))
         self.assertEqual(before, slib.snapshot(self.ws), "report-only: nothing outside the run directory")
         planned = testlib.load_json(os.path.join(run_dir, "events.json"))
-        self.assertEqual([(e["kind"], e["words"]) for e in planned["events"]], [("waived", "Waive it")])
+        self.assertEqual([(e["kind"], e.get("words")) for e in planned["events"]], [("waived", "Waive it"),
+                                                                                    ("card_set", None)])
 
 
 @unittest.skipUnless(slib.usable(), "needs jsonschema, the records component and the three stations beside this core")

@@ -96,6 +96,63 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+
+INTERFACE_VERSION = 1
+
+
+def _identity_only(argv):
+    """`(skill root or None,)` when `argv` asks for `skill-identity` and nothing else (the two shared flags allowed,
+    an explicit skill root an existing directory), else None: every other argv takes the full path below."""
+    root, seen, args = None, False, list(argv)
+    while args:
+        arg = args.pop(0)
+        if arg == "skill-identity" and not seen:
+            seen = True
+        elif arg in ("--skill-root", "--records-root") and args:
+            value = args.pop(0)
+            root = value if arg == "--skill-root" else root
+        elif arg.startswith("--skill-root="):
+            root = arg.split("=", 1)[1]
+        elif not arg.startswith("--records-root="):
+            return None
+    if not seen or (root is not None and not os.path.isdir(root)):
+        return None
+    return (os.path.abspath(root) if root else os.path.dirname(HERE),)
+
+
+def skill_identity_answer(skill_root):
+    """`skill-identity`'s answer (the E15 lane contract A27 (2)): the run block's `skill` fields, computed as
+    `recheck_core.result.skill_identity` computes them (a test holds the two equal), and `interface_version`. Imports
+    nothing that needs jsonschema and opens no records component, so a caller reads it under any interpreter."""
+    from recheck_core import canon as _canon, identity as _identity
+    name, version = "recheck-v2", "unversioned"
+    plugin = os.path.join(skill_root, "..", "..", ".claude-plugin", "plugin.json")
+    if os.path.isfile(plugin):
+        try:
+            with open(plugin, "rb") as fh:
+                meta = json.loads(fh.read().decode("utf-8"))
+            name = meta.get("name") or name
+            version = meta.get("version") or version
+        except (OSError, ValueError):
+            pass
+    commit = "unversioned"
+    if _identity.git(skill_root, ["rev-parse", "--show-toplevel"], check=False) is not None:
+        head = _identity.git(skill_root, ["rev-parse", "HEAD"], check=False)
+        if head:
+            commit = head.strip()
+    body = os.path.join(skill_root, "SKILL.md")
+    if not os.path.isfile(body):
+        body = os.path.join(skill_root, "references", "pilot-contract.md")
+    content = _canon.sha256_file(body) if os.path.isfile(body) else "0" * 64
+    return {"name": name, "version": version, "commit": commit, "content_sha256": content,
+            "interface_version": INTERFACE_VERSION}
+
+
+if __name__ == "__main__" and _identity_only(sys.argv[1:]) is not None:
+    sys.stdout.write(json.dumps(skill_identity_answer(_identity_only(sys.argv[1:])[0]), indent=2,
+                                ensure_ascii=False) + "\n")
+    sys.exit(0)
+
 from recheck_core import canon, checkpoint as cpmod, identity, inputs, ledger, receipt as rcmod  # noqa: E402
 from recheck_core import records_client as rcl, records_view as rview, records_write  # noqa: E402
 from recheck_core import result as rmod, validate, verifier as vmod  # noqa: E402
@@ -2416,7 +2473,7 @@ def cmd_ledger(args):
 
 
 def cmd_skill_identity(args):
-    return emit(rmod.skill_identity(validate.skill_root(args.skill_root)), 0)
+    return emit(skill_identity_answer(validate.skill_root(args.skill_root)), 0)
 
 
 # ---- argparse ------------------------------------------------------------------------------------------
@@ -2554,7 +2611,7 @@ def build_parser():
     sp.add_argument("doc")
     sp.add_argument("--workspace", metavar="W", default=None, help="the workspace root the document path is relative to")
 
-    add("skill-identity", "{name, version, commit, content_sha256} from the skill root", "skill-identity")
+    add("skill-identity", "{name, version, commit, content_sha256, interface_version} from the skill root, without jsonschema", "skill-identity: {name, version, commit, content_sha256, interface_version} from the skill root; interface_version is 1; answers without importing jsonschema and without the records component (E15 A27 (2))")
     return p
 
 

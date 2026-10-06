@@ -144,23 +144,66 @@ class TheVisitIsTraced(unittest.TestCase):
         self.assertFalse(slib.ran(v1, "build-v2"))
 
     def test_the_real_stations_identities(self):
-        """Measured on this checkout's real stations (route 3a): build-v2 and signoff-v2 report a known interface
-        version; recheck-v2's `skill-identity` reports none (and, run isolated by an interpreter without jsonschema in
-        its own site-packages, exits 3 and reports nothing), so under CR-21's rule ship refuses it before any visit
-        (the report's frozen-folder request: recheck-v2 is frozen, E15-2)."""
+        """Measured on this checkout's real stations (route 3a), read the way `visit` reads them (isolated, `-I -B`,
+        under this suite's interpreter, so under `/usr/bin/python3` and under `uv run` alike): each reports
+        `interface_version` 1 and holds the trace's refusal rule, recheck-v2 included since the E15 lane contract A27
+        (2) (before it, recheck-v2 reported none and ship refused it before every visit)."""
         probe = ("import json, sys\nsys.path.insert(0, sys.argv[1])\nsys.dont_write_bytecode = True\n"
                  "from ship_core import stations\nout = {}\nfor name in ('build-v2', 'signoff-v2', 'recheck-v2'):\n"
                  "    found = stations.resolve(name)\n    ident = stations.identify(name, found)\n"
-                 "    out[name] = [(ident or {}).get('interface_version'), sorted(r['rule'] for r in stations.refusals(name, ident))]\n"
+                 "    out[name] = [(ident or {}).get('interface_version'), sorted(r['rule'] for r in stations.refusals(name, ident, found)),\n"
+                 "                 (ident or {}).get('name'), (ident or {}).get('version') == found['manifest_version']]\n"
                  "print(json.dumps(out))\n")
         proc = subprocess.run([sys.executable, "-c", probe, testlib.SCRIPTS], stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, env=testlib.base_env(), timeout=300)
         self.assertEqual(proc.returncode, 0, proc.stderr.decode())
         out = json.loads(proc.stdout.decode())
-        self.assertEqual(out["build-v2"], [1, []])
-        self.assertEqual(out["signoff-v2"], [1, []])
-        self.assertEqual(out["recheck-v2"][0], None)
-        self.assertIn(out["recheck-v2"][1], (["unknown-interface"], ["no-identity"]))
+        for name in ("build-v2", "signoff-v2", "recheck-v2"):
+            self.assertEqual(out[name], [1, [], name, True], name)
+
+
+@unittest.skipUnless(slib.usable(), "needs jsonschema, the records component and the three stations beside this core")
+class TheFullLoopOnTheRealStations(unittest.TestCase):
+    """The checkout's own driver (route 3a beside the real build-v2, signoff-v2 and recheck-v2): the full loop reaches
+    the real recheck-v2's identity, reads it before the visit and traces it (the E15 lane contract A27 (2))."""
+
+    def setUp(self):
+        self.tmp = testlib.make_scratch("ship-real-")
+        self.addCleanup(testlib.rmtree, self.tmp)
+        self.ws = slib.make_repo(self.tmp)
+
+    def test_the_full_loop_reaches_the_real_recheck_v2(self):
+        drive, run_dir = slib.start(self, None, self.tmp, self.ws)
+        slib.through_hook(self, drive, self.tmp, run_dir)
+        code, out, err = slib.visit(self, drive, run_dir, "build-v2", "completed", self.ws)
+        self.assertEqual((code, out["next"]), (0, "visit --station signoff-v2"), (out, err))
+        slib.set_status(self.ws, "A", "built")
+        finding = slib.raise_finding(self.tmp, self.ws)
+        slib.set_status(self.ws, "A", "signed off with conditions")
+        code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "findings", self.ws)
+        self.assertEqual((code, out["next"]), (0, "fix"), (out, err))
+        testlib.write_text(os.path.join(self.ws, "src", "turnstile.py"), "def spin(count):\n    return count + 2\n")
+        code, out, err = drive(["fix", "--run-dir", run_dir, "--fixes", slib.fixes_file(
+            self.tmp, run_dir, 1, [{"finding": finding, "paths": ["src/turnstile.py"], "summary": "the fix"}])])
+        self.assertEqual(code, 0, (out, err))
+
+        def cleared(visit):
+            self.assertEqual(visit["identity"]["name"], "recheck-v2")
+            slib.fix_finding(self.tmp, self.ws, finding)
+            slib.set_status(self.ws, "A", "signed off")
+        code, out, err = slib.visit(self, drive, run_dir, "recheck-v2", "all_clear", self.ws, before_result=cleared)
+        self.assertEqual((code, out["next"]), (0, "report"), (out, err))
+        lines = slib.trace(run_dir)
+        recheck = [l for l in lines if l["expected"] == "recheck-v2"]
+        self.assertEqual([(l["kind"], l["status"]) for l in recheck], [("visit", "visiting"), ("visit", "completed")])
+        identity = recheck[0]["identity"]
+        self.assertEqual((identity["name"], identity["version"], identity["interface_version"], identity["root"]),
+                         ("recheck-v2", slib.real_version("recheck-v2"), 1,
+                          os.path.realpath(slib.real_station("recheck-v2"))))
+        self.assertEqual(slib.validate_trace(run_dir)[0], 0)
+        code, out, err = slib.report(drive, run_dir)
+        self.assertEqual((code, out["status"]), (10, "completed"), (out, err))
+        self.assertEqual(out["trace"]["refused"], 0)
 
 
 @unittest.skipUnless(slib.usable(), "needs jsonschema, the records component and the three stations beside this core")

@@ -5,8 +5,8 @@
 `observe.py` (precon-v2's, byte for byte) calls this for every `lane` step of a case of this core. ship-v2 resolves
 the stations it visits beside its own plugin root, so the observer runs a COPY of this plugin from a plugins folder
 under `scratch` (the checkout or installed shape alike), beside a stand-in for each station: the real station's own
-manifest and result schema (found the way ship-v2 finds the real one, `ship_core/stations.py`, route 3a or 3b) and a
-script that answers `skill-identity` with interface version 1 and nothing else; or, where the case plants one, a
+manifest, a `SKILL.md` (the file ship-v2 hands the executor, held inside the root, C2-5) and result schema (found the
+way ship-v2 finds the real one, `ship_core/stations.py`, route 3a or 3b) and a script that answers `skill-identity` with interface version 1 and nothing else; or, where the case plants one, a
 v1-shaped station (a link into a v1-named folder, a manifest naming a v1 station, an identity naming one, no
 interface version), whose every executable leaves a marker when run.
 
@@ -95,6 +95,8 @@ def _standin(parent, name, folder=None, manifest_name=None, identity_name=None, 
     _write(os.path.join(root, ".claude-plugin", "plugin.json"), {"name": manifest_name or name, "version": version})
     refs = os.path.join(root, "skills", name, "references")
     os.makedirs(refs)
+    with open(os.path.join(root, "skills", name, "SKILL.md"), "w", encoding="utf-8") as fh:
+        fh.write("---\nname: %s\ndescription: a stand-in station.\n---\n# A stand-in\n" % name)
     shutil.copyfile(os.path.join(real, "skills", name, "references", "result.schema.json"),
                     os.path.join(refs, "result.schema.json"))
     script = os.path.join(root, "skills", name, "scripts", SCRIPT[name])
@@ -217,7 +219,17 @@ class _Records(object):
         return next((f["id"] for f in self.findings() if f["location"]["raw"] == location), "f1:" + "0" * 20)
 
 
-def _result(name, which, visit, ws):
+def _sha(path):
+    if not os.path.isfile(path):
+        return None
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+def _result(name, which, visit, ws, writes=None):
+    """The real station's accepted example, its run fields set to the visit's. recheck-v2's slice, doc, name and
+    version are its `checklist` and `run.skill` (C2-4), and its `records_written` lists the project files this visit's
+    station wrote (`writes`), its run artifacts moved to the visit's run directory (C2-1)."""
     real = _real(name)
     if which == "v1-text":
         return {"status": "COMPLETE", "station": V1[0], "report": "BUILD: A"}
@@ -231,6 +243,12 @@ def _result(name, which, visit, ws):
         out["run"].update(run_id=run_id, run_dir=run_dir, workspace=ws, build_doc=DOC, slice="A")
     else:
         out["run"].update(run_id=run_id, run_dir=run_dir)
+        version = _load(os.path.join(real, ".claude-plugin", "plugin.json"))["version"]
+        out["run"]["skill"].update(name=name, version=version)
+        out["checklist"].update(build_doc=DOC, slice="A")
+        out["records_written"] = [dict(r, path=os.path.join(run_dir, os.path.basename(r["path"])))
+                                  for r in out.get("records_written") or [] if r.get("kind") == "run_artifact"]
+        out["records_written"] += list(writes or [])
         out["result"] = which
         keep = ("fixed",) if which == "all_clear" else ("not_fixed",)
         out["items"] = [i for i in out["items"] if i["disposition"] in keep]
@@ -317,10 +335,14 @@ def observe_lane(step, case_dir, neutral, facts, via, scratch):
                     os.path.join(scratch, "answer-%d.json" % number), {
                         "answer_version": 1, "kind": "answer", "run_id": run_id, "pause": asked["pause"],
                         "words": action["answered"], "effect": {"kind": "resume"}})])
+            doc_before = _sha(os.path.join(ws, DOC))
             if action.get("writes"):
                 records.write(action["writes"])
+            doc_after = _sha(os.path.join(ws, DOC))
+            writes = [] if doc_after == doc_before else [{"kind": "status_line", "path": DOC, "appended": False,
+                                                          "sha256_before": doc_before, "sha256_after": doc_after}]
             _write(os.path.join(visit["visit_run_dir"], "result.json"),
-                   _result(action["station"], action["result"], visit, ws))
+                   _result(action["station"], action["result"], visit, ws, writes))
             code, out = run(["visit", "--run-dir", run_dir, "--result"])
             exits["visit_result"].append(code)
             if code != 0:

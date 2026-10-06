@@ -22,21 +22,22 @@ is read twice, and the first line where the two readings take a decision differe
    slices (name and heading line), each slice's card, the recorded base, the withheld sections, and its four
    refusals. `templates.parse` decides nothing here.
 
-THE FOOTPRINT RULE (A26's one rule for a label this core reads; stated once here and once in the contract, section
-5). Inside a slice's section, a line that, after any prefix (indent, list-item or block-quote markers) and any leading
+THE FOOTPRINT RULE (the E15 lane contract A27 (3): the plain one-line form as the slice's named paths, containment by
+build-v2's rule; A26's one rule for a label this core reads; stated once here and once in the contract, section 5).
+Inside a slice's section, a line that, after any prefix (indent, list-item or block-quote markers) and any leading
 listed mark (`fences.marks_off`), folds (`fences.fold`) to `footprint`, spaces or tabs, then a colon, is read only in
-its plain form: at column 0 with exactly `Footprint:`, its value on the same line. Any other such line stops,
-named; a `Footprint:` line whose value is empty stops, named, always (build-v2's bulleted form under a bare label
-puts the paths on later lines, which this reading never takes: "write the slice's paths on the label's own line");
-a second `Footprint:` line in one slice stops, named. In the second reading, every rendered heading (any level) or
-paragraph line from a slice's heading to its next rendered heading of level 1 or 2 whose text reads as a
-`Footprint:` label candidate (format characters removed and leading whitespace stripped, `fences.label_form`; the
-leading listed marks set aside; folded) must be that slice's plain `Footprint:` line in the line reading, on the same
-source line: a bold `**Footprint:**`, a code-span label, a `### Footprint:` heading, a label in a paragraph whose
-rendered lines cannot all be mapped to source lines (named at the paragraph's first line), or a rendered label line
-running over more than one source line all stop. Unlike handoff-v2's labels, a `Footprint:` paragraph may go on
-with any line: a value written on the next line is never read, so the footprint is only ever read narrower than a
-person sees it, and a narrower footprint only stops more fixes (stop 4), never fewer.
+its plain form: at column 0 with exactly `Footprint:`, its value on the same line. Any other such line stops, named;
+a `Footprint:` line whose value is empty stops, named, always (build-v2's bulleted form under a bare label puts the
+paths on later lines, which this reading never takes: "write the slice's paths on the label's own line"); a second
+`Footprint:` line in one slice stops, named. In the second reading, every rendered heading (any level) or paragraph
+line from a slice's heading to its next rendered heading of level 1 or 2 whose text reads as a `Footprint:` label
+candidate (format characters removed and leading whitespace stripped, `fences.label_form`; the leading listed marks
+set aside; folded) must be that slice's plain `Footprint:` line in the line reading, on the same source line: a bold
+`**Footprint:**`, a code-span label, a `### Footprint:` heading, a label in a paragraph whose rendered lines cannot
+all be mapped to source lines (named at the paragraph's first line), or a rendered label line running over more than
+one source line all stop. Unlike handoff-v2's labels, a `Footprint:` paragraph may go on with any line: a value
+written on the next line is never read, so the footprint is only ever read narrower than a person sees it, and a
+narrower footprint only stops more fixes (stop 4), never fewer.
 
 THE FOOTPRINT'S PATHS. The value is split on commas outside code spans; an entry holding code spans names the code
 spans' contents, any other entry names its text, trimmed (`footprint_entries`). Containment is build-v2's rule

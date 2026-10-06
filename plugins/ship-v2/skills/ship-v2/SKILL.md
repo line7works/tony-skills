@@ -26,8 +26,8 @@ honest report is a good outcome.
 **The split.** You visit the stations, fix, and talk to the owner; `scripts/ship.py` does everything deterministic
 (rule E15-4): it finds the doc, reads the slice and its footprint, reads each station's identity through the
 station's own CLI before you visit it and writes the trace, reads each station's own result, keeps the lap counter,
-holds your fixes to the slice, passes a station's question through, records the owner's waiver or reopening, and
-renders the `SHIP:` block. `references/ship-contract.md` states every phase, its stages, its exits and its stops; read
+holds your fixes to the slice, passes a station's question through, records the owner's waiver or reopening (and the
+card it moves), and renders the `SHIP:` block. `references/ship-contract.md` states every phase, its stages, its exits and its stops; read
 it once per run, before step 0. `references/back-loop.md` is the discipline the back cores share.
 
 ## Running the script
@@ -58,8 +58,8 @@ condition or answer a pause yourself to satisfy the hook: the stop or pause stan
 the Stop hook's confirmation for this run with the adapter's helper, and record it at step 1's end:
 
 ```sh
-python3 adapters/<harness>/hook.py > <hook.json>        # Claude Code: reads this session's transcript
-                                                         # Codex: always `Hook: NOT armed`, labelled honestly
+python3 adapters/claude-code/hook.py --slice <slice> > <hook.json>   # Claude Code: this session's transcript
+python3 adapters/codex/hook.py > <hook.json>                          # Codex: always `Hook: NOT armed`, labelled honestly
 ```
 
 Armed or not, the run proceeds identically; the report labels it honestly and never claims armed when it was not.
@@ -89,7 +89,10 @@ uv run scripts/ship.py visit --run-dir <run dir> --station build-v2
 
 The script reads build-v2's identity through its own CLI, writes the trace line, and hands you the visit: run
 build-v2 on the named slice by its own `SKILL.md` (the path it prints), with the run id and run directory it prints in
-the station's input and `invocation.caller` `ship-v2`. build-v2's own contract, preflight, rules and report govern.
+the station's input, `invocation.caller` `ship-v2` and the `invocation.mode` it prints (each station's own input schema
+names the one it takes). build-v2's own contract, preflight, rules and report govern. A station that ends without a
+result it can give (it stopped at its own input check, or its result is refused) still ends the run honestly: run
+`report`, which stops `visit-unfinished`.
 When it has written its result:
 
 ```sh
@@ -140,8 +143,10 @@ uv run scripts/ship.py visit --run-dir <run dir> --result
 ```
 
 Run recheck-v2 on the fixed findings by its own `SKILL.md`. Its closed checklist, independent verifier and card flip
-are its own. ALL CLEAR (its own result and no BLOCKER or MAJOR the records hold open for the slice) ends the loop: go
-to step 7.
+are its own. Touch nothing while its visit is open, and nothing between its result and the next `lap` but what the
+next lap fixes: the script holds what moved then to the footprint and the doc too (outside it is stop 4, the doc moved
+is stop 2, a path inside it that no fix names is refused). ALL CLEAR (its own result and no BLOCKER or MAJOR the
+records hold open for the slice) ends the loop: go to step 7.
 
 ## Step 6: The one extra lap
 
@@ -171,8 +176,10 @@ Two different interruptions, kept distinct:
   ```
 
   If the owner waives or reopens a finding mid-run, his answer's effect is `waive` or `reopen` with the finding's id:
-  the script records his word as a `waived` or `reopened` event in the records, with his words (the one write ship-v2
-  makes; a chat-only waiver counts for nothing downstream).
+  the script records his word as a `waived` or `reopened` event in the records, with his words, and, when the slice's
+  card changes by v1's rule, moves the card with it (a `card_set` and the slice's `Status:` line, all or none: the one
+  write ship-v2 makes; a chat-only waiver counts for nothing downstream). If a `pause --answer` was cut off mid-write,
+  run it again: it settles what landed before anything else, and never writes anything twice.
 - **Stop.** One of the four enumerated conditions: (1) the extra lap is exhausted without ALL CLEAR, (2) a fix would
   change the spec, (3) build-v2 honestly stops mid-slice, (4) work wants to touch files outside the slice scope. Each
   is "stop and report", never "use your judgment." The run ends; what happens next is the owner's call.
@@ -192,7 +199,8 @@ pull request, no merge; those words are the owner's alone, and a finished loop i
    a station's rules, and never skips a station.
 2. **The stations' records are theirs.** Build ledger lines, punch-list blocks and `Status:` cards are written by the
    stations that own them. ship-v2 writes nothing into the build doc, with one sanctioned exception: recording the
-   owner's mid-run waiver or reopening word as its records event (step 4, Pause).
+   owner's mid-run waiver or reopening word as its records event, with the card it moves by v1's rule (its `card_set`
+   and the slice's `Status:` line; step 4, Pause).
 3. **Fixes are this session's hands.** Direct edits against the punch list, inside the slice's footprint, traceable to
    the named findings; never a re-visit of build-v2, never a spec edit.
 4. **The lap counter is hard.** One initial pass plus at most one extra fix-and-recheck lap. The counter never resets
@@ -235,5 +243,5 @@ none.
 - Don't claim the hook armed when the confirmation never appeared: label the run honestly.
 - Don't answer a station's question to the owner yourself: pass it through and wait.
 - Don't write into the build doc: the stations own their ledgers and cards. The one exception is rule 2's: recording
-  the owner's mid-run waiver or reopening word.
+  the owner's mid-run waiver or reopening word, and the card it moves.
 - Don't push, open a pull request, or merge: the git gates are the owner's, always.

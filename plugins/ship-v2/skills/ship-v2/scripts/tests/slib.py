@@ -291,19 +291,34 @@ def example(station, which):
     return testlib.load_json(os.path.join(real, "skills", station, "references", "examples", EXAMPLES[(station, which)]))
 
 
-def station_result(station, which, visit, ws, doc=DOC, slice_name="A"):
-    """The real station's accepted example `which`, its run fields set to the visit's (`visit` is visit's output)."""
+def real_version(station):
+    return testlib.load_json(os.path.join(real_station(station), ".claude-plugin", "plugin.json"))["version"]
+
+
+def station_result(station, which, visit, ws, doc=DOC, slice_name="A", writes=None):
+    """The real station's accepted example `which`, its run fields set to the visit's (`visit` is visit's output).
+
+    recheck-v2's run block carries no slice or doc: its `checklist` names them and `run.skill` names the station and
+    its version, so they are set to the visit's too (C2-4). Its `records_written` lists the project files it wrote:
+    the example's run artifacts move to the visit's run directory, its project rows are dropped, and `writes` (rows
+    of the station's own shape, e.g. a `status_line` with its hashes) are what this visit wrote."""
     out = copy.deepcopy(example(station, which))
     run_id, run_dir = visit["visit_run_id"], visit["visit_run_dir"]
     if "plugin_version" in out:
-        out["plugin_version"] = testlib.load_json(os.path.join(real_station(station), ".claude-plugin",
-                                                               "plugin.json"))["version"]
+        out["plugin_version"] = real_version(station)
     if station == "build-v2":
         out.update(run_id=run_id, run_dir=run_dir, workspace=ws, build_doc=doc, slice=slice_name)
     elif station == "signoff-v2":
         out["run"].update(run_id=run_id, run_dir=run_dir, workspace=ws, build_doc=doc, slice=slice_name)
     else:
         out["run"].update(run_id=run_id, run_dir=run_dir)
+        out["run"]["skill"].update(name="recheck-v2", version=real_version(station))
+        out["checklist"].update(build_doc=doc, slice=slice_name)
+        rows = []
+        for row in out.get("records_written") or []:
+            if row.get("kind") == "run_artifact":
+                rows.append(dict(row, path=os.path.join(run_dir, os.path.basename(row["path"]))))
+        out["records_written"] = rows + [dict(w) for w in (writes or [])]
         if which in ("all_clear", "partial", "not_clear"):
             out["result"] = which
             keep = {"all_clear": ("fixed",), "not_clear": ("not_fixed",)}.get(which)
@@ -321,13 +336,28 @@ def put_result(visit, doc):
     return path
 
 
+def doc_write(ws, before, doc=DOC, kind="status_line"):
+    """recheck-v2's own `records_written` row for the build doc when its visit moved it from `before`, else None."""
+    after = sha(os.path.join(ws, doc))
+    if after == before:
+        return None
+    return {"kind": kind, "path": doc, "appended": False, "sha256_before": before, "sha256_after": after}
+
+
 def visit(test, drive, run_dir, station, which, ws, before_result=None):
-    """One visit: `visit --station`, the station's result written as the station would, `visit --result`."""
+    """One visit: `visit --station`, the station's result written as the station would, `visit --result`. For
+    recheck-v2, a change `before_result` made to the build doc (the station's own `Status:` write) is listed in its
+    result's `records_written`, as the station lists it."""
     code, out, err = drive(["visit", "--run-dir", run_dir, "--station", station])
     test.assertEqual(code, 0, (station, out, err))
+    doc_before = sha(os.path.join(ws, DOC))
     if before_result is not None:
         before_result(out)
-    put_result(out, station_result(station, which, out, ws))
+    writes = None
+    if station == "recheck-v2":
+        row = doc_write(ws, doc_before)
+        writes = [row] if row else []
+    put_result(out, station_result(station, which, out, ws, writes=writes))
     return drive(["visit", "--run-dir", run_dir, "--result"])
 
 

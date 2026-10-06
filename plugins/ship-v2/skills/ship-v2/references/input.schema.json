@@ -98,7 +98,8 @@
             "words": {
               "type": "string",
               "minLength": 1,
-              "description": "the owner's words ordering the slice's MINORs fixed, verbatim"
+              "description": "the owner's words ordering the slice's MINORs fixed, verbatim; at least one character that is not white space (slice 2 check 1's C2-7)",
+              "pattern": "\\S"
             }
           },
           "description": "present only when the invocation ordered MINOR fixes (v1's step 3 and 4): they never gate and never trigger a recheck"
@@ -120,7 +121,8 @@
             "words": {
               "type": "string",
               "minLength": 1,
-              "description": "his words, verbatim"
+              "description": "his words, verbatim; at least one character that is not white space (slice 2 check 1's C2-7)",
+              "pattern": "\\S"
             }
           },
           "description": "present only when the owner ordered more laps in words (CR-22): the only way a third lap happens"

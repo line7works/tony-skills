@@ -1,10 +1,10 @@
 """CR-25, measured: a mid-run waiver or reopening, then each way a ship run continues or ends (contract section 6.2).
 
-E15-9 says ship-v2 writes only the `waived` and `reopened` events the owner gives mid-run; the stations it visits
-write their own records (a card move is a `card_set` and its `Status:` line, written by the station that moves it).
-Slice 1b found that a `waived` event with no card move left vertical-v2's gate stalling a waived slice and passing a
-reopened one (C1B1-2), and the owner ruled the card move for handoff-v2 (A23 (2)). This module measures the same
-question for ship-v2, with the real stations' result files (their accepted examples, set to the visit's run), the
+E15-9 said ship-v2 writes only the `waived` and `reopened` events the owner gives mid-run. Slice 1b found that a
+`waived` event with no card move left vertical-v2's gate stalling a waived slice and passing a reopened one (C1B1-2),
+and the owner ruled the card move for handoff-v2 (A23 (2)); this module measured the same question for ship-v2 (6 of
+11 endings disagreed, 3 passed a reopened slice), and the owner ruled it the same way for ship-v2 (A27 (1)): the
+grant's event and, when the card changes by v1's rule, a `card_set` and its `Status:` line. It measures, with the real stations' result files (their accepted examples, set to the visit's run), the
 records events each station writes for what its result says (the shapes of its own code: signoff-v2's
 `finding_raised` and `card_set`, recheck-v2's `disposition` and `card_set`, build-v2's `card_set`), and vertical-v2's
 real gate run through its own CLI on the workspace the run leaves. Each scenario returns one row:
@@ -66,13 +66,16 @@ def card(tmp, ws, station, before, after, run_id):
 
 
 def recheck(tmp, ws, finding, fixed, before, after, run_id):
-    """What recheck-v2 writes for one checklist item: its disposition, then the card when it moves."""
+    """What recheck-v2 writes for one checklist item: its disposition, then the card when it moves. The card moves
+    from the one the records hold now (a mid-run grant may have moved it since `before` was written down: the E15 lane
+    contract A27 (1)) to `after`, and not at all when they are equal."""
     ident = slib.identity(ws)
     slib.append(tmp, ws, [dict(slib._base("recheck-v2", run_id, ws), kind="disposition", finding=finding,
                                disposition="fixed" if fixed else "not_fixed", how="the case re-ran",
                                verified_source={"known": True, "identity": ident}, join_basis=None)])
-    if before != after:
-        card(tmp, ws, "recheck-v2", before, after, run_id)
+    held = next(s for s in slib.state(ws)["slices"] if s["name"] == "A").get("card_observed") or before
+    if held != after:
+        card(tmp, ws, "recheck-v2", held, after, run_id)
 
 
 class Run(object):

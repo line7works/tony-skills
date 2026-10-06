@@ -22,9 +22,7 @@
       {
         "appended": true,
         "card": {
-          "after": "signed off",
           "before": "signed off with conditions",
-          "line": 14,
           "slice": "A"
         },
         "finding": "f1:0123456789abcdef0123",

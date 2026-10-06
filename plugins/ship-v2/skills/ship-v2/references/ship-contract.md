@@ -1,8 +1,9 @@
 # Ship v2 core: behavioral contract
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a state. Written for
-E15 slice 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 10 and 12, amendments A1 to A26) and
-the control room's readings CR-21 to CR-27 in the slice 2 brief. Where this document and that contract differ, the
+E15 slice 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 10 and 12, amendments A1 to A27) and
+the control room's readings CR-21 to CR-27 in the slice 2 brief, with slice 2 check 1's findings C2-1 to C2-8 (fix
+round 1). Where this document and that contract differ, the
 contract is the authority and this document is the defect. `references/back-loop.md` is the discipline the three back
 cores share; this document is this core's own.
 
@@ -33,7 +34,8 @@ What moved: the deterministic half is a script; each station is reached as a v2 
 identity and read through its own CLI before the visit, with a trace line before and after (CR-21); the station's
 result is its own `result.json`, validated against its own result schema (a v1 station's report is refused); the lap
 counter, the footprint check and the stops are the script's (CR-22, CR-23); the waiver or reopening is a records event
-through `records.py append`, not a hand-written ledger line (ruling E15-9, CR-24); every line read from the doc is
+through `records.py append`, not a hand-written ledger line, with the card it moves by v1's rule as a `card_set` and
+its `Status:` line in build-v2's transaction (ruling E15-9 as A27 (1) amends it, CR-24); every line read from the doc is
 read twice (CR-27); the summon and kickoff lines name the v2 stations (A2 Q5, CR-26); the owner is "the owner" in the
 portable text.
 
@@ -41,7 +43,8 @@ portable text.
 
 `check-input`, then `select`, `hook`, `visit` (once per station visit, each with `--result`), `fix`, `lap`, `pause`,
 `report`; `identity` and `skill-identity` at any time. A command against a run at another stage is exit 2 naming the
-command to run instead. Every phase reads and writes only the run directory, except the records event of section 6.
+command to run instead. Every phase reads and writes only the run directory, except section 6's grant writes (the records events and the
+slice's `Status:` line).
 Every run file this core reads or writes is checked first with `os.lstat`: a link, a pipe or a file outside the run
 directory is refused, never followed.
 
@@ -55,8 +58,14 @@ repository, no home directory, no heuristic across candidates. Nothing named (`s
 (`selection-none`), several found (`selection-several`, listed), no slice named (`slice-unnamed`) or a slice the doc
 does not hold (`slice-unknown`) is a PAUSE: exit 0, `paused` true, `why`, the question for the owner, `next`
 `select`, and nothing written (the run stays at `checked`). `--slice` takes the owner's answer when the input named
-no slice. The doc is then read (section 5); a line the readings refuse ends the run (`doc-unreadable`). Writes
-`ship.json`: the doc, its hash, the slice, its card, its footprint, the lap counter's start.
+no slice. The doc is then read (section 5); a line the readings refuse ends the run (`doc-unreadable`). Then the
+slice's card moves are read from the records (`events --kind card_set`): when the slice's last `card_set` has an `after`
+that differs from its `Status:` line while that line equals the event's `before` (build-v2's drift rule,
+build-contract section 10), its event landed and its line did not, and the run stops `card-drift` before any visit,
+naming both values and both ways out (run the interrupted run's next command, which settles it, section 3.7; or set
+the line to the card the records hold by hand); a line holding any other value is a hand edit, no drift (the E15 lane
+contract A27 (1) with A24 (1)). Writes `ship.json`: the doc, its hash, the slice, its card, its footprint, the lap
+counter's start.
 
 ### 3.2 `hook --run-dir D --reading FILE`
 
@@ -73,10 +82,10 @@ The checkpoint's `phase` holds the run's stage; each command runs at the stages 
 | `checked` | `check-input`; a `select` pause | `select` |
 | `selected` | `select` | `hook` |
 | `hooked` | `hook` | `visit --station build-v2` |
-| `visiting` | `visit --station` | `visit --result` |
+| `visiting` | `visit --station` | `visit --result`; `report` when the station ended without a result this run can take (`visit-unfinished`) |
 | `built` | build-v2 COMPLETE | `visit --station signoff-v2` |
 | `fixing` | signoff-v2 with a BLOCKER or MAJOR charged to the slice (or MINORs the owner ordered); `lap` | `fix` |
-| `fixed` | `fix` | `visit --station recheck-v2` |
+| `fixed` | `fix` (the post-fix pin taken) | `visit --station recheck-v2` |
 | `lap-needed` | recheck-v2 not ALL CLEAR, a lap left | `lap` |
 | `exhausted` | recheck-v2 not ALL CLEAR, no lap left | `report` (stop condition 1); `lap` is refused |
 | `clean` | ALL CLEAR | `report` |
@@ -108,18 +117,38 @@ the root's own manifest's, `no-identity` otherwise). A station that fails any of
 holds gets the opening trace line (`visit`, status `visiting`, the identity, the route, the visit's run directory
 `visits/<seq>-<name>` under this run's directory, which the station's own `check-input` creates), and only then is the
 visit handed over: the station's `SKILL.md`, its summon line, the run id (`<run id>-<seq>-<name>`) and run directory,
-and the caller fields.
+and the caller fields: `invocation.caller` `ship-v2` and the `invocation.mode` the station's own input schema takes
+from a calling station (`visit.MODES`: build-v2 `station`; signoff-v2 and recheck-v2 `headless`, the one value
+recheck-v2's schema takes from a caller other than `direct`; slice 2 check 1's C2-8). The `SKILL.md` handed over is
+held like every other file of the root: it must resolve inside the root by identity and be a regular file, or the
+station is refused before the opening line (a `refused` line, `station-refused`; C2-5). Before recheck-v2 is visited,
+what moved since the lap's fixes were recorded (the post-fix pin, section 3.5) is held: the doc moved is stop 2, a path
+outside the footprint stop 4, any other path refused, exit 5 (put it back).
 
 **Closing.** `visit --result` reads `<visit run dir>/result.json`, the station's own result, written by the station
 run by its own `SKILL.md`. No result yet is exit 2. Before it is read, the station is resolved and identified again: a
 station that changed since the opening is refused (a `refused` line, `station-refused`). The result is refused, exit
 5, nothing written, the run still `visiting`, when: the visit's run directory or the file is a link, not a regular
 file or outside this run's directory; it is not JSON; it does not validate against the station's own result schema (a
-v1 station leaves no such document); it names another run id or run directory, another slice, doc or workspace; its
-plugin version is not the version visited; or, on a report-only run, it is not a report-only result that wrote
-nothing (recheck-v2, which has no report-only mode, must have written only run artifacts). A result that holds is
-recorded (`ship.json`'s `visits`) and closed on the trace (`visit`, the station's own status). Then the next step, from
-the station's own words and the records:
+v1 station leaves no such document); it names another run id or run directory, another slice, doc or workspace; it
+names another station, or its plugin version is not the version visited; or, on a report-only run, it is not a
+report-only result that wrote nothing (recheck-v2, which has no report-only mode, must have written only run
+artifacts). build-v2 and signoff-v2 name their slice, doc and workspace in their run fields and their version in
+`plugin_version`; recheck-v2's run block names none of them, so its `checklist.slice` and `checklist.build_doc` are its
+slice and doc and its `run.skill.name` and `run.skill.version` its name and version (slice 2 check 1's C2-4).
+
+**The recheck window** (slice 2 check 1's C2-1). When recheck-v2's result holds, and before its closing line, every path
+that moved since the post-fix pin (section 3.5), the window the visit was open in included, is held to the footprint
+and the doc, before ALL CLEAR or the next lap. The station's own writes are its own: a project file its result lists
+in `records_written` (every row but its run artifacts), when the file stands at the last hash it lists for it (or it
+lists none); the build doc only when its listed writes run as one chain of hashes from the doc as the fixes left it to
+the doc as it stands, so a hand edit before or between them is never taken for the station's. Anything else that moved:
+the doc is stop 2 (`spec-change`), a path outside the footprint stop 4 (`outside-footprint`), each after the station's
+closing line; a path inside the footprint is refused, exit 5, nothing written (put it back, then `visit --result`
+again). Then the next lap's pin is taken there, after the station's writes, and `lap` keeps it (section 3.6).
+
+A result that holds is recorded (`ship.json`'s `visits`) and closed on the trace (`visit`, the station's own status).
+Then the next step, from the station's own words and the records:
 
 | Station | Its result | Next |
 |---|---|---|
@@ -147,16 +176,26 @@ the pin; (4) **stop 4** (`outside-footprint`): any path declared or moved since 
 then `fixed` (or, for the MINORs the owner ordered after a clean signoff, `clean`: they never gate and never trigger a
 recheck).
 
-**The pin** (`scripts/ship_core/pin.py`): taken when a lap's fixing begins (at signoff-v2's result, and at each `lap`),
-HEAD and the identity of every changed or untracked path (type, mode and content with lstat semantics:
-`file:<mode>:<sha256>`, `link:<sha256 of the target>`, `dir`, `missing`), `docs/records/` left out. A path moved when
-its identity differs from the pin's (one committed as it was is no move), or, clean at the pin, it is dirty now or a
-commit since the pin's HEAD changes it. Git runs read-only (`gitio.py`: `rev-parse`, `status`, `diff`).
+**The pin** (`scripts/ship_core/pin.py`): taken when a lap's fixing begins (at signoff-v2's result, and at recheck-v2's
+result for the next lap, which `lap` keeps: section 3.4, the recheck window), HEAD and the identity of every changed or
+untracked path (type, mode and content with lstat semantics: `file:<mode>:<sha256>`, `link:<sha256 of the target>`,
+`dir`, `missing`), `docs/records/` left out. A path moved when its identity differs from the pin's (one committed as
+it was is no move), or, clean at the pin, it is dirty now or a commit since the pin's HEAD changes it. Git runs
+read-only (`gitio.py`: `rev-parse`, `status`, `diff`). Ignored files are not in the pin, as build-v2's; a fix that
+writes one is not seen (build-contract section 10 leaves them out of its source pin the same way; slice 2 check 1's
+C2-3, its stated replacement: holding them would put every test cache and build output a fix's checks leave in the
+workspace outside the footprint). **The post-fix pin**: when `fix` records a lap's fixes, the pin is taken again with
+the doc's hash (`fixed_pin`); what moves after it, before recheck-v2's visit or while it is open, is held to the
+footprint and the doc (section 3.4). ship-v2's own `Status:` write (section 6) is taken into both pins when the doc had
+not moved under them before it, so it is never a fix's move; a doc another hand moved stays moved.
 
 ### 3.6 `lap --run-dir D`
 
 CR-22. At `lap-needed`: lap N+1 opens (`laps.json`), the findings the records hold open for the slice are named again,
-the pin is taken again, and the run goes back to `fixing`. A lap beyond the allowed count is refused (exit 5, nothing
+and the run goes back to `fixing`. The pin is not taken again (slice 2 check 1's C2-1): `lap` keeps the one recheck-v2's
+result took, and what moved since is held first: the doc moved is stop 2, a path outside the footprint stop 4, before
+the lap opens; a path inside it is the new lap's fix to name (`fix` refuses it unnamed). A run that never took a pin (a
+reopening after a clean signoff) takes it here. A lap beyond the allowed count is refused (exit 5, nothing
 written, the run where it was); at `exhausted` every `lap` is refused. The allowed count is 2 (the initial pass and the
 extra lap) plus `station.extra_laps.count`, the laps the owner's words in the input order; a lap they open records his
 `words` verbatim in `laps.json` and the result (`station_result.laps`). **Not on the trace:** the trace's line shape
@@ -176,15 +215,22 @@ run at `paused`, so a pause is never turned into a stop, and the script never an
 **The answer** (kind `answer`): the owner's words verbatim and their effect: `resume` (the words go back to whoever
 asked; nothing is written) or `waive` or `reopen` with a finding's id (section 6). Refused (exit 5, nothing written, the
 run still paused): an answer to another pause, blank words, a grant on a finding the records do not hold, or at a status
-the grant does not admit (a waiver takes `open` or `fixed`, a reopening `fixed` or `waived`). A refusal the records
-component returns ends the run (`records-refused`, its sentence carried). The run resumes at the stage it paused at; a
+the grant does not admit (a waiver takes `open` or `fixed`, a reopening `fixed` or `waived`), or a grant that moves a
+card whose `Status:` line disagrees with the card the records hold (section 6). A refusal the records component returns
+ends the run (`records-refused`, its sentence carried); a doc that moved between the append and the `Status:` write
+ends it `outside-edit` (section 6). A grant's transaction that was cut off (the run killed between the append and the
+doc write) is settled by the next `pause --answer` before anything else (section 6), and that answer is the receipt's,
+whatever file is given. The run resumes at the stage it paused at; a
 grant at `fixing` names the lap's findings again from the records; a reopening after ALL CLEAR that leaves a BLOCKER or
 MAJOR open for the slice sends the run to the next lap, or, with none left, to `exhausted`: the record over the
 recollection.
 
 ### 3.8 `report --run-dir D --bottom-line TEXT [--skill-note TEXT]`
 
-At `clean`, `exhausted` or `ending` only. Reads the slice's card from the doc as it stands (read twice; a doc that no
+At `clean`, `exhausted` or `ending`, and at `visiting` (slice 2 check 1's C2-6): a station that ended without a result
+`visit --result` holds (it left none, or the one it left was refused) still reaches a terminal status, the stop
+`visit-unfinished` naming the station and why, the visit's opening trace line left as the record that it was handed
+over. Reads the slice's card from the doc as it stands (read twice; a doc that no
 longer reads is reported as `unread` with why), the findings the records hold open (`Remains`: this slice's, with
 `/recheck-v2 <slice> <doc>`; other slices', charged elsewhere and never this run's to fix), the fixes recorded
 (`Fixed`) and the trace; renders the `SHIP:` block into `chat.md`; writes `result.json`, validated against
@@ -219,7 +265,10 @@ and the vendored tree equal to vertical-v2's (skipped, never passed, in the inst
 (`references/back-files.txt` is unchanged). `templates.parse` decides nothing here. The first line where the two
 readings differ, or a refusal, stops the run `doc-unreadable`, naming the line, before any visit or write.
 
-**THE FOOTPRINT RULE** (A26's one rule for the one label this core reads; the code's statement is `doc.py`'s). Inside
+**THE FOOTPRINT RULE** (the E15 lane contract A27 (3), the owner's ruling: ship-v2 reads a slice's `Footprint:` in its
+plain one-line form, A26's one rule, as the slice's named paths, and judges containment by build-v2's rule; build-v2's
+own reader, which reads only a bulleted list under a bare label and so reads the one-line form as empty, is the first
+item on the E15 punch list and not this core's to change; the code's statement is `doc.py`'s). Inside
 a slice's section, a line that, after any prefix and any leading listed mark, folds to `footprint`, spaces or tabs,
 then a colon is read only in its plain form: at column 0 with exactly `Footprint:`, its value on the same line; any
 other such line stops, named; an empty value stops ("write the slice's paths on the label's own line"); a second
@@ -241,26 +290,49 @@ adds none.
 
 ## 6. The one sanctioned write
 
-Ruling E15-9 and CR-24, exhaustively: ship-v2 writes the `waived` and `reopened` events the owner gives mid-run, each
-with his words, through one `records.py append` per grant (`scripts/ship_core/record.py`); and its own run directory and
-trace. Nothing else, ever: no line of the build doc, no `Status:` line, no card event, no finding, no disposition. The
-stations it visits write their own records. A grant's event: `waived` (the finding's severity, `verified_source` the
-workspace identity the component computes now, `join_basis` null) or `reopened` (`join_basis` null), `words` verbatim,
-`grant_date` the run's date, `actor` this station, this run's id and the harness, appended against the head `verify`
-reads. A report-only run plans the event in `events.json` and appends nothing.
+Ruling E15-9 as the E15 lane contract A27 (1) amends it for ship-v2, and CR-24, exhaustively: for each grant the owner
+gives mid-run, ship-v2 writes the `waived` or `reopened` event with his words and, when the slice's card changes by v1's
+rule after the grant, a `card_set` event and its `Status:` line, in build-v2's records transaction (build-contract
+sections 9 and 10), all or none, as handoff-v2 does (A23 (2)); and its own run directory and trace. Nothing else, ever:
+no other line of the build doc, no finding, no disposition. The stations it visits write their own records. The code's
+statement is `scripts/ship_core/grant.py`.
 
-### 6.2 What the records hold after a grant (CR-25, measured; the owner's question)
+**The events.** The grant: `waived` (the finding's severity, `verified_source` the workspace identity the component
+computes now, `join_basis` null) or `reopened` (`join_basis` null), `words` verbatim, `grant_date` the run's date,
+`actor` this station, this run's id and the harness. **The card** (v1's rule, which the component's `card_derived`
+implements): a slice whose card is a verdict (`rejected`, `signed off with conditions`, `signed off`) takes the card
+its open findings give after the grant, waived ones excluded: any BLOCKER open gives `rejected`, else any MAJOR
+`signed off with conditions`, else `signed off`; any other card is kept. The card it moves is the one the records hold
+(`card_observed`, else the `Status:` line), and the slice's `Status:` line must read that same card, or the grant is
+refused, exit 5, nothing written (the owner settles the line first). The card move is a `card_set` (`before`, `after`),
+the doc with that one line set must read cleanly by both readings with the slice at the new card.
+
+**The transaction.** The whole plan into `receipt-<pause>.json` before the append (the events, the card move, the log's
+head and the seq the append expects, the doc's hash before and the hash the plan produces); then ONE `records.py
+append` of the grant and its `card_set` against that head; the outcome into the receipt; then the doc, once: the one
+`Status:` line set, every other byte kept, the doc replaced whole; then the receipt records the write. A refusal the
+component returns writes nothing anywhere: the doc and the log stay byte-equal and the run ends `records-refused`. A
+report-only run plans the events in `events.json` and writes nothing else.
+
+**The crash window** (A24 (1)'s two rules). A run killed between the append and the doc write settles on its next
+command, `pause --answer` (the one command a paused run takes), before anything else, against the head the receipt
+names, never a head read afresh: its own events found there (each at the seq the plan named, the first carrying the
+receipt's head as its `prev`, every one under this run's id, this station and the planned kind) are recorded as landed,
+never appended again; not found there, nothing landed and the grant is planned again from the top. The doc half is
+finished against the receipt's doc hash: at the bytes the plan read, the line is written; at the bytes the plan
+produces, or when the receipt records the write, it is this run's own and is not written again; at any other bytes the
+run stops `outside-edit`, naming what the slice's `Status:` line holds, the events reported as landed and the records
+log listed in the result's writes, nothing reverted. Once the log holds this run's events no stop says that nothing was
+written. A fresh run on the doc stops `card-drift` at `select` (section 3.1).
+
+### 6.2 What the records hold after a grant (CR-25, measured)
 
 Slice 1b found that a `waived` event with no card move leaves vertical-v2's gate stalling a waived slice and passing a
-reopened one (C1B1-2), and the owner ruled the card move for handoff-v2 (A23 (2)). E15-9 still says ship-v2 writes only
-the grant events, and this core follows it as written. Measured (`scripts/tests/cr25lib.py`, `test_cr25.py`): after a
-mid-run waiver of a slice's only open MAJOR, the run ends ALL CLEAR (or waits at a later pause, or ends at stop 3) with
-the card at `signed off with conditions` in the records and on the `Status:` line, while v1's rule gives `signed off`,
-and vertical-v2's gate stalls the slice (`gate-short`); after a mid-run reopening of a fixed MAJOR, a run that ends at
-stop 2 or stop 4, or waits at a pause, leaves the card at `signed off` while v1's rule gives `signed off with
-conditions`, and vertical-v2's gate passes the reopened slice. A run that goes on to another recheck lets recheck-v2
-move the card, and the card then agrees. Whether ship-v2 should move the card with the grant (as A23 (2) did for
-handoff-v2) is the owner's ruling; this core does not change E15-9 on its own.
+reopened one (C1B1-2). Slice 2's build measured the same for ship-v2 (`scripts/tests/cr25lib.py`, `test_cr25.py`): 6 of
+11 ship endings after a mid-run waiver or reopening left the card wrong by v1's rule, and 3 let vertical-v2's gate pass
+a reopened slice. The owner ruled the card move for ship-v2 (A27 (1)). Measured again with the move: in all 11 endings
+(a clean end, each of the four stops, a refused lap, a pause) the card the records hold, the `Status:` line and v1's
+rule agree, and no ending lets vertical-v2's real gate pass a reopened slice; `test_cr25.py` holds the measurement.
 
 ## 7. The stops and the pause
 
@@ -272,8 +344,11 @@ mid-slice (`build-not-complete`), (4) work wants to touch files outside the slic
 stop and report; the run ends and what happens next is the owner's call. Besides the four (CR-23): a signoff-v2 or
 recheck-v2 stop or refusal ends the run with its status (`signoff-stopped`, `recheck-stopped`); a station that is not
 the expected v2 sibling ends it before any visit (`station-refused`); a doc that cannot be read cleanly
-(`doc-unreadable`); the records refusing the owner's grant (`records-refused`). v1's form has a slot for the four
-conditions only; such an end reads `STOPPED (<station or tag>: <tag>)` (the slice 2 report's numbered question).
+(`doc-unreadable`); the records refusing the owner's grant (`records-refused`); a card whose event landed and whose
+`Status:` line did not (`card-drift`, at `select`); the doc moved between a grant's append and its `Status:` write
+(`outside-edit`); a visit that ended without a result this run can take (`visit-unfinished`). v1's form has a slot for
+the four conditions only; such an end reads `STOPPED (<station or tag>: <tag>)` (the slice 2 report's numbered
+question).
 
 ## 8. The load-bearing form
 
@@ -302,23 +377,30 @@ one constant, `forms.D`, written in code as an escape; no file of this core type
 run that reaches `report` ends in a terminal status, every stop included: `completed` (ALL CLEAR) or `stopped` with one
 tag. `writes` lists ship-v2's own writes: its run artifacts (`ship.json`, `chat.md`, `laps.json`, `fixes.json`,
 `pauses.json`, `events.json`, `records-events.json`, `trace.jsonl`; `checkpoint.json` and `result.json` themselves
-aside) and the records log a grant reached (`records_log`, its hash before and after). `trace` names `trace.jsonl`, its
+aside; each grant's `receipt-<pause>.json`) and the records log a grant reached (`records_log`, its hash before and
+after) and the build doc a grant's card move wrote (`build_doc`, its hash before and after; A27 (1)). `trace` names `trace.jsonl`, its
 lines, the visits closed and the stations refused. `station_result` carries the doc, the slice, the hook, the result
 line and condition, the five fields, the laps (taken, allowed, the owner's words and each lap opened), the visits, the
-fixed and remaining findings, the pauses, the events and `chat`.
+fixed and remaining findings, the pauses, the events (each grant with its `card` move, or null) and `chat`.
 
 ## 10. The records component
 
 Reached through the resolver snippet and the CLI only (`station_core/records_client.py`, `records_link.py`), confirmed
 at `interface_version` 2; exit 3 when missing or at another version. Read: `state` (the open set for the named findings
-and the ALL CLEAR test, the `Remains` lines), `identity` (a waiver's source), `verify` (the head an append expects).
-Written: one `append` per grant (section 6). Never a levelling pass, never a log file opened.
+and the ALL CLEAR test, the `Remains` lines, the card a grant moves), `identity` (a waiver's source), `verify` (the head
+an append expects), `events` (the card moves `select` checks for drift; this run's own events a settle looks for).
+Written: one `append` per grant, the grant and its `card_set` together (section 6). Never a levelling pass, never a log
+file opened.
 
 ## 11. The harness seams
 
 Ruling E15-12. **The Stop-hook check**: on Claude Code, `adapters/claude-code/hook.py` reads this session's own
-transcript (found as `invocation.py` finds it, ruling E9-28) for the Stop hook's confirmation and prints the reading
-(`armed`, with the record as `evidence`, or not armed): `helper-derived`, a reading of a harness record, never a fact
+transcript (found as `invocation.py` finds it, ruling E9-28) for the harness's own records that this run's goal is
+set (slice 2 check 1's C2-2 and its send-back 1): the last `/goal` command record and its `Goal set:` output record
+(two `system` records of subtype `local_command`, the shape measured on a live session) whose goal text opens
+`/ship-v2` and names this run's slice (`--slice`), no later `/goal` command replacing it; or, on older harness
+versions, a `system` record whose own content opens with the Stop hook's confirmation, after the last prompt the owner
+typed that invokes `/ship-v2`, when that prompt is a `/goal` one; never a tool result, a message or a sidechain record and prints the reading (`armed`, with the record as `evidence`, or not armed): `helper-derived`, a reading of a harness record, never a fact
 the harness enforces. On Codex, `adapters/codex/hook.py` prints `Hook: NOT armed`, labelled honestly: Codex has no Stop
 hook this core can read. **The invocation facts**: each adapter's `invocation.py` (the back frame's). No manual-only
 control (owner pick P5): ship-v2 keeps its phrases and commands.
@@ -335,9 +417,12 @@ The exits are the back loop's: 0, 1, 2, 3, 4, 5, 10 (back-loop section 2). A sto
 | `build-not-complete` | visit | stop condition 3: build-v2 PARTIAL or STOPPED |
 | `signoff-stopped` | visit | signoff-v2's own stop or refusal, its status carried |
 | `recheck-stopped` | visit | recheck-v2's own stop, its status carried |
-| `spec-change` | fix | stop condition 2: a fix needs the spec changed, or touches the build doc |
-| `outside-footprint` | fix | stop condition 4: a path outside the slice's footprint |
+| `spec-change` | fix, visit, lap | stop condition 2: a fix needs the spec changed, or the build doc moved (section 3.4's recheck window, section 3.6) |
+| `outside-footprint` | fix, visit, lap | stop condition 4: a path outside the slice's footprint moved |
 | `extra-lap-exhausted` | report | stop condition 1: the extra lap spent without ALL CLEAR |
+| `card-drift` | select | the slice's last `card_set` landed and its `Status:` line did not (A27 (1) with A24 (1)), both values and both ways out named |
+| `outside-edit` | pause | the doc moved between a grant's append and its `Status:` write; the events reported as landed, nothing reverted |
+| `visit-unfinished` | report | a visit that ended without a result this run can take (slice 2 check 1's C2-6) |
 
 `selection-none` and `selection-several` (the shared tags) are pauses here, never stops (v1's step 1), so this core
 uses them as a pause's `why`, never as a stop tag. `phase-not-built` is the frame's placeholder; this core uses none.
@@ -353,8 +438,8 @@ key outside this repository.
 ## 14. What this core never does
 
 Run a station's phases (the one station command it runs is `skill-identity`); answer a question meant for the owner;
-turn a pause into a stop; take a third lap without the owner's words; write into the build doc; write a card event, a
-finding or a disposition; run a git command that changes a branch, an index or a worktree; push, open a pull request or
+turn a pause into a stop; take a third lap without the owner's words; write into the build doc, but the `Status:` line
+a grant's card move sets (section 6); write a card event but that grant's `card_set`, or any finding or disposition; run a git command that changes a branch, an index or a worktree; push, open a pull request or
 merge (`scripts/tests/test_static.py`); launch a harness or summon a reader; read a v1 skill's files.
 
 ## 15. Interface
@@ -364,4 +449,5 @@ D`), `identity <workspace>`, `skill-identity`; `--help` on each, without `jsonsc
 syntax, standard library plus `jsonschema==4.25.1` through `uv run` (PEP 723) and the vendored CommonMark reader
 (section 5); git 2.50.1. Run-directory artifacts: `input.json`, `checkpoint.json`, `ship.json`, `trace.jsonl`,
 `visits/<seq>-<station>/` (each the station's own run), `laps.json`, `fixes.json`, `pauses.json`, `events.json`,
-`records-events.json` (an append's input), `chat.md`, `result.json`.
+`records-events.json` (an append's input), `receipt-<pause>.json` (a grant's transaction, section 6), `chat.md`,
+`result.json`.

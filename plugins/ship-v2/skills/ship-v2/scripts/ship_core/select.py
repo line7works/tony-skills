@@ -15,9 +15,9 @@ before any write. Writes `ship.json` (the doc, its hash, the slice, its card and
 """
 import os
 
-from station_core import driver, fsio, hunt as huntmod
+from station_core import driver, fsio, hunt as huntmod, records_link
 
-from . import common, doc as docmod, report
+from . import common, doc as docmod, grant, report
 
 HOMES = [
     {"home": "repo-plans", "root": "workspace", "globs": ["docs/plans/*-{name}.md", "docs/plans/{name}.md"], "tier": 1},
@@ -35,6 +35,21 @@ def _named(ws, path):
     if rel.startswith(("docs/records/", "docs/reviews/")):
         return None
     return rel
+
+
+def drift_reason(row, event):
+    """`card-drift`'s words (the E15 lane contract A27 (1) with A24 (1)): both values and both ways out."""
+    actor = event.get("actor") or {}
+    station, run_id = actor.get("station") or "a station", actor.get("run_id")
+    resume = ("run that ship-v2 run's next command, `ship.py pause --run-dir <the run directory of run %s> --answer "
+              "<its answer file>`, which settles the doc half first" % run_id if station == common.STATION else
+              "resume the interrupted %s run %s by its own SKILL.md, which settles its doc half" % (station, run_id))
+    return ("slice %s's Status: line reads %r, the card the records' last card move for it started from, and that move "
+            "(a card_set at seq %s by %s run %s, %r to %r) is in the log: its event landed and its Status: line did "
+            "not, so the doc contradicts the record and this run visits nothing; nothing was written. Two ways out: "
+            "%s; or set the line to the card the records hold, `Status: %s`, by hand. Then run ship-v2 again"
+            % (row["name"], row["status"], event.get("seq"), station, run_id, event.get("before"), event.get("after"),
+               resume, event.get("after")))
 
 
 def _pause(ctx, run, why, question, **extra):
@@ -100,6 +115,15 @@ def handler(ctx, args):
         return _pause(ctx, run, "slice-unknown", "%s holds no slice %r (its slices: %s). Which slice do you want "
                                                  "shipped?" % (doc, slice_name, ", ".join(names) or "none"),
                       doc=doc, slices=names)
+    try:
+        cli = records_link.open_client(common.STATION, records_root=args.records_root)
+        moves = cli.events(ws, doc, kind="card_set").get("results") or []
+    except records_link.RecordsRefusal as exc:
+        return report.ending(ctx, run, facts, "records-refused", records_link.refusal_sentence(
+            exc, "reading the card moves of %s" % doc))
+    drifted = grant.drift(moves, row)
+    if drifted is not None:
+        return report.ending(ctx, run, dict(facts, slice=slice_name), "card-drift", drift_reason(row, drifted))
     facts.update(slice=slice_name, card=row["status"], footprint=row["footprint"], footprint_line=row["footprint_at"])
     state = dict(facts, lap=0, laps_allowed=common.laps_allowed(run),
                  visits=[], visit=None, named=[], pin=None, ending=None, build=None, signoff=None, recheck=None,

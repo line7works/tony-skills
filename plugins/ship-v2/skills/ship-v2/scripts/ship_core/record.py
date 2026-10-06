@@ -4,17 +4,15 @@
     open_findings(run, ...) -> the findings the records hold open, from `state`, never recomputed here
     named(run, ...) -> the findings a lap fixes: every open BLOCKER and MAJOR charged to the slice, the fix-introduced
         defects charged to it, and its open MINORs when the owner's invocation ordered them
-    grant(ctx, run, kind, finding, words) -> the one write ship-v2 makes: a `waived` or `reopened` event
+    event(run, kind, finding, words, identity, at) -> a grant's `waived` or `reopened` event
 
-Reads: `state` (the open set and the cards), `identity` (the source a waiver carries), `verify` (the head an append
-expects). Writes: one `append` per grant, the owner's words verbatim, `grant_date` the run's date, `actor` this
-station, this run's id and the harness, nothing else; the stations ship-v2 visits write their own records. A
-report-only run plans the event (`events.json`) and appends nothing. The component is reached through the resolver
+Reads: `state` (the open set and the cards). The grant itself, the one write ship-v2 makes (its event with the owner's
+words verbatim, `grant_date` the run's date, `actor` this station, this run's id and the harness, and the card it moves
+by v1's rule), is `grant.py`'s, in build-v2's transaction (the E15 lane contract A27 (1)); the stations ship-v2 visits
+write their own records. The component is reached through the resolver
 snippet and the CLI only (`station_core/records_client.py`, `records_link.py`); no log file is opened here.
 """
-import os
-
-from station_core import fsio, records_link
+from station_core import records_link
 
 from . import common
 
@@ -69,34 +67,3 @@ def event(run, kind, finding, words, identity, at):
     else:
         out.update(join_basis=None)
     return out
-
-
-class GrantRefused(Exception):
-    """A grant the record cannot take: refused (exit 5) with nothing written."""
-
-
-def grant(run, kind, finding_id, words, records_root=None):
-    """Append (or, report-only, plan) one `waived` or `reopened` event. Returns (event, appended, writes).
-    GrantRefused when the record cannot take it (a finding it does not hold, or one at a status the grant does not
-    admit); a refusal the component returns is a `records_link.RecordsRefusal`, raised as it is."""
-    name = GRANTS[kind]
-    cli = client(run, records_root)
-    ws, doc = common.workspace(run), common.state(run)["doc"]
-    rows = cli.state(ws, doc).get("findings") or []
-    row = next((f for f in rows if f.get("id") == finding_id), None)
-    if row is None:
-        raise GrantRefused("the records hold no finding %r for %s" % (finding_id, doc))
-    if row.get("status") not in ADMITS[name]:
-        raise GrantRefused("the finding %s stands %r, and a %s takes only a finding that stands %s" % (
-            finding_id, row.get("status"), name, " or ".join(repr(s) for s in ADMITS[name])))
-    identity = cli.identity(ws)["identity"]
-    one = event(run, name, {"id": finding_id, "severity": row.get("severity")}, words, identity, common.now())
-    if common.report_only(run):
-        return one, False, []
-    head = cli.verify(ws, doc)
-    log = os.path.join(ws, head["log"])
-    sha_before = fsio.sha256_file_or_none(log)
-    body = cli.append(ws, doc, [one], head["head"], run.run_dir)
-    return one, True, [{"path": log, "kind": "records_log", "sha256_before": sha_before,
-                        "sha256_after": fsio.sha256_file_or_none(log), "head_before": head["head"],
-                        "head_after": body.get("head")}]

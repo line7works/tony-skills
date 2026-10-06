@@ -95,10 +95,13 @@ def _writes(run):
         if name not in ("checkpoint.json", "result.json") and os.path.isfile(path) and not os.path.islink(path):
             out.append({"path": path, "kind": "run_artifact", "sha256_before": None,
                         "sha256_after": fsio.sha256_file(path)})
-    for outcome in common.listing(run, "events.json", "outcomes"):
-        if outcome.get("appended"):
-            out.append({"path": outcome["path"], "kind": "records_log", "sha256_before": outcome["sha256_before"],
-                        "sha256_after": outcome["sha256_after"]})
+    for row in common.listing(run, "events.json", "grants"):
+        if row.get("log"):
+            out.append({"path": row["log"]["path"], "kind": "records_log", "sha256_before": row["log"]["sha256_before"],
+                        "sha256_after": row["log"]["sha256_after"]})
+        if row.get("doc"):
+            out.append({"path": row["doc"]["path"], "kind": "build_doc", "sha256_before": row["doc"]["sha256_before"],
+                        "sha256_after": row["doc"]["sha256_after"]})
     return out
 
 
@@ -121,9 +124,8 @@ def build_result(ctx, run, status, tag, reason, state, chat, fields):
                     "question": p["question"]["text"], "answered": p.get("answer") is not None,
                     "words": (p.get("answer") or {}).get("words")} for p in common.listing(run, "pauses.json",
                                                                                            "pauses")],
-        "events": [{"kind": e["kind"], "finding": e["finding"], "words": e["words"], "appended": bool(o.get("appended"))}
-                   for e, o in zip(common.listing(run, "events.json", "events"),
-                                   common.listing(run, "events.json", "outcomes"))],
+        "events": [{"kind": g["kind"], "finding": g["finding"], "words": g["words"], "appended": bool(g["appended"]),
+                    "card": g.get("card")} for g in common.listing(run, "events.json", "grants")],
         "chat": chat}
     return ctx.envelope(run_id=common.run_id(run), run_dir=run.run_dir, status=status, stop_tag=tag, reason=reason,
                         report_only=common.report_only(run), wrote_nothing=not outside, writes=writes,
@@ -142,6 +144,22 @@ def check(ctx, result):
                             % "; ".join("%s %s" % (e.get("path"), e.get("message")) for e in (errors or semantic)[:4]))
 
 
+def _unfinished(run, state):
+    """`report` at `visiting` (slice 2 check 1's C2-6): the station ended without a result `visit --result` holds, so
+    the run ends `visit-unfinished`, the visit's opening trace line left as the record that it was handed over."""
+    visit = state.get("visit") or {}
+    name = visit.get("station") or "the station"
+    path = os.path.join(visit.get("run_dir") or run.run_dir, "result.json")
+    why = ("its result %s was not accepted (`visit --result` refused it)" % path if os.path.lexists(path) else
+           "it left no result in %s" % (visit.get("run_dir") or "its run directory"))
+    state = dict(state, visit=None)
+    state["ending"] = {"status": "stopped", "tag": "visit-unfinished", "condition": None, "by": name,
+                       "reason": "the visit to %s ended without a result this run can take: %s (no result holds, so "
+                                 "the run ends here; the trace's opening line for the visit is the record that it "
+                                 "was handed over)" % (name, why)}
+    return state
+
+
 def _laps_taken(state):
     """Fix-and-recheck laps taken: a lap counts once its recheck visit closed (a minors-only fix has no recheck)."""
     return len(set(v["lap"] for v in state.get("visits") or [] if v["station"] == "recheck-v2"))
@@ -149,7 +167,7 @@ def _laps_taken(state):
 
 def handler(ctx, args):
     """`report --run-dir D --bottom-line TEXT [--skill-note TEXT]`."""
-    run = common.open_run(ctx, args.run_dir, ("clean", "exhausted", "ending"), "report")
+    run = common.open_run(ctx, args.run_dir, ("clean", "exhausted", "ending", "visiting"), "report")
     if not args.bottom_line or not args.bottom_line.strip() or "\n" in args.bottom_line:
         raise driver.Usage("report needs --bottom-line: two or three sentences on one line (what shipped, what state "
                            "it is in, what to do next)")
@@ -158,6 +176,9 @@ def handler(ctx, args):
                            "excepted")
     state = common.state(run)
     stage = run.checkpoint["phase"]
+    if stage == "visiting":
+        state = _unfinished(run, state)
+        stage = "ending"
     if stage == "clean":
         status, tag, reason, result = "completed", None, "ALL CLEAR: the loop ended by its own rules", "ALL CLEAR"
     elif stage == "exhausted":

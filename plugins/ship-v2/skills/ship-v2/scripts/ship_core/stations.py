@@ -289,13 +289,25 @@ def _same_dir(a, b):
 
 
 def run_block(name, doc):
-    """The fields that bind a result to its run: (run_id, run_dir, slice, doc, workspace), None where absent."""
+    """The fields that bind a result to its run: (run_id, run_dir, slice, doc, workspace), None where absent.
+    recheck-v2's run block names no slice or doc: its `checklist` does (slice 2 check 1's C2-4)."""
     if name == "build-v2":
         return doc.get("run_id"), doc.get("run_dir"), doc.get("slice"), doc.get("build_doc"), doc.get("workspace")
     run = doc.get("run") if isinstance(doc.get("run"), dict) else {}
     if name == "signoff-v2":
         return run.get("run_id"), run.get("run_dir"), run.get("slice"), run.get("build_doc"), run.get("workspace")
-    return run.get("run_id"), run.get("run_dir"), None, None, None
+    checklist = doc.get("checklist") if isinstance(doc.get("checklist"), dict) else {}
+    return run.get("run_id"), run.get("run_dir"), checklist.get("slice"), checklist.get("build_doc"), None
+
+
+def named_station(name, doc):
+    """(the station name, the plugin version) the result itself states: build-v2 and signoff-v2 at the top level
+    (`plugin_version`; the name is the schema's), recheck-v2 in its run block's `skill` (C2-4)."""
+    if name == "recheck-v2":
+        run = doc.get("run") if isinstance(doc.get("run"), dict) else {}
+        skill = run.get("skill") if isinstance(run.get("skill"), dict) else {}
+        return skill.get("name"), skill.get("version")
+    return name, doc.get("plugin_version")
 
 
 def result_problems(name, found, identity, doc, visit, facts, prefix):
@@ -317,8 +329,12 @@ def result_problems(name, found, identity, doc, visit, facts, prefix):
         out.append("it is for the doc %r, not %r" % (build_doc, facts["doc"]))
     if workspace is not None and not _same_dir(workspace, facts["workspace"]):
         out.append("it is for the workspace %r, not %r" % (workspace, facts["workspace"]))
-    version = doc.get("plugin_version")
-    if version is not None and version != identity["version"]:
+    stated, version = named_station(name, doc)
+    if stated != name:
+        out.append("it names the station %r, not %s" % (stated, name))
+    if name == "recheck-v2" and (slice_name is None or build_doc is None):
+        out.append("its checklist names no slice or no doc, so it cannot be this visit's")
+    if (version is not None or name == "recheck-v2") and version != identity["version"]:
         out.append("its plugin version %r is not the version of the station visited (%r)" % (version,
                                                                                             identity["version"]))
     if facts["report_only"]:

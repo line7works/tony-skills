@@ -59,9 +59,12 @@
         "spec-change",
         "outside-footprint",
         "extra-lap-exhausted",
+        "card-drift",
+        "outside-edit",
+        "visit-unfinished",
         null
       ],
-      "description": "the stop's one tag; null on a completion. The shared tags: `station-refused` (a station that is not the expected v2 sibling, refused before the visit, a `refused` trace line) and `records-refused` (the records component refused the owner's grant, its sentence carried). This core's own: `doc-unreadable` (a doc line the two readings refuse or take differently, CR-27), `build-not-complete` (stop condition 3), `signoff-stopped` and `recheck-stopped` (the station's own stop or refusal, its status carried), `spec-change` (stop condition 2), `outside-footprint` (stop condition 4) and `extra-lap-exhausted` (stop condition 1)"
+      "description": "the stop's one tag; null on a completion. The shared tags: `station-refused` (a station that is not the expected v2 sibling, refused before the visit, a `refused` trace line) and `records-refused` (the records component refused the owner's grant, its sentence carried). This core's own: `doc-unreadable` (a doc line the two readings refuse or take differently, CR-27), `build-not-complete` (stop condition 3), `signoff-stopped` and `recheck-stopped` (the station's own stop or refusal, its status carried), `spec-change` (stop condition 2), `outside-footprint` (stop condition 4) and `extra-lap-exhausted` (stop condition 1). Since slice 2 fix round 1: `card-drift` (select: the slice's last card_set landed and its Status: line did not, the E15 lane contract A27 (1) with A24 (1)), `outside-edit` (pause: the doc moved between this run's grant append and its Status: write; the events reported as landed, nothing reverted) and `visit-unfinished` (report at visiting: the station ended without a result this run can take, slice 2 check 1's C2-6)"
     },
     "reason": {
       "type": "string",
@@ -92,7 +95,8 @@
           "kind": {
             "enum": [
               "run_artifact",
-              "records_log"
+              "records_log",
+              "build_doc"
             ]
           },
           "sha256_before": {
@@ -110,7 +114,8 @@
             "pattern": "^[0-9a-f]{64}$"
           }
         }
-      }
+      },
+      "description": "ship-v2's own writes: its run artifacts, the records log a grant reached, and the build doc's Status: line a grant's card move wrote (the E15 lane contract A27 (1))"
     },
     "invocation": {
       "type": "object",
@@ -519,6 +524,42 @@
               },
               "appended": {
                 "type": "boolean"
+              },
+              "card": {
+                "description": "the card the grant moved by v1's rule (a card_set and its Status: line, A27 (1)), or null when it moved none",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "slice",
+                      "line",
+                      "before",
+                      "after"
+                    ],
+                    "properties": {
+                      "slice": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "line": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "before": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "after": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                ]
               }
             }
           }

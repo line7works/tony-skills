@@ -20,6 +20,8 @@ and, separately, any fix that needs the spec changed (`spec_change`). In order:
 """
 import os
 
+from station_core import fsio
+
 from . import common, doc as docmod, pin, report
 
 
@@ -100,6 +102,10 @@ def handler(ctx, args):
         common.advance(run, "clean")
         return ctx.emit(ctx.envelope(next="report", run_id=common.run_id(run), lap=state["lap"], recorded=declared,
                                      minors_only=True))
+    # what the workspace holds once the fixes are recorded: anything that moves after it, before recheck-v2's visit
+    # or while it is open, is held to the footprint and the doc (slice 2 check 1's C2-1; `visit.py`)
+    state["fixed_pin"] = dict(pin.take(ws), doc_sha256=fsio.sha256_file_or_none(os.path.join(ws, state["doc"])))
+    common.save(run, state)
     common.advance(run, "fixed")
     return ctx.emit(ctx.envelope(next="visit --station recheck-v2", run_id=common.run_id(run), lap=state["lap"],
                                  recorded=declared, moved=moved))
