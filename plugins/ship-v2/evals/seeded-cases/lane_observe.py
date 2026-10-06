@@ -14,7 +14,8 @@ It then plays the case's recorded answer (`answer.json`'s `script`, what the exe
 REAL phase driver (the copy's `scripts/ship.py`, as a subprocess): `check-input`, `select --doc`, `hook`, then each
 action: `visit` (the station's own result, the real station's accepted example with its run fields set to the
 visit's, written into the visit's run directory as the station writes it, together with the records events and the
-`Status:` line that station writes for it, through the records component's own CLI), `fix`, `lap`, `pause` (a
+`Status:` line that station writes for it, through the records component's own CLI, and that write listed as the
+station lists its own, `_evidence`, for the window rule of the E15 lane contract A28 (1)), `fix`, `lap`, `pause` (a
 question), `answer` (the owner's answer), `report`. It fills, from what the driver did and what the run directory
 and the workspace hold after it, exactly the names the step lists under `pending` that it has a fact for (`via` is
 `cli`); a name it has no fact for is left out, so `observe.py` keeps it under `_lane_pending`. Nothing is read from
@@ -226,10 +227,57 @@ def _sha(path):
         return hashlib.sha256(fh.read()).hexdigest()
 
 
-def _result(name, which, visit, ws, writes=None):
+def _dirty(ws):
+    """(changed, untracked) as build-v2's source set lists them, `docs/records/` excluded."""
+    proc = subprocess.run(["git", "-C", ws, "status", "--porcelain", "--untracked-files=all"], stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"))
+    changed, untracked = [], []
+    for line in proc.stdout.decode("utf-8", "replace").split("\n"):
+        if line.strip() and not line[3:].startswith("docs/records/"):
+            (untracked if line.startswith("??") else changed).append(line[3:])
+    return sorted(changed), sorted(untracked)
+
+
+def _evidence(name, out, ws, run_dir, doc_move):
+    """What build-v2 and signoff-v2 list of their own write into the build doc (the E15 lane contract A28 (1), the
+    window rule): build-v2 names the doc in `source_set.sanctioned`, lists its `status_line` write with its hash after
+    and lists the build's paths from git; signoff-v2 lists the doc in `records_written` and its document step, with its
+    hashes, in its own `receipt.json` in the visit's run directory."""
+    before, after = doc_move
+    if name == "build-v2":
+        changed, untracked = _dirty(ws)
+        out["source_set"].update(changed=changed, untracked=untracked, committed=[])
+        out["source_set"]["sanctioned"] = [dict(r, path=DOC) for r in out["source_set"].get("sanctioned") or []] or \
+            [{"path": DOC, "reason": "the ledger document this run is executing"}]
+        rows = []
+        for row in out.get("writes") or []:
+            if row["kind"] == "run_artifact":
+                rows.append(dict(row, path=os.path.join(run_dir, os.path.basename(row["path"]))))
+            elif row["kind"] == "status_line":
+                if after != before:
+                    rows.append(dict(row, path=DOC, sha256_after=after))
+            else:
+                rows.append(dict(row))
+        out["writes"] = rows
+        out["receipt"] = None
+        return
+    rows = [dict(r, path=os.path.join(run_dir, os.path.basename(r["path"])))
+            for r in out.get("records_written") or [] if r.get("kind") == "run_artifact"]
+    out["receipt"] = None
+    if after != before:
+        out["receipt"] = _write(os.path.join(run_dir, "receipt.json"), {
+            "receipt_version": 1, "run_id": out["run"]["run_id"], "ledger_doc": DOC,
+            "steps": [{"kind": "card", "target": DOC, "before_sha256": before, "after_sha256": after,
+                       "state": "done"}]})
+        rows += [{"kind": "build_doc", "path": os.path.join(ws, DOC)}, {"kind": "card", "path": os.path.join(ws, DOC)}]
+    out["records_written"] = rows
+
+
+def _result(name, which, visit, ws, writes=None, doc_move=None):
     """The real station's accepted example, its run fields set to the visit's. recheck-v2's slice, doc, name and
     version are its `checklist` and `run.skill` (C2-4), and its `records_written` lists the project files this visit's
-    station wrote (`writes`), its run artifacts moved to the visit's run directory (C2-1)."""
+    station wrote (`writes`), its run artifacts moved to the visit's run directory (C2-1); build-v2 and signoff-v2
+    list their own doc write as each station lists it (`_evidence`, A28 (1))."""
     real = _real(name)
     if which == "v1-text":
         return {"status": "COMPLETE", "station": V1[0], "report": "BUILD: A"}
@@ -239,8 +287,12 @@ def _result(name, which, visit, ws, writes=None):
         out["plugin_version"] = _load(os.path.join(real, ".claude-plugin", "plugin.json"))["version"]
     if name == "build-v2":
         out.update(run_id=run_id, run_dir=run_dir, workspace=ws, build_doc=DOC, slice="A")
+        if doc_move is not None:
+            _evidence(name, out, ws, run_dir, doc_move)
     elif name == "signoff-v2":
         out["run"].update(run_id=run_id, run_dir=run_dir, workspace=ws, build_doc=DOC, slice="A")
+        if doc_move is not None:
+            _evidence(name, out, ws, run_dir, doc_move)
     else:
         out["run"].update(run_id=run_id, run_dir=run_dir)
         version = _load(os.path.join(real, ".claude-plugin", "plugin.json"))["version"]
@@ -342,7 +394,7 @@ def observe_lane(step, case_dir, neutral, facts, via, scratch):
             writes = [] if doc_after == doc_before else [{"kind": "status_line", "path": DOC, "appended": False,
                                                           "sha256_before": doc_before, "sha256_after": doc_after}]
             _write(os.path.join(visit["visit_run_dir"], "result.json"),
-                   _result(action["station"], action["result"], visit, ws, writes))
+                   _result(action["station"], action["result"], visit, ws, writes, (doc_before, doc_after)))
             code, out = run(["visit", "--run-dir", run_dir, "--result"])
             exits["visit_result"].append(code)
             if code != 0:

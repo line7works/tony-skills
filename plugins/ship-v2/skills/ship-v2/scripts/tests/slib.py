@@ -295,21 +295,32 @@ def real_version(station):
     return testlib.load_json(os.path.join(real_station(station), ".claude-plugin", "plugin.json"))["version"]
 
 
-def station_result(station, which, visit, ws, doc=DOC, slice_name="A", writes=None):
+def station_result(station, which, visit, ws, doc=DOC, slice_name="A", writes=None, doc_move=None):
     """The real station's accepted example `which`, its run fields set to the visit's (`visit` is visit's output).
 
     recheck-v2's run block carries no slice or doc: its `checklist` names them and `run.skill` names the station and
     its version, so they are set to the visit's too (C2-4). Its `records_written` lists the project files it wrote:
     the example's run artifacts move to the visit's run directory, its project rows are dropped, and `writes` (rows
-    of the station's own shape, e.g. a `status_line` with its hashes) are what this visit wrote."""
+    of the station's own shape, e.g. a `status_line` with its hashes) are what this visit wrote.
+
+    `doc_move` is `(sha256 before, sha256 after)` of the build doc across the visit: what the station itself wrote
+    there, listed the way that station lists it (the E15 lane contract A28 (1), the window rule): build-v2 names the
+    doc in `source_set.sanctioned` and lists its `status_line` write with its hash after, and its source set lists
+    the paths the build changed (from git, as build-v2 computes it); signoff-v2 lists the doc in `records_written`
+    and its document steps, with their hashes, in its own `receipt.json` in the visit's run directory. None: the
+    example's own rows, untouched but for the run directory."""
     out = copy.deepcopy(example(station, which))
     run_id, run_dir = visit["visit_run_id"], visit["visit_run_dir"]
     if "plugin_version" in out:
         out["plugin_version"] = real_version(station)
     if station == "build-v2":
         out.update(run_id=run_id, run_dir=run_dir, workspace=ws, build_doc=doc, slice=slice_name)
+        if doc_move is not None:
+            _build_evidence(out, ws, doc, run_dir, doc_move)
     elif station == "signoff-v2":
         out["run"].update(run_id=run_id, run_dir=run_dir, workspace=ws, build_doc=doc, slice=slice_name)
+        if doc_move is not None:
+            _signoff_evidence(out, ws, doc, run_dir, doc_move)
     else:
         out["run"].update(run_id=run_id, run_dir=run_dir)
         out["run"]["skill"].update(name="recheck-v2", version=real_version(station))
@@ -330,6 +341,54 @@ def station_result(station, which, visit, ws, doc=DOC, slice_name="A", writes=No
     return out
 
 
+def _dirty(ws):
+    """(changed, untracked) as build-v2's source set lists them, `docs/records/` excluded."""
+    raw = testlib.git(ws, ["status", "--porcelain", "--untracked-files=all"])
+    changed, untracked = [], []
+    for line in raw.split("\n"):
+        if not line.strip():
+            continue
+        path = line[3:]
+        if path.startswith("docs/records/"):
+            continue
+        (untracked if line.startswith("??") else changed).append(path)
+    return sorted(changed), sorted(untracked)
+
+
+def _build_evidence(out, ws, doc, run_dir, doc_move):
+    before, after = doc_move
+    changed, untracked = _dirty(ws)
+    out["source_set"].update(changed=changed, untracked=untracked, committed=[])
+    out["source_set"]["sanctioned"] = [dict(row, path=doc) for row in out["source_set"].get("sanctioned") or []] or \
+        [{"path": doc, "reason": "the ledger document this run is executing"}]
+    rows = []
+    for row in out.get("writes") or []:
+        if row["kind"] == "run_artifact":
+            rows.append(dict(row, path=os.path.join(run_dir, os.path.basename(row["path"]))))
+        elif row["kind"] == "status_line":
+            if after != before:
+                rows.append(dict(row, path=doc, sha256_after=after))
+        else:
+            rows.append(dict(row))
+    out["writes"] = rows
+    out["receipt"] = None
+
+
+def _signoff_evidence(out, ws, doc, run_dir, doc_move):
+    before, after = doc_move
+    rows = [dict(row, path=os.path.join(run_dir, os.path.basename(row["path"])))
+            for row in out.get("records_written") or [] if row.get("kind") == "run_artifact"]
+    out["receipt"] = None
+    if after != before:
+        receipt = os.path.join(run_dir, "receipt.json")
+        testlib.write_json(receipt, {"receipt_version": 1, "run_id": out["run"]["run_id"], "ledger_doc": doc,
+                                     "steps": [{"kind": "card", "target": doc, "before_sha256": before,
+                                                "after_sha256": after, "state": "done"}]})
+        out["receipt"] = receipt
+        rows += [{"kind": "build_doc", "path": os.path.join(ws, doc)}, {"kind": "card", "path": os.path.join(ws, doc)}]
+    out["records_written"] = rows
+
+
 def put_result(visit, doc):
     path = os.path.join(visit["visit_run_dir"], "result.json")
     testlib.write_json(path, doc)
@@ -344,20 +403,26 @@ def doc_write(ws, before, doc=DOC, kind="status_line"):
     return {"kind": kind, "path": doc, "appended": False, "sha256_before": before, "sha256_after": after}
 
 
-def visit(test, drive, run_dir, station, which, ws, before_result=None):
-    """One visit: `visit --station`, the station's result written as the station would, `visit --result`. For
-    recheck-v2, a change `before_result` made to the build doc (the station's own `Status:` write) is listed in its
-    result's `records_written`, as the station lists it."""
+def visit(test, drive, run_dir, station, which, ws, before_result=None, evidence=True, after_result=None):
+    """One visit: `visit --station`, then `before_result` (what the station itself writes while it runs, and what a
+    test plants while the visit is open), the station's result written as the station would, then `after_result`
+    (what a test plants after the station wrote its result, before `visit --result`), `visit --result`. A change to
+    the build doc across `before_result` is listed in the result as that station lists its own write
+    (`station_result`'s `doc_move`); `evidence=False` lists none (a doc move no station claims)."""
     code, out, err = drive(["visit", "--run-dir", run_dir, "--station", station])
     test.assertEqual(code, 0, (station, out, err))
     doc_before = sha(os.path.join(ws, DOC))
     if before_result is not None:
         before_result(out)
+    doc_after = sha(os.path.join(ws, DOC))
     writes = None
     if station == "recheck-v2":
-        row = doc_write(ws, doc_before)
+        row = doc_write(ws, doc_before) if evidence else None
         writes = [row] if row else []
-    put_result(out, station_result(station, which, out, ws, writes=writes))
+    put_result(out, station_result(station, which, out, ws, writes=writes,
+                                   doc_move=(doc_before, doc_after) if evidence else None))
+    if after_result is not None:
+        after_result(out)
     return drive(["visit", "--run-dir", run_dir, "--result"])
 
 

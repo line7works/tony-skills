@@ -62,7 +62,9 @@ python3 adapters/claude-code/hook.py --slice <slice> > <hook.json>   # Claude Co
 python3 adapters/codex/hook.py > <hook.json>                          # Codex: always `Hook: NOT armed`, labelled honestly
 ```
 
-Armed or not, the run proceeds identically; the report labels it honestly and never claims armed when it was not.
+Armed or not, the run proceeds identically; the report labels it honestly and never claims armed when it was not. A
+plain `/ship-v2 <slice>` typed after an earlier `/goal` in the same session is a new run whose goal was never set: it
+reads not armed.
 
 ## Step 1: Find the doc
 
@@ -110,7 +112,10 @@ uv run scripts/ship.py visit --run-dir <run dir> --result
 ```
 
 Run signoff-v2 on the built slice by its own `SKILL.md`. Its independence, model floor and verdict machinery are its
-own. A signoff-v2 stop or refusal ends the run with its status. A clean signoff, no BLOCKER or MAJOR charged to this
+own. Touch nothing while its visit is open, and nothing between build-v2's result and its visit: the script holds
+every visit window and every step between visits by one rule (outside the footprint is stop 4, the doc moved is stop
+2, a path inside it that nothing names is refused; the stations' own listed writes and the script's own are theirs).
+A signoff-v2 stop or refusal ends the run with its status. A clean signoff, no BLOCKER or MAJOR charged to this
 slice in the records, ends the loop: skip steps 4 to 6 and go to step 7 with Result ALL CLEAR and Recheck not run; if
 the owner's invocation ordered MINOR fixes, the script names them for step 4 first (they never gate and never trigger
 a recheck). Findings signoff-v2's sweep raises from prior slices are never this run's to fix: the report lists them
@@ -144,8 +149,8 @@ uv run scripts/ship.py visit --run-dir <run dir> --result
 
 Run recheck-v2 on the fixed findings by its own `SKILL.md`. Its closed checklist, independent verifier and card flip
 are its own. Touch nothing while its visit is open, and nothing between its result and the next `lap` but what the
-next lap fixes: the script holds what moved then to the footprint and the doc too (outside it is stop 4, the doc moved
-is stop 2, a path inside it that no fix names is refused). ALL CLEAR (its own result and no BLOCKER or MAJOR the
+next lap fixes: the same rule holds what moved then (outside it is stop 4, the doc moved is stop 2, a path inside it
+that no fix names is refused). ALL CLEAR (its own result and no BLOCKER or MAJOR the
 records hold open for the slice) ends the loop: go to step 7.
 
 ## Step 6: The one extra lap

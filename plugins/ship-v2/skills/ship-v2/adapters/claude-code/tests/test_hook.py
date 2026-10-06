@@ -43,9 +43,10 @@ def goal(text="/goal /ship-v2 A docs/plans/2026-09-20-turnstile.md"):
 class TheReading(unittest.TestCase):
 
     def reading(self, extra):
+        """This run is slice A's (`--slice A`): the old phrase shape reads only for this run's slice (A28 (2))."""
         work, path = with_records(extra)
         try:
-            return testlib.run_json(HELPER, ["--transcript", path, "--session-id", testlib.SESSION])
+            return testlib.run_json(HELPER, ["--transcript", path, "--session-id", testlib.SESSION, "--slice", "A"])
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -89,9 +90,10 @@ class OnlyTheHarnessesOwnConfirmationForThisRun(unittest.TestCase):
     ship-v2, when that prompt is a `/goal` one, in this session."""
 
     def reading(self, extra):
+        """This run is slice A's (`--slice A`): the old phrase shape reads only for this run's slice (A28 (2))."""
         work, path = with_records(extra)
         try:
-            return testlib.run_json(HELPER, ["--transcript", path, "--session-id", testlib.SESSION])
+            return testlib.run_json(HELPER, ["--transcript", path, "--session-id", testlib.SESSION, "--slice", "A"])
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -228,9 +230,64 @@ class TheGoalCommandRecordsOfThisHarness(unittest.TestCase):
 
     def test_6_the_old_phrase_shape_still_reads_armed(self):
         self.assertTrue(self.reading([goal(), confirmation_record()])["armed"])
-        self.assertTrue(self.reading([goal(), confirmation_record()], slice_name=None)["armed"])
+        self.assertFalse(self.reading([goal(), confirmation_record()], slice_name=None)["armed"],
+                         "no slice given, the old shape's goal cannot name this run's (A28 (2), R1S2-7)")
         self.assertFalse(self.reading([goal(), confirmation_record(), goal_command("something else")])["armed"],
                          "a later /goal command replaces the old shape's goal too")
+
+
+
+class APlainRerunResetsTheReading(unittest.TestCase):
+    """The E15 lane contract A28 (2), from slice 2 re-check 1's R1S2-1 and R1S2-7. A `/goal` pair counts only when it
+    comes after the last prompt the owner typed that invokes `/ship-v2`, or that prompt is itself a `/goal` one: a
+    typed `/ship-v2` prompt without `/goal` after a pair resets the reading to not armed (a plain rerun of the same
+    slice in the same session is a new run, and its goal was never set). The old confirmation-phrase shape reads only
+    for this run's slice: the `/goal` prompt before it must name `/ship-v2 <slice>`. Every fixture is synthetic."""
+
+    def reading(self, extra, slice_name="A"):
+        work, path = with_records([typed("good morning")] + list(extra))
+        try:
+            args = ["--transcript", path, "--session-id", testlib.SESSION]
+            if slice_name is not None:
+                args += ["--slice", slice_name]
+            return testlib.run_json(HELPER, args)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    def test_a_plain_rerun_after_the_pair_reads_not_armed(self):
+        out = self.reading(pair() + [typed("/ship-v2 A docs/plans/2026-09-20-turnstile.md")])
+        self.assertFalse(out["armed"], out)
+        self.assertIn("/goal", out["how"])
+
+    def test_a_plain_rerun_after_a_goal_achieved_record_reads_not_armed(self):
+        achieved = {"type": "system", "subtype": "informational", "sessionId": testlib.SESSION,
+                    "content": "Goal achieved: /ship-v2 A"}
+        self.assertFalse(self.reading(pair() + [achieved, typed("/ship-v2 A")])["armed"])
+
+    def test_the_pair_after_the_plain_prompt_still_reads_armed(self):
+        self.assertTrue(self.reading([typed("/ship-v2 A")] + pair())["armed"], "the goal set for this run")
+
+    def test_a_goal_prompt_typed_with_the_pair_still_reads_armed(self):
+        self.assertTrue(self.reading([goal("/goal /ship-v2 A")] + pair())["armed"])
+        self.assertTrue(self.reading(pair() + [goal("/goal /ship-v2 A")])["armed"],
+                        "the last typed /ship-v2 prompt is itself a /goal one")
+
+    def test_a_rerun_with_its_own_pair_reads_armed_again(self):
+        self.assertTrue(self.reading(pair() + [typed("/ship-v2 A")] + pair())["armed"])
+
+    def test_the_old_shape_reads_only_for_this_runs_slice(self):
+        self.assertFalse(self.reading([goal("/goal /ship-v2 B"), confirmation_record()])["armed"],
+                         "another slice's goal")
+        self.assertTrue(self.reading([goal("/goal /ship-v2 B"), confirmation_record()], slice_name="B")["armed"])
+        self.assertTrue(self.reading([goal("/goal /ship-v2 A"), confirmation_record()])["armed"])
+        self.assertFalse(self.reading([goal("/goal /ship-v2 A"), confirmation_record()], slice_name=None)["armed"],
+                         "no slice given, no goal can name it")
+        slash = typed("<command-name>/goal</command-name>\n<command-args>/ship-v2 A</command-args>")
+        self.assertTrue(self.reading([slash, confirmation_record()])["armed"], "the harness's slash-command shape")
+        self.assertFalse(self.reading([slash, confirmation_record()], slice_name="B")["armed"])
+
+    def test_the_old_shape_then_a_plain_rerun_reads_not_armed(self):
+        self.assertFalse(self.reading([goal("/goal /ship-v2 A"), confirmation_record(), typed("/ship-v2 A")])["armed"])
 
 
 if __name__ == "__main__":

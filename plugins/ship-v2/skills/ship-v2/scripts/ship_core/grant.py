@@ -4,8 +4,8 @@ contract section 6).
     plan(run, kind, finding_id, words, records_root) -> the plan, or GrantRefused (exit 5, nothing written)
     execute(ctx, run, plan, given, records_root) -> ("done", receipt) | ("ended", the emitted stop)
     pending(run) -> the receipt of a transaction this run began and never finished, or None
+    receipt_of(run, pause) -> the receipt of that pause's grant, finished or not, or None
     settle(ctx, run, receipt, records_root) -> ("done", receipt) | ("ended", the emitted stop) | ("replan", None)
-    finish_pins(state, ws, receipt) -> the pins with ship-v2's own `Status:` write taken into them
 
 THE GRANT. For each grant ship-v2 writes the `waived` or `reopened` event with the owner's words and, when the slice's
 card changes by v1's rule after the grant, a `card_set` event and its `Status:` line, as handoff-v2 does (A23 (2)). v1's
@@ -36,24 +36,25 @@ landed, nothing reverted. Once the log holds this run's events no stop says that
 whose slice's last `card_set` differs from its `Status:` line while that line equals the event's `before` stops
 `card-drift` at `select` (`drift`).
 
-SHIP-V2'S OWN WRITE IS NO FIX. The pins a lap's fixes are held to (`pin.py`) take ship-v2's own `Status:` write in
-(`finish_pins`), but only a pin under which the doc had not moved before the grant: a doc another hand moved stays
-moved, and stop 2 stands.
+SHIP-V2'S OWN WRITE IS NO FIX. Each grant's `Status:` write (its receipt's doc hash before and after) is recorded
+against the window rule's pin (`window.own`), and every check point takes it as ship-v2's own sanctioned write: a link
+in the chain the doc's hashes must run along from the pin, so it is never a station's or a fix's move, and a hand edit
+before, between or after it still is (the E15 lane contract A28 (1); slice 2 re-check 1's R1S2-4).
 
 The test hook `SHIP_V2_TEST_HOLD` (honored only with `SHIP_V2_TEST=1`) holds the process at one named point so a test
 can kill it there: `intent` (the append landed, the receipt holds no outcome), `outcome` (the receipt holds the
-outcome, the doc is not written), `written` (the doc is written, the run's bookkeeping is not).
+outcome, the doc is not written), `written` (the doc is written, the run's bookkeeping is not), `answered` (the
+answer is recorded in `pauses.json`, the run has not left `paused`: `pause.py`).
 """
 import os
 import time
 
 from station_core import fsio, records_link
 
-from . import common, doc as docmod, fences, pin, record
+from . import common, doc as docmod, fences, record
 
 VERDICT = ("rejected", "signed off with conditions", "signed off")
-HOLDS = ("intent", "outcome", "written")
-PINS = ("pin", "fixed_pin")
+HOLDS = ("intent", "outcome", "written", "answered")
 
 
 class GrantRefused(Exception):
@@ -72,10 +73,14 @@ def effective(card, open_rows):
     return "signed off"
 
 
-def _hold(where):
+def hold_point(where):
+    """The test hook (module docstring): sleep at `where` when the test asked for it, so its kill lands there."""
     value = os.environ.get(common.PREFIX + "_TEST_HOLD")
     if common.test_mode() and value == where and where in HOLDS:
         time.sleep(120)
+
+
+_hold = hold_point
 
 
 def set_status(text, line, before, after):
@@ -167,25 +172,6 @@ def _receipt_name(number):
     return "receipt-%d.json" % number
 
 
-def _excused_pins(state, ws, rel):
-    """The pins under which the doc has not moved before this grant's write (module docstring)."""
-    return [key for key in PINS if state.get(key) and rel not in pin.moved(ws, state[key])]
-
-
-def finish_pins(state, ws, receipt):
-    """`state` with ship-v2's own `Status:` write taken into the pins the receipt names."""
-    if not receipt.get("doc_written"):
-        return state
-    for key in receipt.get("excuse") or []:
-        if state.get(key):
-            paths = dict(state[key]["paths"])
-            paths[receipt["doc_rel"]] = pin.identity(ws, receipt["doc_rel"])
-            state[key] = dict(state[key], paths=paths)
-            if "doc_sha256" in state[key]:
-                state[key]["doc_sha256"] = receipt["doc_sha256_after"]
-    return state
-
-
 def grants_row(receipt, appended):
     """The `events.json` row of one grant: what the result reports of it."""
     log = None
@@ -207,7 +193,6 @@ def execute(ctx, run, planned, given, records_root=None):
     head = cli.verify(ws, rel)
     log = os.path.join(ws, head["log"])
     doc_path = os.path.join(ws, rel)
-    state = common.state(run)
     receipt = {"receipt_version": 1, "run_id": common.run_id(run), "pause": given["pause"], "answer": given,
                "kind": planned["kind"], "finding": planned["finding"], "words": planned["words"],
                "events": planned["events"], "card": planned["card"], "log": log,
@@ -215,8 +200,7 @@ def execute(ctx, run, planned, given, records_root=None):
                "expect_head": head["head"], "expect_seq": head["events"], "doc": doc_path, "doc_rel": rel,
                "doc_sha256_before": fsio.sha256_bytes(planned["text"].encode("utf-8")) if planned["card"] else None,
                "doc_sha256_planned": fsio.sha256_bytes(planned["planned"].encode("utf-8")) if planned["card"] else None,
-               "doc_sha256_after": None, "excuse": _excused_pins(state, ws, rel) if planned["card"] else [],
-               "appended": None, "doc_written": False, "finished": False, "stop": None}
+               "doc_sha256_after": None, "appended": None, "doc_written": False, "finished": False, "stop": None}
     common.write(run, _receipt_name(given["pause"]), receipt)
     try:
         body = cli.append(ws, rel, planned["events"], head["head"], run.run_dir)
@@ -301,6 +285,13 @@ def pending(run):
         if not receipt.get("finished") and not receipt.get("abandoned"):
             return receipt
     return None
+
+
+def receipt_of(run, number):
+    """The receipt of pause `number`'s grant, finished or not, or None (a resume, or a report-only grant)."""
+    if not common.has(run, _receipt_name(number)):
+        return None
+    return common.read(run, _receipt_name(number))
 
 
 def _landed(rows, receipt):

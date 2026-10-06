@@ -16,11 +16,16 @@ an assistant record or a typed prompt never counts, whatever text it holds). Two
    (b) its output, with a `commandRun` field, its `content` opening `<local-command-stdout>Goal set: ` and then the
    same goal text. `armed` when the LAST (a) for `/goal` in the session is followed by its (b), and that goal text
    opens with `/ship-v2` and names this run's slice (`--slice`) as its next word. A later `/goal` command replaces the
-   goal, whatever it sets; (b) with no (a) before it, or (a) with no (b), sets none.
+   goal, whatever it sets; (b) with no (a) before it, or (a) with no (b), sets none. A pair counts only for this run
+   (the E15 lane contract A28 (2), slice 2 re-check 1's R1S2-1): when it comes after the last prompt the owner typed
+   that invokes `/ship-v2`, or that prompt is itself a `/goal` one; a typed `/ship-v2` prompt without `/goal` after a
+   pair is a new run whose goal was never set, so it resets the reading to not armed.
 2. THE CONFIRMATION PHRASE (older harness versions, the fixture's shape): a `system` record whose own `content` opens
    with the Stop hook's confirmation (the module constant `CONFIRMATION`, compared without regard to case), after the
    last prompt the owner typed in this session that invokes `/ship-v2` (a user record whose content is his text, never
-   a tool result), when that prompt is a `/goal` one, and with no `/goal` command record (a) after it.
+   a tool result), when that prompt is a `/goal` one whose goal names `/ship-v2` and this run's slice as shape 1's
+   does (A28 (2), R1S2-7: the text after `/goal`, or the slash-command record's `<command-args>`), and with no `/goal`
+   command record (a) after it.
 
 `armed` true with the record or records as `evidence`; `armed` false otherwise, `evidence` null, `how` saying what was
 missing. A reading of harness records by their type, subtype, place and content, labelled `helper-derived`, never a
@@ -48,7 +53,8 @@ SET = "<local-command-stdout>Goal set: "
 EPILOG = """\
 Reads this session's transcript for the harness's own records that this run's goal is set: the last /goal command
 record and its "Goal set" output naming /ship-v2 and --slice, or, on older versions, the Stop hook's confirmation
-record after this run's typed /goal prompt; prints the reading (kind hook) for `ship.py hook --reading FILE`.
+record after this run's typed /goal prompt naming /ship-v2 and --slice; a typed /ship-v2 prompt without /goal after
+the pair is a new run and reads not armed; prints the reading (kind hook) for `ship.py hook --reading FILE`.
 --transcript and --session-id are the fixture interface and work only under SHIP_V2_ADAPTER_TEST=1.
 
 Exit 0 success, 2 usage, 3 a harness record or the claude binary is missing, 1 anything else.
@@ -115,6 +121,16 @@ def names_run(goal_text, slice_name):
     return bool(slice_name) and len(words) >= 2 and words[0] == "/ship-v2" and words[1] == slice_name
 
 
+def typed_goal(text):
+    """The goal text a typed prompt sets, or None when it is not a `/goal` one: the slash-command record's
+    `<command-args>` when the text is that record's shape, else the text after `/goal`."""
+    if COMMAND in text:
+        found = ARGS.search(text)
+        return found.group(1).strip() if found else ""
+    found = GOAL.search(text)
+    return text[found.end():].strip() if found else None
+
+
 def is_confirmation(record):
     """The harness's own Stop-hook confirmation record (module docstring, WHICH RECORD COUNTS)."""
     if record.get("type") != "system" or "message" in record or record.get("isSidechain"):
@@ -137,7 +153,7 @@ def main():
     cfg = _common.config_dir(args.config_dir)
     path, session_id, discovery, binding = _common.find_transcript(
         explicit=args.transcript, session_id=args.session_id, cfg=cfg, workspace=args.workspace)
-    prompt = None           # (line, is a /goal prompt) of the last typed prompt that invokes ship-v2
+    prompt = None           # (line, is a /goal prompt naming this run) of the last typed prompt invoking ship-v2
     seen = None             # (line, type) of the last confirmation after that prompt (shape 2)
     command = None          # (line, goal text) of the last /goal command record (shape 1 (a))
     goal = None             # (line of (a), line of (b), goal text): its output followed it (shape 1)
@@ -151,8 +167,11 @@ def main():
                 continue
             text = typed_text(record)
             if text is not None and SHIP.search(text):
-                prompt = (number, GOAL.search(text) is not None)
+                asked = typed_goal(text)
+                prompt = (number, asked is not None and names_run(asked, args.slice))
                 seen = None
+                if asked is None:       # a plain rerun: a new run whose goal was never set (A28 (2))
+                    command, goal = None, None
                 continue
             asked = goal_command(record)
             if asked is not None:
@@ -184,7 +203,8 @@ def main():
     elif prompt is None:
         why = "no prompt typed in this session invokes /ship-v2 and no /goal command record is in it"
     elif not prompt[1]:
-        why = "this run's prompt (line %d) carries no /goal" % prompt[0]
+        why = ("this run's prompt (line %d) carries no /goal naming /ship-v2 %s, and no /goal command record follows "
+               "it" % (prompt[0], args.slice or "<slice>: pass --slice"))
     else:
         why = ("no system record after this run's /goal prompt (line %d) carries the Stop hook's confirmation"
                % prompt[0])

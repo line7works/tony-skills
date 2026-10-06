@@ -8,7 +8,8 @@ station). It is resolved by allowlist identity and its `skill-identity` read thr
 its identity, the route, the visit's run directory) is written, and only then is the visit handed to the executor:
 the station's `SKILL.md` to run by, the summon line, the run id and run directory the visit uses (`visits/<seq>-<name>`
 under this run's directory, which the station's own `check-input` creates), and the caller fields (`ship-v2`,
-`station`).
+`station`). Before anything of the station is read, the window since the last step is held, and when the opening line
+is written the workspace is pinned (the window rule, `window.py`).
 
 `visit --result`: the station's own result file, `<visit run dir>/result.json`, read after the executor ran the
 station by its own `SKILL.md`. Before it is read, the station is resolved and identified again: one that changed
@@ -16,10 +17,14 @@ since the visit opened is refused (a `refused` line, `station-refused`). The fil
 visit's run directory; it must validate against that station's own result schema, name this visit's run id and run
 directory, this run's slice, doc and workspace where it carries them, and the version of the station visited; on a
 report-only run it must be a report-only result that wrote nothing. Anything else is a v1 result file, or not this
-visit's: refused, exit 5, nothing written, the run still at the visit. A result that holds is recorded with its
-terminal status on the closing trace line (`visit`, the station's status), and the loop's next step is decided from
-the station's own words and the records (contract section 3.4's table): stop 3 on a build that is not COMPLETE; the
-run's end on a signoff-v2 or recheck-v2 stop or refusal; the fixes, ALL CLEAR, a lap or the extra lap exhausted.
+visit's: refused, exit 5, nothing written, the run still at the visit. Then the window the visit was open in is held,
+net of the station's own listed writes and ship-v2's own (`window.py`): a path inside the footprint nothing names is
+refused there, exit 5. A result that holds is recorded with its terminal status on the closing trace line (`visit`,
+the station's status); the window's stop (2 or 4), if any, ends the run after it; otherwise the workspace is pinned
+again and the loop's next step is decided from the station's own words and the records (contract section 3.4's
+table): stop 3 on a build that is not COMPLETE; the run's end on a signoff-v2 or recheck-v2 stop or refusal; the
+fixes, ALL CLEAR, a lap or the extra lap exhausted. `judge` is the same reading without a write, for `report` at
+`visiting` (slice 2 re-check 1's R1S2-5).
 """
 import os
 import stat
@@ -28,9 +33,12 @@ from station_core import driver, fsio, records_link
 from station_core.records_client import ComponentUnavailable
 from back_core import trace
 
-from . import common, doc as docmod, forms, pin, record, report, stations
+from . import common, forms, record, report, stations, window
 
 EXPECT = {"hooked": "build-v2", "built": "signoff-v2", "fixed": "recheck-v2"}
+# the window a visit's opening holds, by the stage it opens at (the window rule's words)
+BETWEEN = {"built": "between build-v2's result and signoff-v2's visit",
+           "fixed": "after the lap's fixes were recorded and before recheck-v2's visit"}
 # the `invocation.mode` each station's own input schema takes from a calling station (slice 2 check 1's C2-8):
 # build-v2's `station`; signoff-v2 and recheck-v2 take `interactive` or `headless`, and recheck-v2 takes only
 # `headless` from a caller other than `direct`
@@ -88,10 +96,11 @@ def open_visit(ctx, run, args):
     if os.path.lexists(run_dir):
         raise driver.Defect("the visit's run directory %s already exists: the run directory has been changed by hand"
                             % run_dir)
-    if expected == "recheck-v2":
-        moved_after = _moved_after_the_fixes(ctx, run, state)
-        if moved_after is not None:
-            return moved_after
+    between = window.hold(run, state, BETWEEN.get(stage, "before %s's visit" % expected))
+    if between.stop is not None:
+        return report.ending(ctx, run, state, between.stop[0], between.stop[1], condition=between.stop[2])
+    if between.refuse is not None:
+        return common.refuse(ctx, run, between.refuse)
     held, ended = _resolve(ctx, run, state, expected, run_dir)
     if held is None:
         return ended
@@ -105,6 +114,7 @@ def open_visit(ctx, run, args):
     os.makedirs(os.path.join(run.run_dir, "visits"), exist_ok=True)
     state["visit"] = {"station": expected, "seq": written["seq"], "run_id": run_id, "run_dir": run_dir,
                       "identity": identity, "route": found["route"], "root": found["root"], "skill_md": skill_md}
+    window.take(run, state)                 # what the workspace holds when the visit opens
     common.save(run, state)
     common.advance(run, "visiting")
     return ctx.emit(ctx.envelope(
@@ -140,105 +150,6 @@ def _skill_md(found, name):
     return path, None
 
 
-def _moved_after_the_fixes(ctx, run, state):
-    """Before recheck-v2 is visited, what moved since the lap's pin is held to the lap's recorded fixes (contract
-    section 3.5): the build doc moved is stop 2, a path outside the footprint stop 4, and a path inside it that no fix
-    names is refused (exit 5: put it back, or it reaches recheck-v2 unnamed). None when everything holds."""
-    laps = [l for l in common.listing(run, "fixes.json", "laps") if l["lap"] == state["lap"]
-            and l.get("outcome") == "recorded"]
-    declared = set(laps[-1]["declared"]) if laps else set()
-    if state.get("fixed_pin"):          # what the workspace held when the fixes were recorded: everything since moved
-        declared = set()
-        moved = pin.moved(common.workspace(run), state["fixed_pin"])
-    else:
-        moved = pin.moved(common.workspace(run), state["pin"])
-    if state["doc"] in moved:
-        return report.ending(ctx, run, state, "spec-change", "the build doc %s moved after the lap's fixes were "
-                                                              "recorded: a fix is never a spec edit, so the run stops at "
-                                                              "condition 2" % state["doc"], condition=2)
-    outside = [p for p in moved if not docmod.in_footprint(p, state["footprint"])]
-    if outside:
-        return report.ending(ctx, run, state, "outside-footprint", "after the lap's fixes were recorded, files outside "
-                                                                   "slice %s's footprint moved: %s; the run stops at "
-                                                                   "condition 4" % (state["slice"], ", ".join(outside)),
-                             condition=4)
-    unnamed = [p for p in moved if p not in declared]
-    if unnamed:
-        return common.refuse(ctx, run, "after the lap's fixes were recorded, paths moved that no fix names: %s; every "
-                                       "change traces to a named finding, so put them back before recheck-v2 is "
-                                       "visited" % ", ".join(unnamed))
-    return None
-
-
-def station_writes(run, doc):
-    """{workspace path: [(sha256 before, sha256 after)]} of the project files recheck-v2's own result says it wrote
-    (`records_written`, every row but its run artifacts), in the result's order; a hash it does not give is None."""
-    ws = os.path.realpath(common.workspace(run))
-    out = {}
-    for row in doc.get("records_written") or []:
-        if not isinstance(row, dict) or row.get("kind") == "run_artifact" or not isinstance(row.get("path"), str):
-            continue
-        path = row["path"]
-        if os.path.isabs(path):
-            real = os.path.realpath(path)
-            if not fsio.inside(real, ws):
-                continue
-            path = os.path.relpath(real, ws)
-        sha = lambda key: row.get(key) if isinstance(row.get(key), str) else None  # noqa: E731
-        out.setdefault(os.path.normpath(path), []).append((sha("sha256_before"), sha("sha256_after")))
-    return out
-
-
-def _own(ws, rel, rows, start=None):
-    """Whether the station's listed writes of `rel` account for every byte of it now: the last listed hash is the file
-    as it stands (or the station gives none). For the build doc (`start`, its hash when the fixes were recorded) the
-    listed writes must also run as one chain from that hash, each from the hash the one before left, so a hand edit
-    before or between them is never taken for the station's."""
-    current = fsio.sha256_file_or_none(os.path.join(ws, rel))
-    if start is None:
-        return rows[-1][1] is None or rows[-1][1] == current
-    expect = start
-    for before, after in rows:
-        if before is None or after is None or before != expect:
-            return False
-        expect = after
-    return expect == current
-
-
-def _recheck_window(run, state, doc):
-    """What moved while recheck-v2's visit was open (since the lap's fixes were recorded), held to the footprint and
-    the doc before ALL CLEAR or the next lap (slice 2 check 1's C2-1; contract section 3.4). The station's own writes
-    are its own: a project file its result lists, at the hash it gives (the build doc: a chain of its listed writes
-    from the doc the fixes left). Returns None when nothing else moved; ("stop", tag, reason, condition): the doc moved
-    is stop 2, a path outside the footprint stop 4; ("refuse", reason): a path inside the footprint that no fix names,
-    exit 5, nothing written."""
-    ws = common.workspace(run)
-    base = state.get("fixed_pin") or state.get("pin")
-    if not base:
-        return None
-    own = station_writes(run, doc)
-
-    def excused(rel):
-        if rel not in own:
-            return False
-        return _own(ws, rel, own[rel], base.get("doc_sha256") if rel == state["doc"] else None)
-    moved = [p for p in pin.moved(ws, base) if not excused(p)]
-    if state["doc"] in moved:
-        return ("stop", "spec-change", "the build doc %s moved while recheck-v2's visit was open, and not by a write "
-                                       "recheck-v2's result lists: a fix is never a spec edit, so the run stops at "
-                                       "condition 2 before ALL CLEAR or another lap" % state["doc"], 2)
-    outside = [p for p in moved if not docmod.in_footprint(p, state["footprint"])]
-    if outside:
-        return ("stop", "outside-footprint", "while recheck-v2's visit was open, files outside slice %s's footprint "
-                                             "moved: %s; the run stops at condition 4 before ALL CLEAR or another lap"
-                % (state["slice"], ", ".join(outside)), 4)
-    if moved:
-        return ("refuse", "while recheck-v2's visit was open, paths inside the footprint moved that no fix names and "
-                          "recheck-v2's result does not list: %s; every change traces to a named finding, so put them "
-                          "back, then run `visit --result` again" % ", ".join(moved))
-    return None
-
-
 def _result_file(run, visit):
     folder = visit["run_dir"]
     path = os.path.join(folder, "result.json")
@@ -257,43 +168,69 @@ def _result_file(run, visit):
     return path, None
 
 
-def close_visit(ctx, run, args):
-    state = common.state(run)
+def judge(run, state, prefix):
+    """The station's result read as `visit --result` reads it, writing nothing: ("missing", None) for no result yet;
+    ("take", None) for one `visit --result` takes; ("refuse", why) for one it refuses (exit 5), why in its words; or
+    ("refused-station", (identity, route, rules, why)) for a station refused at its result."""
     visit = state["visit"]
     name = visit["station"]
     path, wrong = _result_file(run, visit)
     if wrong is not None:
-        return common.refuse(ctx, run, wrong)
+        return "refuse", wrong
     if path is None:
+        return "missing", None
+    try:
+        found = stations.resolve(name)
+    except stations.RootRefused as exc:
+        return "refused-station", (None, exc.route, [exc.rule], str(exc))
+    except LookupError as exc:
+        raise ComponentUnavailable("missing dependency: %s" % exc)
+    identity = stations.identify(name, found)
+    problems = stations.refusals(name, identity, found)
+    if problems:
+        return "refused-station", (identity, found["route"], [p["rule"] for p in problems],
+                                   "; ".join(p["message"] for p in problems))
+    if identity != visit["identity"] or found["route"] != visit["route"]:
+        return "refused-station", (identity, found["route"], ["no-identity"],
+                                   "the station %s changed between the visit and its result (identity %r at the visit, "
+                                   "%r now)" % (name, visit["identity"], identity))
+    try:
+        doc = fsio.read_json(path)
+    except (OSError, ValueError) as exc:
+        return "refuse", ("the station's result %s is not a JSON document (%s): a v1 station leaves no such document"
+                          % (path, exc))
+    if not isinstance(doc, dict):
+        return "refuse", "the station's result %s is not a JSON object" % path
+    facts = {"slice": state["slice"], "doc": state["doc"], "workspace": common.workspace(run),
+             "report_only": common.report_only(run)}
+    problems = stations.result_problems(name, found, identity, doc, visit, facts, prefix)
+    if problems:
+        return "refuse", "the result %s is refused as not %s's own result for this visit: %s" % (
+            path, name, "; ".join(problems))
+    held = window.hold(run, state, "while %s's visit was open" % name,
+                       station=window.evidence(run, state, name, doc, visit["run_dir"]))
+    if held.refuse is not None:
+        return "refuse", held.refuse
+    return "take", (found, identity, path, doc, held)
+
+
+def close_visit(ctx, run, args):
+    state = common.state(run)
+    visit = state["visit"]
+    name = visit["station"]
+    verdict, detail = judge(run, state, ctx.prefix)
+    if verdict == "missing":
         raise driver.Usage("%s has written no result in %s yet: run the station to its end by its own SKILL.md, then "
                            "run `visit --result` (a question it asks the owner is `pause --question`; a station that "
                            "ends without a result it can give: `report`, which ends the run visit-unfinished)"
                            % (name, visit["run_dir"]))
-    held, ended = _resolve(ctx, run, state, name, visit["run_dir"])
-    if held is None:
-        return ended
-    found, identity = held
-    if identity != visit["identity"] or found["route"] != visit["route"]:
-        return _refused(ctx, run, state, name, identity, found["route"], visit["run_dir"], ["no-identity"],
-                        "the station %s changed between the visit and its result (identity %r at the visit, %r now)"
-                        % (name, visit["identity"], identity))
-    try:
-        doc = fsio.read_json(path)
-    except (OSError, ValueError) as exc:
-        return common.refuse(ctx, run, "the station's result %s is not a JSON document (%s): a v1 station leaves no "
-                                       "such document" % (path, exc))
-    if not isinstance(doc, dict):
-        return common.refuse(ctx, run, "the station's result %s is not a JSON object" % path)
-    facts = {"slice": state["slice"], "doc": state["doc"], "workspace": common.workspace(run),
-             "report_only": common.report_only(run)}
-    problems = stations.result_problems(name, found, identity, doc, visit, facts, ctx.prefix)
-    if problems:
-        return common.refuse(ctx, run, "the result %s is refused as not %s's own result for this visit: %s"
-                             % (path, name, "; ".join(problems)))
+    if verdict == "refuse":
+        return common.refuse(ctx, run, detail)
+    if verdict == "refused-station":
+        identity, route, rules, why = detail
+        return _refused(ctx, run, state, name, identity, route, visit["run_dir"], rules, why)
+    found, identity, path, doc, held = detail
     told = stations.outcome(name, doc)
-    window = _recheck_window(run, state, doc) if name == "recheck-v2" else None
-    if window is not None and window[0] == "refuse":
-        return common.refuse(ctx, run, window[1])
     line = trace.line(kind="visit", caller=common.STATION, expected=name, identity=identity, route=found["route"],
                       run_dir=visit["run_dir"], status=str(doc.get("status")), at=common.now())
     _append(ctx, run, line)
@@ -303,6 +240,10 @@ def close_visit(ctx, run, args):
     state["visit"] = None
     if name == "build-v2":
         state["build"] = told["word"]
+    if held.stop is not None:
+        return report.ending(ctx, run, state, held.stop[0], held.stop[1], condition=held.stop[2])
+    window.take(run, state)                 # after the station's own writes: the next window starts here
+    if name == "build-v2":
         if not told["complete"]:
             return report.ending(ctx, run, state, "build-not-complete",
                                  "build-v2 ended %s (%s): the build stopped mid-slice, so the run ends at stop "
@@ -311,12 +252,6 @@ def close_visit(ctx, run, args):
         common.save(run, state)
         common.advance(run, "built")
         return _next(ctx, run, "visit --station signoff-v2", told)
-    if window is not None:
-        tag, reason, condition = window[1:]
-        return report.ending(ctx, run, state, tag, reason, condition=condition)
-    if name == "recheck-v2":
-        # the next lap's pin: taken here, after the station's own writes, and kept by `lap` (C2-1)
-        state.update(pin=pin.take(common.workspace(run)), fixed_pin=None)
     try:
         return _decide(ctx, run, args, state, name, doc, told)
     except records_link.RecordsRefusal as exc:
@@ -357,7 +292,7 @@ def _after_review(ctx, run, state, named, told):
     MINORs the owner ordered, which never gate and never trigger a recheck); ALL CLEAR otherwise."""
     blocking = record.blocking(named)
     if named:
-        state.update(named=named, lap=1, minors_only=not blocking, pin=pin.take(common.workspace(run)))
+        state.update(named=named, lap=1, minors_only=not blocking)
         common.write(run, "laps.json", {"laps": [{"lap": 1, "opened_at": common.now(), "owner_words": None}]})
         common.save(run, state)
         common.advance(run, "fixing")

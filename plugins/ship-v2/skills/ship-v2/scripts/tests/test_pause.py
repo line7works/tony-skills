@@ -69,11 +69,15 @@ class ThePause(unittest.TestCase):
 
     def through_findings(self, drive, run_dir):
         slib.visit(self, drive, run_dir, "build-v2", "completed", self.ws)
-        finding = slib.raise_finding(self.tmp, self.ws)
-        slib.set_status(self.ws, "A", "signed off with conditions")     # signoff-v2's own card, both halves
-        code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "findings", self.ws)
+        found = []
+
+        def signoff_writes(visit):          # signoff-v2's own finding and card, both halves, while it runs
+            found.append(slib.raise_finding(self.tmp, self.ws))
+            slib.set_status(self.ws, "A", "signed off with conditions")
+        code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "findings", self.ws,
+                                    before_result=signoff_writes)
         self.assertEqual((code, out["next"]), (0, "fix"), (out, err))
-        return finding
+        return found[0]
 
     def waive(self, drive, run_dir, finding, words, kind="waive"):
         code, out, err = drive(["pause", "--run-dir", run_dir, "--question", slib.question_file(
@@ -117,10 +121,10 @@ class ThePause(unittest.TestCase):
         self.assertEqual(before, slib.snapshot(self.ws))
 
     def test_report_only_plans_the_waiver_and_writes_nothing(self):
+        finding = slib.raise_finding(self.tmp, self.ws)          # the records as an earlier review left them
+        slib.set_status(self.ws, "A", "signed off with conditions")
         drive, run_dir = self.begin(report_only=True)
         slib.visit(self, drive, run_dir, "build-v2", "report-only", self.ws)
-        finding = slib.raise_finding(self.tmp, self.ws)
-        slib.set_status(self.ws, "A", "signed off with conditions")
         code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "report-only", self.ws)
         self.assertEqual((code, out["next"]), (0, "fix"), (out, err))
         before = slib.snapshot(self.ws)

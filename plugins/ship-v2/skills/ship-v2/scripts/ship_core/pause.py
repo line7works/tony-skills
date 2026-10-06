@@ -21,10 +21,21 @@ blank, a grant on a finding the records do not hold, at a status the grant does 
 `fixing` renames the lap's findings from the records, and a reopening after ALL CLEAR (`clean`) that leaves a BLOCKER
 or MAJOR open sends the run to the next lap (or, with none left, to stop condition 1): the record over the
 recollection.
+
+THE WINDOW RULE (`window.py`, the E15 lane contract A28 (1)): an answer is a check point, held before the grant,
+unless the pause was asked while a visit is open (that visit's close holds its window). A path inside the footprint
+nothing names is refused (exit 5, still paused), or, at `fixing` and `lap-needed`, left for `fix`; the doc moved or a
+path outside the footprint ends the run (stop 2 or 4) with the answer recorded with that ending and no grant written.
+A grant's `Status:` write is recorded against the pin as ship-v2's own (`window.own`).
+
+THE BOOKKEEPING (slice 2 re-check 1's R1S2-3): `pauses.json` records the answer, then the stage and the state land in
+one checkpoint write, then the receipt is finished. A run killed after the answer was recorded and before it left
+`paused` is finished by the next `pause --answer` from the recorded answer and its receipt (`_finish_cut`), whatever
+answer file is given, nothing written twice.
 """
 from station_core import records_link
 
-from . import common, grant, record, report
+from . import common, grant, record, report, window
 
 
 def ask(ctx, run, args):
@@ -47,13 +58,18 @@ def ask(ctx, run, args):
                                      "never turn it into a stop"))
 
 
+# the stages a pause's answer leaves an unnamed inside path for `fix` to name (a lap's fixes are open)
+FIXING = ("fixing", "lap-needed")
+
+
 def answer(ctx, run, args):
+    pauses = common.listing(run, "pauses.json", "pauses")
+    last = pauses[-1] if pauses else None
+    if last is not None and last["answer"] is not None:
+        return _finish_cut(ctx, run, args, last)
     receipt = grant.pending(run)
-    settled = None
     if receipt is not None:
-        pauses = common.listing(run, "pauses.json", "pauses")
-        open_one = pauses[-1] if pauses and pauses[-1]["answer"] is None else None
-        if open_one is None or open_one["pause"] != receipt["pause"]:
+        if last is None or last["pause"] != receipt["pause"]:
             grant.finished(run, receipt)       # an older grant whose bookkeeping already landed
         else:
             outcome, detail = grant.settle(ctx, run, receipt, args.records_root)
@@ -74,25 +90,39 @@ def answer(ctx, run, args):
     if not given["words"].strip():
         return common.refuse(ctx, run, "the answer carries no words of the owner's: his answer is recorded verbatim, "
                                        "never stood in for")
+    state = common.state(run)
+    stage = state.get("paused_from")
+    if stage != "visiting":                 # a pause inside an open visit is that visit's window, held at its close
+        held = window.hold(run, state, "before the owner's answer to pause %d" % open_one["pause"],
+                           leave_inside=stage in FIXING)
+        if held.refuse is not None:
+            return common.refuse(ctx, run, held.refuse)
+        if held.stop is not None:
+            ended = {"tag": held.stop[0], "reason": held.stop[1], "condition": held.stop[2]}
+            open_one["answer"] = dict(given, recorded=False, ended=ended)
+            common.write(run, "pauses.json", {"pauses": pauses})
+            return report.ending(ctx, run, state, ended["tag"], ended["reason"], condition=ended["condition"])
     effect = given["effect"]
     if effect["kind"] not in record.GRANTS:
         return _after_grant(ctx, run, args, given, None, None, None)
-    state = common.state(run)
     try:
         planned = grant.plan(run, effect["kind"], effect["finding"], given["words"], args.records_root)
     except grant.GrantRefused as exc:
         return common.refuse(ctx, run, "the owner's %s cannot be recorded: %s" % (effect["kind"], exc))
     except records_link.RecordsRefusal as exc:
-        open_one["answer"] = dict(given, recorded=False)
+        reason = records_link.refusal_sentence(exc, "recording the owner's %s" % effect["kind"])
+        open_one["answer"] = dict(given, recorded=False, ended={"tag": "records-refused", "reason": reason,
+                                                                 "condition": None})
         common.write(run, "pauses.json", {"pauses": pauses})
-        return report.ending(ctx, run, state, "records-refused", records_link.refusal_sentence(
-            exc, "recording the owner's %s" % effect["kind"]))
+        return report.ending(ctx, run, state, "records-refused", reason)
     if common.report_only(run):
-        events = common.listing(run, "events.json", "events") + planned["events"]
-        grants = common.listing(run, "events.json", "grants") + [{
-            "pause": given["pause"], "kind": planned["kind"], "finding": planned["finding"], "words": planned["words"],
-            "card": planned["card"], "appended": False, "log": None, "doc": None}]
-        common.write(run, "events.json", {"events": events, "grants": grants})
+        grants = common.listing(run, "events.json", "grants")
+        if not any(r.get("pause") == given["pause"] for r in grants):
+            events = common.listing(run, "events.json", "events") + planned["events"]
+            grants.append({"pause": given["pause"], "kind": planned["kind"], "finding": planned["finding"],
+                           "words": planned["words"], "card": planned["card"], "appended": False, "log": None,
+                           "doc": None})
+            common.write(run, "events.json", {"events": events, "grants": grants})
         return _after_grant(ctx, run, args, given, None, None, None)
     outcome, detail = grant.execute(ctx, run, planned, given, args.records_root)
     return _after_grant(ctx, run, args, given, outcome, detail, None)
@@ -100,13 +130,11 @@ def answer(ctx, run, args):
 
 def _after_grant(ctx, run, args, given, outcome, detail, settled):
     """The answer's bookkeeping, once the grant's transaction (if any) is done or has ended the run: the events and the
-    writes recorded in `events.json` once per grant, the pause answered, the run resumed where it paused (a grant at
-    `fixing` names the lap's findings again from the records; a reopening after ALL CLEAR that leaves a BLOCKER or
-    MAJOR open sends the run to the next lap, or, with none left, to `exhausted`), or ended when the transaction
-    ended it (`records-refused`, `outside-edit`)."""
+    writes recorded in `events.json` once per grant; the answer recorded in `pauses.json`; then `_resume`. A
+    transaction that ended the run (`records-refused`, `outside-edit`) records the answer with that ending and ends
+    it."""
     pauses = common.listing(run, "pauses.json", "pauses")
     open_one = next((p for p in pauses if p["pause"] == given["pause"]), None)
-    state = common.state(run)
     receipt = None
     if outcome in ("done", "outside-edit"):
         receipt = detail if outcome == "done" else grant.pending(run)
@@ -115,25 +143,31 @@ def _after_grant(ctx, run, args, given, outcome, detail, settled):
             events = common.listing(run, "events.json", "events") + receipt["events"]
             rows.append(grant.grants_row(receipt, receipt.get("appended")))
             common.write(run, "events.json", {"events": events, "grants": rows})
-    if outcome == "refused":
-        open_one["answer"] = dict(given, recorded=False)
+    if outcome in ("refused", "outside-edit"):
+        tag = "records-refused" if outcome == "refused" else "outside-edit"
+        open_one["answer"] = dict(given, recorded=outcome == "outside-edit",
+                                  ended={"tag": tag, "reason": detail, "condition": None})
         common.write(run, "pauses.json", {"pauses": pauses})
-        receipt = grant.pending(run)
+        receipt = receipt or grant.pending(run)
         if receipt is not None:
             grant.finished(run, receipt)
-        return report.ending(ctx, run, state, "records-refused", detail)
-    if outcome == "outside-edit":
-        open_one["answer"] = dict(given, recorded=True)
-        common.write(run, "pauses.json", {"pauses": pauses})
-        grant.finished(run, receipt)
-        return report.ending(ctx, run, state, "outside-edit", detail)
+        return report.ending(ctx, run, common.state(run), tag, detail)
     open_one["answer"] = dict(given, recorded=True)
     common.write(run, "pauses.json", {"pauses": pauses})
+    grant.hold_point("answered")
+    return _resume(ctx, run, args, given, receipt, settled)
+
+
+def _resume(ctx, run, args, given, receipt, settled):
+    """The run resumed where it paused, in one checkpoint write with its state (a grant at `fixing` names the lap's
+    findings again from the records; a reopening after ALL CLEAR that leaves a BLOCKER or MAJOR open sends the run to
+    the next lap, or, with none left, to `exhausted`); ship-v2's own `Status:` write recorded against the pin (the
+    window rule's sanctioned write); then the receipt finished."""
+    state = common.state(run)
     effect = given["effect"]
     stage = state.get("paused_from") or "selected"
     state["paused_from"] = None
-    if receipt is not None:
-        state = grant.finish_pins(state, common.workspace(run), receipt)
+    window.own(state, receipt)
     if effect["kind"] in record.GRANTS and not common.report_only(run):
         try:
             if stage == "fixing":
@@ -146,8 +180,8 @@ def _after_grant(ctx, run, args, given, outcome, detail, settled):
         except records_link.RecordsRefusal as exc:
             return report.ending(ctx, run, state, "records-refused", records_link.refusal_sentence(
                 exc, "reading the findings after the owner's %s" % effect["kind"]))
+    run.checkpoint["phase"] = stage         # the stage and the state land in one checkpoint write
     common.save(run, state)
-    common.advance(run, stage)
     if receipt is not None:
         grant.finished(run, receipt)
     extra = {"settled": settled} if settled else {}
@@ -155,6 +189,30 @@ def _after_grant(ctx, run, args, given, outcome, detail, settled):
         extra["card"] = receipt["card"]
     return ctx.emit(ctx.envelope(next=common.NEXT[stage], run_id=common.run_id(run), pause=given["pause"],
                                  effect=effect["kind"], words=given["words"], **extra))
+
+
+def _finish_cut(ctx, run, args, last):
+    """The run is still `paused` and its last pause already holds an answer: a kill cut the answer's bookkeeping off
+    after `pauses.json` recorded it (slice 2 re-check 1's R1S2-3). The bookkeeping is finished from the recorded
+    answer and its receipt, whatever answer file is given, and nothing is written twice: an answer that ended the run
+    ends it the same way; any other resumes the run where it paused."""
+    recorded = last["answer"]
+    given = dict((k, v) for k, v in recorded.items() if k not in ("recorded", "ended"))
+    receipt = grant.receipt_of(run, last["pause"])
+    ended = recorded.get("ended")
+    if ended or not recorded.get("recorded"):
+        ended = ended or {"tag": "records-refused", "reason": "the owner's answer to pause %d was not recorded"
+                                                              % last["pause"], "condition": None}
+        if receipt is not None and not receipt.get("finished"):
+            grant.finished(run, receipt)
+        return report.ending(ctx, run, common.state(run), ended["tag"], ended["reason"],
+                             condition=ended.get("condition"))
+    usable = receipt if receipt is not None and receipt.get("appended") is not None and not receipt.get("stop") \
+        else None
+    return _resume(ctx, run, args, given, usable, "the answer to pause %d was recorded and its bookkeeping was cut off "
+                                                "before the run left `paused`; it was finished first, from the "
+                                                "recorded answer%s, and nothing was written twice"
+                   % (last["pause"], " and its receipt" if usable is not None else ""))
 
 
 def handler(ctx, args):

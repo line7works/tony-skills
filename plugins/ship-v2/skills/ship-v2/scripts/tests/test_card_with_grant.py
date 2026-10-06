@@ -34,11 +34,14 @@ def blocker_cleared(test, tmp, name):
     """A run whose slice A held a BLOCKER that lap 1 fixed and recheck-v2 cleared: the card `signed off`, stage `clean`."""
     run = cr25lib.Run(test, tmp, name, majors=0)
     run.build()
-    finding = slib.raise_finding(run.tmp, run.ws, severity="BLOCKER", card=None, claim="the counter loses turns")
-    run.findings.append(finding)
-    cr25lib.card(run.tmp, run.ws, "signoff-v2", "built", "rejected", "signoff-run")
-    code, out, err = run.visit("signoff-v2", "findings")
+
+    def signoff_writes(visit):          # what signoff-v2 itself writes while it runs
+        run.findings.append(slib.raise_finding(run.tmp, run.ws, severity="BLOCKER", card=None,
+                                               claim="the counter loses turns"))
+        cr25lib.card(run.tmp, run.ws, "signoff-v2", "built", "rejected", "signoff-run")
+    code, out, err = run.visit("signoff-v2", "findings", before_result=signoff_writes)
     test.assertEqual((code, out["next"]), (0, "fix"), (out, err))
+    finding = run.findings[0]
     run.fix(1, [finding])
     out = run.recheck("all_clear", lambda: cr25lib.recheck(run.tmp, run.ws, finding, True, "rejected", "signed off",
                                                            "recheck-1"))
@@ -147,7 +150,11 @@ class TheCardMovesWithTheGrant(unittest.TestCase):
         run = cr25lib.Run(self, self.tmp, "line")
         run.build()
         run.signoff()
-        slib.set_status(run.ws, "A", "built")
+        # the records move the card and the doc does not (another station's half-done card): the line disagrees with
+        # the records' card although the doc never moved since the pin (a hand edit of the doc is the window rule's
+        # stop 2 instead, test_window.py)
+        slib.append(run.tmp, run.ws, [dict(slib._base("signoff-v2", "a-later-signoff", run.ws), kind="card_set",
+                                           slice="A", before="signed off with conditions", after="rejected")])
         doc_before, log_before = slib.sha(os.path.join(run.ws, slib.DOC)), slib.sha(log_path(run.ws))
         code, asked, err = run.drive(["pause", "--run-dir", run.run_dir, "--question", slib.question_file(
             run.tmp, run.run_dir, "Waive it or hold?", source="ship", station=None, finding=run.findings[0])])
@@ -170,11 +177,11 @@ class ReportOnly(unittest.TestCase):
     def test_report_only_plans_the_card_and_writes_nothing(self):
         ws = slib.make_repo(self.tmp)
         tree = slib.Tree(self.tmp)
+        finding = slib.raise_finding(self.tmp, ws)          # the records as an earlier review left them
+        slib.set_status(ws, "A", "signed off with conditions")
         drive, run_dir = slib.start(self, tree, self.tmp, ws, report_only=True)
         slib.through_hook(self, drive, self.tmp, run_dir)
         slib.visit(self, drive, run_dir, "build-v2", "report-only", ws)
-        finding = slib.raise_finding(self.tmp, ws)
-        slib.set_status(ws, "A", "signed off with conditions")
         code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "report-only", ws)
         self.assertEqual((code, out["next"]), (0, "fix"), (out, err))
         before = slib.snapshot(ws)

@@ -33,16 +33,16 @@ class TheLoop(unittest.TestCase):
         slib.through_hook(self, self.drive, self.tmp, self.run_dir, armed=True)
 
     def build(self):
-        code, out, err = slib.visit(self, self.drive, self.run_dir, "build-v2", "completed", self.ws)
+        code, out, err = slib.visit(self, self.drive, self.run_dir, "build-v2", "completed", self.ws,
+                                    before_result=lambda visit: slib.set_status(self.ws, "A", "built"))
         self.assertEqual(code, 0, (out, err))
-        slib.set_status(self.ws, "A", "built")
 
     def test_a_clean_loop_build_signoff_all_clear_recheck_not_run(self):
         self.build()
-        code, out, err = slib.visit(self, self.drive, self.run_dir, "signoff-v2", "clean", self.ws)
+        code, out, err = slib.visit(self, self.drive, self.run_dir, "signoff-v2", "clean", self.ws,
+                                    before_result=lambda visit: slib.set_status(self.ws, "A", "signed off"))
         self.assertEqual(code, 0, (out, err))
         self.assertEqual(out["next"], "report")
-        slib.set_status(self.ws, "A", "signed off")
         code, out, err = self.drive(["visit", "--run-dir", self.run_dir, "--station", "recheck-v2"])
         self.assertEqual(code, 2, "a clean signoff ends the loop: no recheck")
         code, out, err = slib.report(self.drive, self.run_dir)
@@ -59,9 +59,14 @@ class TheLoop(unittest.TestCase):
 
     def test_the_full_loop_build_signoff_findings_fix_recheck(self):
         self.build()
-        finding = slib.raise_finding(self.tmp, self.ws)
-        slib.set_status(self.ws, "A", "signed off with conditions")
-        code, out, err = slib.visit(self, self.drive, self.run_dir, "signoff-v2", "findings", self.ws)
+        found = []
+
+        def signoff_writes(visit):          # what signoff-v2 itself writes while it runs
+            found.append(slib.raise_finding(self.tmp, self.ws))
+            slib.set_status(self.ws, "A", "signed off with conditions")
+        code, out, err = slib.visit(self, self.drive, self.run_dir, "signoff-v2", "findings", self.ws,
+                                    before_result=signoff_writes)
+        finding = found[0]
         self.assertEqual(code, 0, (out, err))
         self.assertEqual(out["next"], "fix")
         self.assertEqual([f["id"] for f in out["named"]], [finding])

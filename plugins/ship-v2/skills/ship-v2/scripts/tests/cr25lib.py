@@ -97,22 +97,33 @@ class Run(object):
         self.majors = majors
         self.pauses = 0
 
-    def visit(self, station, which, before_result=None):
-        return slib.visit(self.test, self.drive, self.run_dir, station, which, self.ws, before_result=before_result)
+    def visit(self, station, which, before_result=None, after_result=None):
+        return slib.visit(self.test, self.drive, self.run_dir, station, which, self.ws, before_result=before_result,
+                          after_result=after_result)
 
-    def build(self, which="completed"):
-        code, out, err = self.visit("build-v2", which)
-        if which == "completed":
-            card(self.tmp, self.ws, "build-v2", "not started", "built", "build-run")
+    def build(self, which="completed", during=None, after=None):
+        """build-v2's visit; on COMPLETE, the card it writes while it runs (its `card_set` and `Status:` line).
+        `during`, what else happens while the visit is open."""
+        def writes(visit):
+            if during is not None:
+                during(visit)
+            if which == "completed":
+                card(self.tmp, self.ws, "build-v2", "not started", "built", "build-run")
+        code, out, err = self.visit("build-v2", which, before_result=writes, after_result=after)
         return out
 
-    def signoff(self):
-        for index in range(self.majors):
-            at = slib.MAJOR_AT if index == 0 else SECOND_AT
-            self.findings.append(slib.raise_finding(self.tmp, self.ws, location=at, card=None,
-                                                    claim="the counter skips turn %d" % index))
-        card(self.tmp, self.ws, "signoff-v2", "built", "signed off with conditions", "signoff-run")
-        code, out, err = self.visit("signoff-v2", "findings")
+    def signoff(self, during=None, after=None):
+        """signoff-v2's visit: the findings it raises and the card it sets, written while it runs. `during`, what else
+        happens while the visit is open."""
+        def writes(visit):
+            if during is not None:
+                during(visit)
+            for index in range(self.majors):
+                at = slib.MAJOR_AT if index == 0 else SECOND_AT
+                self.findings.append(slib.raise_finding(self.tmp, self.ws, location=at, card=None,
+                                                        claim="the counter skips turn %d" % index))
+            card(self.tmp, self.ws, "signoff-v2", "built", "signed off with conditions", "signoff-run")
+        code, out, err = self.visit("signoff-v2", "findings", before_result=writes, after_result=after)
         return out
 
     def grant(self, kind, finding, words):

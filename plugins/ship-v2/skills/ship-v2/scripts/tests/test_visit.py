@@ -175,12 +175,17 @@ class TheFullLoopOnTheRealStations(unittest.TestCase):
     def test_the_full_loop_reaches_the_real_recheck_v2(self):
         drive, run_dir = slib.start(self, None, self.tmp, self.ws)
         slib.through_hook(self, drive, self.tmp, run_dir)
-        code, out, err = slib.visit(self, drive, run_dir, "build-v2", "completed", self.ws)
+        code, out, err = slib.visit(self, drive, run_dir, "build-v2", "completed", self.ws,
+                                    before_result=lambda visit: slib.set_status(self.ws, "A", "built"))
         self.assertEqual((code, out["next"]), (0, "visit --station signoff-v2"), (out, err))
-        slib.set_status(self.ws, "A", "built")
-        finding = slib.raise_finding(self.tmp, self.ws)
-        slib.set_status(self.ws, "A", "signed off with conditions")
-        code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "findings", self.ws)
+        found = []
+
+        def signoff_writes(visit):          # what signoff-v2 itself writes while it runs
+            found.append(slib.raise_finding(self.tmp, self.ws))
+            slib.set_status(self.ws, "A", "signed off with conditions")
+        code, out, err = slib.visit(self, drive, run_dir, "signoff-v2", "findings", self.ws,
+                                    before_result=signoff_writes)
+        finding = found[0]
         self.assertEqual((code, out["next"]), (0, "fix"), (out, err))
         testlib.write_text(os.path.join(self.ws, "src", "turnstile.py"), "def spin(count):\n    return count + 2\n")
         code, out, err = drive(["fix", "--run-dir", run_dir, "--fixes", slib.fixes_file(

@@ -26,12 +26,17 @@ class TheRecheckWindow(unittest.TestCase):
         self.tree = slib.Tree(self.tmp)
         self.drive, self.run_dir = slib.start(self, self.tree, self.tmp, self.ws)
         slib.through_hook(self, self.drive, self.tmp, self.run_dir)
-        code, out, err = slib.visit(self, self.drive, self.run_dir, "build-v2", "completed", self.ws)
+        code, out, err = slib.visit(self, self.drive, self.run_dir, "build-v2", "completed", self.ws,
+                                    before_result=lambda visit: slib.set_status(self.ws, "A", "built"))
         self.assertEqual(code, 0, (out, err))
-        slib.set_status(self.ws, "A", "built")
-        self.finding = slib.raise_finding(self.tmp, self.ws)
-        slib.set_status(self.ws, "A", "signed off with conditions")
-        code, out, err = slib.visit(self, self.drive, self.run_dir, "signoff-v2", "findings", self.ws)
+        found = []
+
+        def signoff_writes(visit):          # what signoff-v2 itself writes while it runs
+            found.append(slib.raise_finding(self.tmp, self.ws))
+            slib.set_status(self.ws, "A", "signed off with conditions")
+        code, out, err = slib.visit(self, self.drive, self.run_dir, "signoff-v2", "findings", self.ws,
+                                    before_result=signoff_writes)
+        self.finding = found[0]
         self.assertEqual((code, out["next"]), (0, "fix"), (out, err))
         self.fix(1)
 
