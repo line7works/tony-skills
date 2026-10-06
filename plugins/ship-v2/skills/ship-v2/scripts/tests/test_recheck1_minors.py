@@ -3,7 +3,10 @@
 - R1S2-3: a kill inside a pause answer's bookkeeping (after `pauses.json` records the answer, before the run leaves
   `paused`) wedged the run: every later `pause --answer` was refused ("the open pause is None") and no command reached
   a terminal status. Now the next `pause --answer` finishes the cut-off bookkeeping from the recorded answer and its
-  receipt, writes nothing twice, and the run goes on to its end.
+  receipt, writes nothing twice, and the run goes on to its end. Since the E15 lane contract A29 (1) the answer, the
+  receipt finished, the state and the stage land in one save, so a kill leaves either none of the bookkeeping (the
+  next answer settles the grant and saves it once) or a journal the next command finishes; the run directory re-check
+  1 reproduced (an answer recorded while still `paused`) is still finished by the next answer.
 - R1S2-5: `report` at `visiting` with a result standing that `visit --result` never refused said the result "was not
   accepted (`visit --result` refused it)". Now it refuses (exit 2) and names `visit --result` as the command to run
   first; a result `visit --result` would refuse, or none, still ends the run `visit-unfinished`, saying which.
@@ -94,8 +97,8 @@ class R1S2_3_ACutOffAnswerSettles(unittest.TestCase):
         self.to_the_end(run)
 
     def test_a_real_kill_inside_the_bookkeeping(self):
-        """A real SIGKILL on the `pause --answer` process the test starts, held (`SHIP_V2_TEST_HOLD=answered`) after
-        `pauses.json` records the answer and before the run leaves `paused`."""
+        """A real SIGKILL on the `pause --answer` process the test starts, held (`SHIP_V2_TEST_HOLD=answered`) once the
+        grant's doc half is written and the answer's bookkeeping is decided and staged, before its one save (A29)."""
         run = cr25lib.Run(self, self.tmp, "kill")
         run.build()
         run.signoff()
@@ -104,14 +107,15 @@ class R1S2_3_ACutOffAnswerSettles(unittest.TestCase):
                                                                              "finding": run.findings[0]},
                                   name="a-kill.json")
         pauses_path = os.path.join(run.run_dir, "pauses.json")
+        receipt = os.path.join(run.run_dir, "receipt-%d.json" % number)
         env = dict(run.drive.env, SHIP_V2_TEST_HOLD="answered")
         proc = subprocess.Popen([sys.executable, run.drive.script, "pause", "--run-dir", run.run_dir, "--answer",
                                  answer], cwd=run.tmp, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         deadline = time.time() + 60
         while time.time() < deadline:
-            pauses = testlib.load_json(pauses_path)["pauses"] if os.path.exists(pauses_path) else []
-            if pauses and pauses[-1]["answer"] is not None:
-                time.sleep(0.2)
+            written = testlib.load_json(receipt).get("doc_written") if os.path.exists(receipt) else False
+            if written:
+                time.sleep(0.5)
                 os.kill(proc.pid, signal.SIGKILL)
                 proc.wait()
                 break
@@ -122,7 +126,9 @@ class R1S2_3_ACutOffAnswerSettles(unittest.TestCase):
             proc.kill()
             proc.wait()
             self.fail("the bookkeeping window was never reached")
-        self.assertEqual(phase(run), "paused", "the kill left the run paused with the answer recorded")
+        self.assertEqual(phase(run), "paused", "the kill left the run paused")
+        self.assertIsNone(testlib.load_json(pauses_path)["pauses"][-1]["answer"], "none of the bookkeeping saved")
+        self.assertFalse(os.path.exists(os.path.join(run.run_dir, "save.json")), "no save had begun")
         events = ours(run.ws)
         self.assertEqual([e["kind"] for e in events], ["waived", "card_set"])
         for attempt in range(2):

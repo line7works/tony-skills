@@ -41,10 +41,15 @@ against the window rule's pin (`window.own`), and every check point takes it as 
 in the chain the doc's hashes must run along from the pin, so it is never a station's or a fix's move, and a hand edit
 before, between or after it still is (the E15 lane contract A28 (1); slice 2 re-check 1's R1S2-4).
 
+THE WRITES. Each receipt write and the doc's write go through `common.put` (a temporary file beside it, then a
+rename), so a kill leaves the old bytes or the new; a temporary file a cut-off doc write left beside the doc is
+removed before the doc half runs again. The receipt finished is staged and lands in the answer's one save (`finished`;
+THE SAVE in `common.py`).
+
 The test hook `SHIP_V2_TEST_HOLD` (honored only with `SHIP_V2_TEST=1`) holds the process at one named point so a test
 can kill it there: `intent` (the append landed, the receipt holds no outcome), `outcome` (the receipt holds the
 outcome, the doc is not written), `written` (the doc is written, the run's bookkeeping is not), `answered` (the
-answer is recorded in `pauses.json`, the run has not left `paused`: `pause.py`).
+answer's bookkeeping is decided and staged, and none of it is saved: `pause.py`).
 """
 import os
 import time
@@ -253,6 +258,7 @@ def _doc_half(ctx, run, receipt):
     """The `Status:` line, written once against the receipt's doc hash; then the receipt records the write."""
     if receipt["card"] is None:
         return "done", receipt
+    common.clear_temp(common.temp_of(receipt["doc"]))
     current = fsio.sha256_file_or_none(receipt["doc"])
     if receipt.get("doc_written") or current == receipt["doc_sha256_planned"]:
         if current != (receipt.get("doc_sha256_after") or receipt["doc_sha256_planned"]):
@@ -268,7 +274,7 @@ def _doc_half(ctx, run, receipt):
     final = set_status(text, move["line"], move["before"], move["after"])
     if fsio.sha256_bytes(final.encode("utf-8")) != receipt["doc_sha256_planned"]:
         return _outside_edit(run, receipt)
-    fsio.atomic_write(receipt["doc"], final.encode("utf-8"))
+    common.put(receipt["doc"], final.encode("utf-8"))
     receipt.update(doc_written=True, doc_sha256_after=fsio.sha256_file(receipt["doc"]))
     common.write(run, _receipt_name(receipt["pause"]), receipt)
     _hold("written")
@@ -339,8 +345,9 @@ def settle(ctx, run, receipt, records_root=None):
 
 
 def finished(run, receipt):
+    """The receipt marked finished, staged: it lands in the answer's one save (THE SAVE in `common.py`)."""
     receipt["finished"] = True
-    common.write(run, _receipt_name(receipt["pause"]), receipt)
+    common.stage(run, _receipt_name(receipt["pause"]), receipt)
 
 
 def drift(rows, item):

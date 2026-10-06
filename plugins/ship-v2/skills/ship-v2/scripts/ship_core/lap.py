@@ -8,7 +8,8 @@ ship-v2's own `Status:` write) is stop 2 and a path outside the footprint stop 4
 it is left for the new lap's `fix` to name (`fix` refuses it unnamed), and the pin stays where it is until then. A lap
 beyond the allowed count is refused (exit 5, nothing written, the run where it was); the allowed count is two, plus
 the count the owner's words in the input give (`station.extra_laps`: `count` and his `words`, verbatim), and a lap
-those words open records them verbatim in `laps.json` and the result. The counter never resets. The trace's line
+those words open records them verbatim in `laps.json` and the result. `laps.json`, the state and the stage land in
+one save (`common.save`, THE SAVE), so a kill never leaves a lap counted and not opened. The counter never resets. The trace's line
 shape is a frozen back-frame file with no field for words, so the words are not on the trace (the slice 2 report's
 numbered question).
 """
@@ -38,7 +39,7 @@ def handler(ctx, args):
     words = (common.station(run).get("extra_laps") or {}).get("words") if lap > 2 else None
     laps = common.listing(run, "laps.json", "laps")
     laps.append({"lap": lap, "opened_at": common.now(), "owner_words": words})
-    common.write(run, "laps.json", {"laps": laps})
+    common.stage(run, "laps.json", {"laps": laps})      # saved with the lap's state, or with a records refusal's end
     try:
         named = state["named"] if common.report_only(run) else record.named(run, state["slice"], args.records_root)
     except records_link.RecordsRefusal as exc:
@@ -47,6 +48,5 @@ def handler(ctx, args):
     state.update(lap=lap, named=named, minors_only=False)
     if not held.left:
         window.take(run, state)
-    common.save(run, state)
-    common.advance(run, "fixing")
+    common.save(run, state, "fixing")
     return ctx.emit(ctx.envelope(next="fix", run_id=common.run_id(run), lap=lap, named=named, owner_words=words))

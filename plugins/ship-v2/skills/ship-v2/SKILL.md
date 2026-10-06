@@ -36,7 +36,10 @@ Run every command as `uv run scripts/ship.py <command> ...`, resolved against th
 paths are absolute. Every command prints one JSON document. Exit 0: go on (`next` names the command). Exit 10: the
 run ended; report its result. Exit 2: your usage, or a command out of turn (the message names the command to run
 instead). Exit 3: a missing dependency (jsonschema, the records component, a station); say so and stop. Exit 4: a file
-you passed fails its schema; fix it. Exit 5: refused on its content; nothing was written; read the reason.
+you passed fails its schema; fix it. Exit 5: refused on its content; nothing was written; read the reason. A command
+cut off mid-way (the process killed): run it again; a save it left half done is finished first (THE SAVE, contract
+section 3.10), and exit 2 then names the command to run. Exit 1 saying the run directory was changed by hand: stop
+and tell the owner; never edit a run file to get past it.
 
 Build the input first (`references/input.schema.json`): read `adapters/README.md`; your harness's profile names the
 helper that prints the `invocation` object. A fresh `run_id`, an absolute `run_dir` outside the repo, the

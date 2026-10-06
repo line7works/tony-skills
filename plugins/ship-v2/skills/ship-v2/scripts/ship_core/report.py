@@ -3,7 +3,9 @@
 
 `ending(ctx, run, state, tag, reason, condition=None, by=None)` records a stop where it is decided (`ship.json`'s
 `ending`) and moves the run to the stage `ending`, where nothing but `report` runs: no later visit, fix, lap or
-pause can reach the trace or the records (CR-23). It prints the stop and `next` `report` (exit 0).
+pause can reach the trace or the records (CR-23). It prints the stop and `next` `report` (exit 0). What the command
+staged before the stop (a trace line, `pauses.json`, `fixes.json`, `laps.json`, a receipt finished) lands in the same
+save (`common.save`, THE SAVE).
 
 `report --run-dir D --bottom-line TEXT [--skill-note TEXT]` runs at `clean` (ALL CLEAR), `exhausted` (stop condition
 1: the extra lap spent without ALL CLEAR), `ending` (any other stop) and `visiting` (a visit that ended without a
@@ -16,8 +18,9 @@ would refuse, or none, ends the run `visit-unfinished`, saying which (slice 2 re
 twice, CR-27), the findings the records hold open (the `Remains` lines; a report-only run's planned grants are not
 in the records), the fixes this run recorded (the `Fixed` lines) and the trace, renders the `SHIP:` block
 (`forms.render`) into `chat.md`, assembles `result.json`, validates it against `references/result.schema.json` and
-the semantic checks S1 to S4, writes it, and ends the run (exit 10). A result that fails either check is a defect of
-this script (exit 1), never a softened result.
+the semantic checks S1 to S4, and ends the run (exit 10): `chat.md`, the state, `result.json` and the stage `done` land
+in one save (`common.save`, THE SAVE), the result's `writes` listing the bytes that save writes. A result that fails
+either check is a defect of this script (exit 1), never a softened result.
 """
 import os
 
@@ -34,8 +37,7 @@ def ending(ctx, run, state, tag, reason, condition=None, by=None):
     state.setdefault("visits", [])
     state["ending"] = {"status": "stopped", "tag": tag, "reason": reason, "condition": condition, "by": by}
     state["visit"] = None
-    common.save(run, state)
-    common.advance(run, "ending")
+    common.save(run, state, "ending")
     return ctx.emit(ctx.envelope(next="report", run_id=common.run_id(run), stop_tag=tag, reason=reason,
                                  condition=condition))
 
@@ -94,12 +96,18 @@ def _fixed(run, state):
 
 
 def _writes(run):
+    """The run's own files as they stand once this report's save lands (the staged bytes over the bytes on disk), and
+    the records log and the build doc each grant reached."""
+    staged = common.staged_bytes(run)
+    names = set(n for n in os.listdir(run.run_dir) if os.path.isfile(os.path.join(run.run_dir, n))
+                and not os.path.islink(os.path.join(run.run_dir, n))) | set(staged)
     out = []
-    for name in sorted(os.listdir(run.run_dir)):
+    for name in sorted(names):
+        if name in (common.CHECKPOINT, "result.json", common.JOURNAL) or name.endswith(common.TEMP):
+            continue
         path = os.path.join(run.run_dir, name)
-        if name not in ("checkpoint.json", "result.json") and os.path.isfile(path) and not os.path.islink(path):
-            out.append({"path": path, "kind": "run_artifact", "sha256_before": None,
-                        "sha256_after": fsio.sha256_file(path)})
+        after = fsio.sha256_bytes(staged[name]) if name in staged else fsio.sha256_file(path)
+        out.append({"path": path, "kind": "run_artifact", "sha256_before": None, "sha256_after": after})
     for row in common.listing(run, "events.json", "grants"):
         if row.get("log"):
             out.append({"path": row["log"]["path"], "kind": "records_log", "sha256_before": row["log"]["sha256_before"],
@@ -230,10 +238,10 @@ def handler(ctx, args):
         chat = forms.render(fields)
     except forms.FormError as exc:
         raise driver.Usage("the SHIP: block cannot carry a value given: %s" % exc)
-    common.write_text(run, "chat.md", chat)
-    common.save(run, state)
+    common.stage_text(run, "chat.md", chat)
+    common.stage(run, common.STATE, state)
     result_doc = build_result(ctx, run, status, tag, reason, state, chat, fields)
     check(ctx, result_doc)
-    common.write(run, "result.json", result_doc)
-    common.advance(run, "done")
+    common.stage(run, "result.json", result_doc)
+    common.save(run, stage="done")
     raise driver.Terminal(dict(result_doc, next="done"))

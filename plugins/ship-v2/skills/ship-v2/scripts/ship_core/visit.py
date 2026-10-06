@@ -25,6 +25,10 @@ again and the loop's next step is decided from the station's own words and the r
 table): stop 3 on a build that is not COMPLETE; the run's end on a signoff-v2 or recheck-v2 stop or refusal; the
 fixes, ALL CLEAR, a lap or the extra lap exhausted. `judge` is the same reading without a write, for `report` at
 `visiting` (slice 2 re-check 1's R1S2-5).
+
+Each trace line is staged (`common.stage_trace`) and lands in the one save that ends the command (`common.save`, THE
+SAVE), with the state, the stage and any run file the step writes (`laps.json` when the first lap opens), or with the
+stop that ends the run there: a kill never leaves a visit's line without the stage it moved the run to.
 """
 import os
 import stat
@@ -52,8 +56,9 @@ def _trace_ready(run):
 
 
 def _append(ctx, run, line):
+    """The trace line, numbered and checked now; written by the save that ends the command."""
     _trace_ready(run)
-    return trace.append(run.run_dir, line, ctx.skill_root, ctx.prefix)
+    return common.stage_trace(run, line, ctx.skill_root, ctx.prefix)
 
 
 def _refused(ctx, run, state, name, identity, route, run_dir, rules, reason):
@@ -115,8 +120,7 @@ def open_visit(ctx, run, args):
     state["visit"] = {"station": expected, "seq": written["seq"], "run_id": run_id, "run_dir": run_dir,
                       "identity": identity, "route": found["route"], "root": found["root"], "skill_md": skill_md}
     window.take(run, state)                 # what the workspace holds when the visit opens
-    common.save(run, state)
-    common.advance(run, "visiting")
+    common.save(run, state, "visiting")
     return ctx.emit(ctx.envelope(
         next="visit --result", run_id=common.run_id(run), visited=expected, identity=identity, route=found["route"],
         root=found["root"], skill_md=skill_md, summon=forms.summon(expected, state["slice"], state["doc"]),
@@ -249,8 +253,7 @@ def close_visit(ctx, run, args):
                                  "build-v2 ended %s (%s): the build stopped mid-slice, so the run ends at stop "
                                  "condition 3 and goes on to no inspection" % (told["word"], doc.get("status")),
                                  condition=3)
-        common.save(run, state)
-        common.advance(run, "built")
+        common.save(run, state, "built")
         return _next(ctx, run, "visit --station signoff-v2", told)
     try:
         return _decide(ctx, run, args, state, name, doc, told)
@@ -293,26 +296,22 @@ def _after_review(ctx, run, state, named, told):
     blocking = record.blocking(named)
     if named:
         state.update(named=named, lap=1, minors_only=not blocking)
-        common.write(run, "laps.json", {"laps": [{"lap": 1, "opened_at": common.now(), "owner_words": None}]})
-        common.save(run, state)
-        common.advance(run, "fixing")
+        common.stage(run, "laps.json", {"laps": [{"lap": 1, "opened_at": common.now(), "owner_words": None}]})
+        common.save(run, state, "fixing")
         return _next(ctx, run, "fix", told, named=named, lap=1, minors_only=not blocking)
-    common.save(run, state)
-    common.advance(run, "clean")
+    common.save(run, state, "clean")
     return _next(ctx, run, "report", told, all_clear=True)
 
 
 def _after_recheck(ctx, run, state, told, still):
     if told["all_clear"] and not still:
-        common.save(run, state)
-        common.advance(run, "clean")
+        common.save(run, state, "clean")
         return _next(ctx, run, "report", told, all_clear=True)
     state["named"] = still
-    common.save(run, state)
     if state["lap"] < common.laps_allowed(run):
-        common.advance(run, "lap-needed")
+        common.save(run, state, "lap-needed")
         return _next(ctx, run, "lap", told, still_open=still, lap=state["lap"])
-    common.advance(run, "exhausted")
+    common.save(run, state, "exhausted")
     return _next(ctx, run, "report", told, still_open=still, lap=state["lap"],
                  exhausted="the extra lap is exhausted without ALL CLEAR: `report` ends the run at stop condition 1, "
                            "and a further lap is refused without the owner's words in the input")

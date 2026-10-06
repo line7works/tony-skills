@@ -18,6 +18,9 @@ and, separately, any fix that needs the spec changed (`spec_change`). In order:
 5. Otherwise the lap's fixes are recorded (`fixes.json`), the workspace is pinned again (what moves after it is the
    recheck-v2 window's), and the run goes on to `recheck-v2`, or, for the MINORs the owner ordered after a clean
    signoff, to `report` (they never gate and never trigger a recheck).
+
+`fixes.json` lands in the one save that ends the command (`common.save`, THE SAVE), with the state and the stage, or
+with the stop: a kill never leaves the fixes recorded twice or recorded without the stage they moved the run to.
 """
 import os
 
@@ -87,12 +90,10 @@ def handler(ctx, args):
     _keep(run, record, "recorded")
     window.take(run, state)             # the post-fix pin: what moves after it is held at recheck-v2's opening
     if state.get("minors_only"):
-        common.save(run, state)
-        common.advance(run, "clean")
+        common.save(run, state, "clean")
         return ctx.emit(ctx.envelope(next="report", run_id=common.run_id(run), lap=state["lap"], recorded=declared,
                                      minors_only=True))
-    common.save(run, state)
-    common.advance(run, "fixed")
+    common.save(run, state, "fixed")
     return ctx.emit(ctx.envelope(next="visit --station recheck-v2", run_id=common.run_id(run), lap=state["lap"],
                                  recorded=declared, moved=held.moved))
 
@@ -102,4 +103,4 @@ def _keep(run, record, outcome):
     file's fixes are never listed as Fixed)."""
     laps = common.listing(run, "fixes.json", "laps")
     laps.append(dict(record, outcome=outcome))
-    common.write(run, "fixes.json", {"laps": laps})
+    common.stage(run, "fixes.json", {"laps": laps})

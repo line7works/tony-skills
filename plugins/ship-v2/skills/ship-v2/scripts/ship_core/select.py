@@ -11,7 +11,8 @@ hunt, never the lone doc on disk). `--slice` takes the owner's answer when the i
 
 The doc found is read twice (`doc.read`, CR-27): a line the line rules refuse, or the first line where the second,
 CommonMark reading takes a decision differently, stops the run `doc-unreadable` naming it, before any visit and
-before any write. Writes `ship.json` (the doc, its hash, the slice, its card and its footprint).
+before any write. Writes `ship.json` (the doc, its hash, the slice, its card and its footprint) and the stage in one
+save (`common.save`, THE SAVE).
 """
 import os
 
@@ -128,7 +129,6 @@ def handler(ctx, args):
     state = dict(facts, lap=0, laps_allowed=common.laps_allowed(run),
                  visits=[], visit=None, named=[], pin=None, ending=None, build=None, signoff=None, recheck=None,
                  hook=None, minors_only=False, paused_from=None)
-    common.save(run, state)
-    common.advance(run, "selected")
+    common.save(run, state, "selected")
     return ctx.emit(ctx.envelope(next="hook", run_id=common.run_id(run), doc=doc, slice=slice_name, card=row["status"],
                                  footprint=row["footprint"], selection=selection))

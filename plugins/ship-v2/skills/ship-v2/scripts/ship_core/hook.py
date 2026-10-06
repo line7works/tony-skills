@@ -28,7 +28,6 @@ def handler(ctx, args):
     state = common.state(run)
     state["hook"] = {"harness": harness, "armed": bool(reading["armed"]), "label": forms.hook_label(reading["armed"]),
                      "how": reading["how"], "evidence": reading.get("evidence")}
-    common.save(run, state)
-    common.advance(run, "hooked")
+    common.save(run, state, "hooked")
     return ctx.emit(ctx.envelope(next="visit --station build-v2", run_id=common.run_id(run), hook=state["hook"],
                                  summon=forms.summon_goal(state["slice"], state["doc"])))

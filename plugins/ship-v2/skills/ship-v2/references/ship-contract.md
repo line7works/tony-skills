@@ -1,9 +1,9 @@
 # Ship v2 core: behavioral contract
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a state. Written for
-E15 slice 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 10 and 12, amendments A1 to A28) and
+E15 slice 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 10 and 12, amendments A1 to A29) and
 the control room's readings CR-21 to CR-27 in the slice 2 brief, with slice 2 check 1's findings C2-1 to C2-8 (fix
-round 1) and re-check 1's R1S2-1 to R1S2-7 (fix round 2). Where this document and that contract differ, the
+round 1), re-check 1's R1S2-1 to R1S2-7 (fix round 2) and Astra's look 6's L6-1 (fix round 3). Where this document and that contract differ, the
 contract is the authority and this document is the defect. `references/back-loop.md` is the discipline the three back
 cores share; this document is this core's own.
 
@@ -45,6 +45,7 @@ portable text.
 `report`; `identity` and `skill-identity` at any time. A command against a run at another stage is exit 2 naming the
 command to run instead. Every phase reads and writes only the run directory, except section 6's grant writes (the records events and the
 slice's `Status:` line). Every visit and every step between visits is held by one rule, THE WINDOW RULE (section 3.5).
+Every write of the run's state and its checkpoint goes through one routine, THE SAVE (section 3.10).
 Every run file this core reads or writes is checked first with `os.lstat`: a link, a pipe or a file outside the run
 directory is refused, never followed.
 
@@ -252,11 +253,14 @@ the run there (stop 2 or 4), the answer recorded with that ending and no grant w
 ends the run (`records-refused`, its sentence carried); a doc that moved between the append and the `Status:` write
 ends it `outside-edit` (section 6). A grant's transaction that was cut off (the run killed between the append and the
 doc write) is settled by the next `pause --answer` before anything else (section 6), and that answer is the receipt's,
-whatever file is given. **The answer's own bookkeeping** (re-check 1's R1S2-3): `pauses.json` records the answer, then
-the stage and the state land in one checkpoint write, then the receipt is finished; a run killed after the answer was
-recorded and before it left `paused` is finished by the next `pause --answer` from the recorded answer and its receipt
-(whatever file is given), nothing written twice, so every run still reaches a terminal status (the test hook
-`SHIP_V2_TEST_HOLD=answered` holds the process in that window). The run resumes at the stage it paused at; a
+whatever file is given. **The answer's own bookkeeping** (re-check 1's R1S2-3, then A29): the answer in `pauses.json`,
+the grant's rows in `events.json`, the receipt finished, the state and the stage land in one save (THE SAVE, section
+3.10), or with the stop that ends the run there. A kill before that save leaves the run `paused` with none of it
+written, and the next `pause --answer` settles the grant from its receipt and saves the bookkeeping once (the test
+hook `SHIP_V2_TEST_HOLD=answered` holds the process just before that save); a kill inside it is finished by the next
+command. A run directory holding an answer in `pauses.json` while the run is still `paused` (a run before A29 could
+leave one) is finished by the next `pause --answer` from the recorded answer and its receipt (whatever file is given),
+nothing written twice, so every run still reaches a terminal status. The run resumes at the stage it paused at; a
 grant at `fixing` names the lap's findings again from the records; a reopening after ALL CLEAR that leaves a BLOCKER or
 MAJOR open for the slice sends the run to the next lap, or, with none left, to `exhausted`: the record over the
 recollection.
@@ -280,6 +284,39 @@ longer reads is reported as `unread` with why), the findings the records hold op
 ### 3.9 `identity <workspace>` and `skill-identity`
 
 The frame's: the workspace as this station sees it, and this skill's name, version, commit and content hash.
+
+### 3.10 THE SAVE
+
+The E15 lane contract A29 (1), the owner's ruling "Make every save crash-safe" (Astra's look 6, L6-1: a run killed
+between the write of `ship.json` and the checkpoint's record of its hash refused every later command as changed by
+hand). One rule, stated once here and once in `scripts/ship_core/common.py` (`save`, `recover`, `put`), coded once:
+
+- **One routine.** Every write of the run's state (`ship.json`) and its checkpoint (`checkpoint.json`, the stage and
+  the state's sha256) goes through `save`, and with them everything else the command writes into its run directory:
+  its trace lines, `pauses.json`, `laps.json`, `fixes.json`, `events.json`, a grant's receipt finished, `chat.md`,
+  `result.json`. A command stages what it writes and the one save at its end writes it all, so a command's run-directory
+  writes land together or not at all.
+- **The journal.** The save first writes `save.json` (replaced whole by one rename): for each file its name, the sha256
+  of the bytes it holds now (or none), the bytes it will hold and their sha256, and the journal's own sha256. Then each
+  file is replaced whole (a temporary file `.<name>.ship-v2-tmp` beside it, then a rename), `ship.json` and
+  `checkpoint.json` last; then the journal is removed.
+- **The next command.** Before any command reads anything of the run, a temporary file a cut-off write left is removed,
+  and a journal a kill left is finished when every file it names holds either the bytes it held before the save or the
+  bytes the save was writing (both are this run's): the rest is written, the journal removed, a line on stderr says so,
+  and the run goes on from the stage the save wrote (the command it was is then out of turn, exit 2 naming the command
+  to run). A file at any other bytes, or a journal whose own sha256, version, run id or rows do not hold, is the run
+  directory changed by hand: the run refuses (exit 1), nothing written. A kill before the journal lands leaves the run
+  as it was, and the command runs again from its top.
+- **A hand edit still refuses.** `ship.json` stays held to the sha256 its checkpoint recorded: a hand edit after a clean
+  save refuses as before (exit 1, "changed by hand", nothing written).
+- **The grant's own transaction** (section 6) keeps its crash rules: its receipt writes and the `Status:` line's write
+  go through the same whole-file replace as they happen, a temporary file a cut-off doc write left is removed before
+  the doc half runs again, and the receipt finished lands in the answer's one save.
+- **What it covers.** A kill of the process at any line (a SIGKILL, an interrupted terminal): the run then reaches a
+  terminal status with no records event, trace line, run file or doc line written twice (section 7 (3) of the lane
+  contract). It does not claim durability across a power loss (no `fsync`). Tested by a kill at every line between
+  each saving command's first and last write (`scripts/tests/test_kill_sweep.py`, `killpoint.py`) and by L6-1's own
+  case (`test_crash_safe_save.py`).
 
 ## 4. The input
 
@@ -494,4 +531,4 @@ syntax, standard library plus `jsonschema==4.25.1` through `uv run` (PEP 723) an
 (section 5); git 2.50.1. Run-directory artifacts: `input.json`, `checkpoint.json`, `ship.json`, `trace.jsonl`,
 `visits/<seq>-<station>/` (each the station's own run), `laps.json`, `fixes.json`, `pauses.json`, `events.json`,
 `records-events.json` (an append's input), `receipt-<pause>.json` (a grant's transaction, section 6), `chat.md`,
-`result.json`. `ship.json` holds the window rule's pin (`pin`) and ship-v2's own writes since it (`own`).
+`result.json`; while a save is under way, its journal `save.json` and a `.<name>.ship-v2-tmp` (section 3.10). `ship.json` holds the window rule's pin (`pin`) and ship-v2's own writes since it (`own`).

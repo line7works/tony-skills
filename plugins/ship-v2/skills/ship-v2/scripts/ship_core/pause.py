@@ -28,10 +28,14 @@ nothing names is refused (exit 5, still paused), or, at `fixing` and `lap-needed
 path outside the footprint ends the run (stop 2 or 4) with the answer recorded with that ending and no grant written.
 A grant's `Status:` write is recorded against the pin as ship-v2's own (`window.own`).
 
-THE BOOKKEEPING (slice 2 re-check 1's R1S2-3): `pauses.json` records the answer, then the stage and the state land in
-one checkpoint write, then the receipt is finished. A run killed after the answer was recorded and before it left
-`paused` is finished by the next `pause --answer` from the recorded answer and its receipt (`_finish_cut`), whatever
-answer file is given, nothing written twice.
+THE BOOKKEEPING (the E15 lane contract A29 (1), THE SAVE in `common.py`): the answer recorded in `pauses.json`, the
+grant's rows in `events.json`, the receipt finished, the state and the stage land in one save, or with the stop that
+ends the run there. A kill before that save leaves the run `paused` with nothing of the bookkeeping written, and the
+next `pause --answer` settles the grant's transaction from its receipt (`grant.settle`) and saves the bookkeeping
+once; a kill after it is finished by `common.recover` before the next command reads the run. A run directory that
+holds an answer in `pauses.json` while the run is still `paused` (one a run before A29 could leave: slice 2 re-check
+1's R1S2-3) is finished by the next `pause --answer` from the recorded answer and its receipt (`_finish_cut`),
+whatever answer file is given, nothing written twice.
 """
 from station_core import records_link
 
@@ -46,11 +50,10 @@ def ask(ctx, run, args):
     pauses = common.listing(run, "pauses.json", "pauses")
     number = len(pauses) + 1
     pauses.append({"pause": number, "stage": stage, "at": common.now(), "question": question, "answer": None})
-    common.write(run, "pauses.json", {"pauses": pauses})
+    common.stage(run, "pauses.json", {"pauses": pauses})
     state = common.state(run)
     state["paused_from"] = stage
-    common.save(run, state)
-    common.advance(run, "paused")
+    common.save(run, state, "paused")
     return ctx.emit(ctx.envelope(next="pause --answer", run_id=common.run_id(run), pause=number,
                                  source=question["source"], asked_by=question.get("station"),
                                  question=question["text"],
@@ -100,7 +103,7 @@ def answer(ctx, run, args):
         if held.stop is not None:
             ended = {"tag": held.stop[0], "reason": held.stop[1], "condition": held.stop[2]}
             open_one["answer"] = dict(given, recorded=False, ended=ended)
-            common.write(run, "pauses.json", {"pauses": pauses})
+            common.stage(run, "pauses.json", {"pauses": pauses})
             return report.ending(ctx, run, state, ended["tag"], ended["reason"], condition=ended["condition"])
     effect = given["effect"]
     if effect["kind"] not in record.GRANTS:
@@ -113,7 +116,7 @@ def answer(ctx, run, args):
         reason = records_link.refusal_sentence(exc, "recording the owner's %s" % effect["kind"])
         open_one["answer"] = dict(given, recorded=False, ended={"tag": "records-refused", "reason": reason,
                                                                  "condition": None})
-        common.write(run, "pauses.json", {"pauses": pauses})
+        common.stage(run, "pauses.json", {"pauses": pauses})
         return report.ending(ctx, run, state, "records-refused", reason)
     if common.report_only(run):
         grants = common.listing(run, "events.json", "grants")
@@ -122,7 +125,7 @@ def answer(ctx, run, args):
             grants.append({"pause": given["pause"], "kind": planned["kind"], "finding": planned["finding"],
                            "words": planned["words"], "card": planned["card"], "appended": False, "log": None,
                            "doc": None})
-            common.write(run, "events.json", {"events": events, "grants": grants})
+            common.stage(run, "events.json", {"events": events, "grants": grants})
         return _after_grant(ctx, run, args, given, None, None, None)
     outcome, detail = grant.execute(ctx, run, planned, given, args.records_root)
     return _after_grant(ctx, run, args, given, outcome, detail, None)
@@ -142,27 +145,27 @@ def _after_grant(ctx, run, args, given, outcome, detail, settled):
         if not any(r.get("pause") == given["pause"] for r in rows):
             events = common.listing(run, "events.json", "events") + receipt["events"]
             rows.append(grant.grants_row(receipt, receipt.get("appended")))
-            common.write(run, "events.json", {"events": events, "grants": rows})
+            common.stage(run, "events.json", {"events": events, "grants": rows})
     if outcome in ("refused", "outside-edit"):
         tag = "records-refused" if outcome == "refused" else "outside-edit"
         open_one["answer"] = dict(given, recorded=outcome == "outside-edit",
                                   ended={"tag": tag, "reason": detail, "condition": None})
-        common.write(run, "pauses.json", {"pauses": pauses})
+        common.stage(run, "pauses.json", {"pauses": pauses})
         receipt = receipt or grant.pending(run)
         if receipt is not None:
             grant.finished(run, receipt)
         return report.ending(ctx, run, common.state(run), tag, detail)
     open_one["answer"] = dict(given, recorded=True)
-    common.write(run, "pauses.json", {"pauses": pauses})
+    common.stage(run, "pauses.json", {"pauses": pauses})
     grant.hold_point("answered")
     return _resume(ctx, run, args, given, receipt, settled)
 
 
 def _resume(ctx, run, args, given, receipt, settled):
-    """The run resumed where it paused, in one checkpoint write with its state (a grant at `fixing` names the lap's
-    findings again from the records; a reopening after ALL CLEAR that leaves a BLOCKER or MAJOR open sends the run to
-    the next lap, or, with none left, to `exhausted`); ship-v2's own `Status:` write recorded against the pin (the
-    window rule's sanctioned write); then the receipt finished."""
+    """The run resumed where it paused (a grant at `fixing` names the lap's findings again from the records; a
+    reopening after ALL CLEAR that leaves a BLOCKER or MAJOR open sends the run to the next lap, or, with none left, to
+    `exhausted`); ship-v2's own `Status:` write recorded against the pin (the window rule's sanctioned write); the
+    receipt finished, the answer, the state and the stage in one save."""
     state = common.state(run)
     effect = given["effect"]
     stage = state.get("paused_from") or "selected"
@@ -180,10 +183,9 @@ def _resume(ctx, run, args, given, receipt, settled):
         except records_link.RecordsRefusal as exc:
             return report.ending(ctx, run, state, "records-refused", records_link.refusal_sentence(
                 exc, "reading the findings after the owner's %s" % effect["kind"]))
-    run.checkpoint["phase"] = stage         # the stage and the state land in one checkpoint write
-    common.save(run, state)
     if receipt is not None:
         grant.finished(run, receipt)
+    common.save(run, state, stage)          # the answer, the receipt finished, the state and the stage: one save
     extra = {"settled": settled} if settled else {}
     if receipt is not None and receipt.get("card"):
         extra["card"] = receipt["card"]
