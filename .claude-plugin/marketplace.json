@@ -275,6 +275,33 @@
         "skills-v2",
         "inspect"
       ]
+    },
+    {
+      "name": "vertical-v2",
+      "source": "./plugins/vertical-v2",
+      "description": "The whole-build adversarial review after every slice is signed off: the gate read from the records and the build doc, the base and source scope computed by script, cold packets with prior verdicts and author advocacy left out, the local fleet first, outside reviewers on the owner's word, every outside finding verified, one verdict doc. The portable vertical core of the skills v2 rebuild; the -v2 suffix stays while v1 vertical is installed and both are renamed at cutover.",
+      "tags": [
+        "skills-v2",
+        "vertical"
+      ]
+    },
+    {
+      "name": "handoff-v2",
+      "source": "./plugins/handoff-v2",
+      "description": "The end-of-slice photograph rebuilt from the records component and git, the question gate, one additive block in the build doc and the next move. Strictly user-invoked. The portable handoff core of the skills v2 rebuild; the -v2 suffix stays while v1 handoff is installed and both are renamed at cutover.",
+      "tags": [
+        "skills-v2",
+        "handoff"
+      ]
+    },
+    {
+      "name": "ship-v2",
+      "source": "./plugins/ship-v2",
+      "description": "The coordinator that takes one slice through build-v2, signoff-v2, the fixes and recheck-v2, calling only qualified v2 stations and proving it with a trace. The portable ship core of the skills v2 rebuild; the -v2 suffix stays while v1 ship is installed and both are renamed at cutover.",
+      "tags": [
+        "skills-v2",
+        "ship"
+      ]
     }
   ]
 }
