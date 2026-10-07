@@ -1,10 +1,10 @@
 # Ship v2 core: behavioral contract
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a state. Written for
-E15 slice 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 10 and 12, amendments A1 to A30) and
+E15 slice 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 10 and 12, amendments A1 to A31) and
 the control room's readings CR-21 to CR-27 in the slice 2 brief, with slice 2 check 1's findings C2-1 to C2-8 (fix
-round 1), re-check 1's R1S2-1 to R1S2-7 (fix round 2), Astra's look 6's L6-1 (fix round 3) and the slice 3 join's
-two seams (A30, slice 3 fix round 1). Where this document and that contract differ, the
+round 1), re-check 1's R1S2-1 to R1S2-7 (fix round 2), Astra's look 6's L6-1 (fix round 3), the slice 3 join's
+two seams (A30, slice 3 fix round 1) and slice 3 check 1's C3-1 (A31, slice 3 fix round 2). Where this document and that contract differ, the
 contract is the authority and this document is the defect. `references/back-loop.md` is the discipline the three back
 cores share; this document is this core's own.
 
@@ -88,7 +88,7 @@ The checkpoint's `phase` holds the run's stage; each command runs at the stages 
 | `visiting` | `visit --station` | `visit --result`; `report` when the station ended without a result this run can take (`visit-unfinished`) |
 | `built` | build-v2 COMPLETE | `visit --station signoff-v2` |
 | `fixing` | signoff-v2 with a BLOCKER or MAJOR charged to the slice (or MINORs the owner ordered); `lap` | `fix` |
-| `fixed` | `fix` (the workspace pinned again) | the executor's save step (section 3.11), then `visit --station recheck-v2` |
+| `fixed` | `fix` (the workspace pinned again) | the executor's save step (section 3.11), then `visit --station recheck-v2`; `report` when the step was not taken (section 3.11, `recheck-stopped`) |
 | `lap-needed` | recheck-v2 not ALL CLEAR, a lap left | `lap` |
 | `exhausted` | recheck-v2 not ALL CLEAR, no lap left | `report` (stop condition 1); `lap` is refused |
 | `clean` | ALL CLEAR | `report` |
@@ -280,11 +280,13 @@ recollection.
 
 ### 3.8 `report --run-dir D --bottom-line TEXT [--skill-note TEXT]`
 
-At `clean`, `exhausted` or `ending`, and at `visiting` (slice 2 check 1's C2-6): a station that ended without a result
+At `clean`, `exhausted` or `ending`; at `fixed` while the save step was not taken (section 3.11, THE STEP NOT TAKEN;
+with every mirror committed as it stands `report` is out of turn there, exit 2); and at `visiting` (slice 2 check 1's
+C2-6): a station that ended without a result
 `visit --result` takes (it left none, or `visit --result` refuses the one it left) still reaches a terminal status, the
 stop `visit-unfinished` naming the station and why, the visit's opening trace line left as the record that it was
 handed over. The result is read there as `visit --result` reads it, writing nothing (`visit.judge`): one it would take
-is refused at `report`, exit 2, "run `visit --result` first" (re-check 1's R1S2-5). At `clean` and `exhausted`,
+is refused at `report`, exit 2, "run `visit --result` first" (re-check 1's R1S2-5). At `clean`, `exhausted` and `fixed`,
 `report` is a check point of THE WINDOW RULE (section 3.5): what moved since the last pin is held first; the doc moved
 (stop 2) or a path outside the footprint (stop 4) is the run's end, reported as such; a path inside it nothing names is
 refused, exit 5. Reads the slice's card from the doc as it stands (read twice; a doc that no
@@ -356,6 +358,15 @@ script's own run-directory write): this is a commit the executor makes. Stated o
   recorded mirror is untracked (git does not track it, ignored files included) or differs from its committed bytes
   (git reports it changed or staged, or the bytes on disk are not the blob HEAD holds), naming the step and the file
   and carrying `save_step`. The window since the last step is held first (section 3.5).
+- **The step not taken** (the E15 lane contract A31 (1), the owner's ruling "End it as recheck stopped"; slice 3
+  check 1's C3-1). When the step cannot be taken (the owner declines it, a pre-commit hook or signing refuses the
+  commit, git cannot commit), the executor never bypasses the hook and never edits the mirror: it runs `report` at
+  `fixed`. THE WINDOW RULE holds first (section 3.5: the doc moved is stop 2, a path outside the footprint stop 4, an
+  unnamed path inside it refused); then, while a recorded mirror is unsaved, the run ends STOPPED with the existing tag
+  `recheck-stopped`, its reason naming each unsaved file and why the step was not taken, in the refusal's own words
+  (`mirror.not_taken`). No new stop word: v1's four stops and the pause are unchanged, recheck-v2 is not visited and no
+  trace line is written. With every mirror committed as it stands, `report` at `fixed` stays out of turn (exit 2): the
+  next move is the recheck visit.
 - **The sanctioned commit.** THE WINDOW RULE (section 3.5) takes a commit of the mirror as the session's sanctioned step
   when the mirror is committed exactly as it stood: its identity on disk is the one recorded, and HEAD holds those
   bytes with nothing changed or staged. Any other file in that commit is held by the rule as any move is (one committed
@@ -505,6 +516,12 @@ lines, the visits closed and the stations refused. `station_result` carries the 
 line and condition, the five fields, the laps (taken, allowed, the owner's words and each lap opened), the visits, the
 fixed and remaining findings, the pauses, the events (each grant with its `card` move, or null) and `chat`.
 
+**Every refusal has a way to a terminal status** (the E15 lane contract A31 (2); section 7 (3) of the lane contract).
+`scripts/tests/test_terminal_class.py` enumerates every exit 5 and exit 2 a command prints, from every stage it is
+printed at, and drives ship-v2's own commands from there to `completed` or `stopped` with a result written, never by a
+hand edit of the run directory and never by the refused step itself. The stages it finds stuck without a step only
+the executor can take outside ship-v2 are named there, with their output, as questions for the owner.
+
 ## 10. The records component
 
 Reached through the resolver snippet and the CLI only (`station_core/records_client.py`, `records_link.py`), confirmed
@@ -542,7 +559,7 @@ The exits are the back loop's: 0, 1, 2, 3, 4, 5, 10 (back-loop section 2). A sto
 | `doc-unreadable` | select, fix | a doc line the two readings refuse or take differently (CR-27), named |
 | `build-not-complete` | visit | stop condition 3: build-v2 PARTIAL or STOPPED |
 | `signoff-stopped` | visit | signoff-v2's own stop or refusal, its status carried |
-| `recheck-stopped` | visit | recheck-v2's own stop, its status carried (`missing_input` and every status other than `completed` or `nothing_open`, A30 (2)) |
+| `recheck-stopped` | visit, report | recheck-v2's own stop, its status carried (`missing_input` and every status other than `completed` or `nothing_open`, A30 (2)); or, at `report` at `fixed`, the save step not taken, the unsaved file and why named (section 3.11, A31 (1)) |
 | `spec-change` | fix, visit, lap, pause, report | stop condition 2: a fix needs the spec changed, or the build doc moved but by a sanctioned write (THE WINDOW RULE, section 3.5) |
 | `outside-footprint` | fix, visit, lap, pause, report | stop condition 4: a path outside the slice's footprint moved or was named (THE WINDOW RULE, section 3.5) |
 | `extra-lap-exhausted` | report | stop condition 1: the extra lap spent without ALL CLEAR |

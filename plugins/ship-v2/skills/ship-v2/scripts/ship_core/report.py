@@ -8,11 +8,15 @@ staged before the stop (a trace line, `pauses.json`, `fixes.json`, `laps.json`, 
 save (`common.save`, THE SAVE).
 
 `report --run-dir D --bottom-line TEXT [--skill-note TEXT]` runs at `clean` (ALL CLEAR), `exhausted` (stop condition
-1: the extra lap spent without ALL CLEAR), `ending` (any other stop) and `visiting` (a visit that ended without a
-result this run can take), and nowhere else: a paused run waits for its answer (exit 2), so a pause is never turned
-into a stop. At `clean` and `exhausted` it is a check point of the window rule (`window.py`): what moved since the
-last pin is held first (the doc moved is stop 2 and a path outside the footprint stop 4, reported as the run's end; a
-path inside it nothing names is refused, exit 5). At `visiting` the station's result is read as `visit --result` reads
+1: the extra lap spent without ALL CLEAR), `ending` (any other stop), `visiting` (a visit that ended without a result
+this run can take) and `fixed` while a recorded verdict mirror is unsaved (THE SAVE STEP not taken, `mirror.py`, the
+E15 lane contract A31 (1)), and nowhere else: a paused run waits for its answer (exit 2), so a pause is never turned
+into a stop, and at `fixed` with every mirror committed as it stands the next move is the recheck visit (exit 2). At
+`clean`, `exhausted` and `fixed` it is a check point of the window rule (`window.py`): what moved since the last pin
+is held first (the doc moved is stop 2 and a path outside the footprint stop 4, reported as the run's end; a path
+inside it nothing names is refused, exit 5). At `fixed`, when the window holds, the run ends STOPPED with the
+existing tag `recheck-stopped`, its reason naming each unsaved file and why the step was not taken, in the save step
+refusal's own words (`mirror.not_taken`); no new stop word, and recheck-v2 is not visited. At `visiting` the station's result is read as `visit --result` reads
 it, writing nothing (`visit.judge`): one it would take is refused here (exit 2: run `visit --result` first); one it
 would refuse, or none, ends the run `visit-unfinished`, saying which (slice 2 re-check 1's R1S2-5). It reads the slice's card from the doc as it stands (read
 twice, CR-27), the findings the records hold open (the `Remains` lines; a report-only run's planned grants are not
@@ -27,7 +31,7 @@ import os
 from station_core import driver, fsio, records_link, validate
 from back_core import trace
 
-from . import common, doc as docmod, forms, record, window
+from . import common, doc as docmod, forms, mirror, record, window
 
 CONDITION_TAGS = {1: "extra-lap-exhausted", 2: "spec-change", 3: "build-not-complete", 4: "outside-footprint"}
 
@@ -190,7 +194,7 @@ def _laps_taken(state):
 
 def handler(ctx, args):
     """`report --run-dir D --bottom-line TEXT [--skill-note TEXT]`."""
-    run = common.open_run(ctx, args.run_dir, ("clean", "exhausted", "ending", "visiting"), "report")
+    run = common.open_run(ctx, args.run_dir, ("clean", "exhausted", "ending", "visiting", "fixed"), "report")
     if not args.bottom_line or not args.bottom_line.strip() or "\n" in args.bottom_line:
         raise driver.Usage("report needs --bottom-line: two or three sentences on one line (what shipped, what state "
                            "it is in, what to do next)")
@@ -199,6 +203,20 @@ def handler(ctx, args):
                            "excepted")
     state = common.state(run)
     stage = run.checkpoint["phase"]
+    if stage == "fixed":
+        not_taken = mirror.not_taken(run, state)        # THE SAVE STEP not taken (A31 (1)), or out of turn
+        if not_taken is None:
+            raise driver.Usage("this run is at stage 'fixed' and every verdict mirror it recorded is committed as it "
+                               "stands: `report` runs at 'fixed' only while the save step was not taken; run `%s` "
+                               "instead" % common.NEXT["fixed"])
+        held = window.hold(run, state, "after the lap's fixes were recorded and before the report")
+        if held.refuse is not None:
+            return common.refuse(ctx, run, held.refuse)
+        state["ending"] = ({"status": "stopped", "tag": held.stop[0], "reason": held.stop[1],
+                            "condition": held.stop[2], "by": None} if held.stop is not None else
+                           {"status": "stopped", "tag": "recheck-stopped", "reason": not_taken, "condition": None,
+                            "by": "recheck-v2"})
+        stage = "ending"
     if stage == "visiting":
         state = _unfinished(run, state, ctx.prefix)
         stage = "ending"

@@ -13,7 +13,11 @@
 #    the six tripwire copies; all nineteen installed into the harness's isolated home (CLAUDE_CONFIG_DIR=<home>/config,
 #    or CODEX_HOME=<home>), every v1 plugin beside its v2. Each installed v1 copy must hold its tripwire entry.
 # 3. The audit hook (`tripwire.py`'s `sitecustomize.py`) first on PYTHONPATH, watching the installed v1 folders and
-#    the tripwire copies: any Python process that opens, lists or launches a path under them leaves a marker.
+#    the tripwire copies: any hooked Python process that opens, lists or launches a path under them leaves a marker.
+#    Its reach, as measured (tripwire.py, THE REACH): a child started isolated (`-I`: ship-v2's identity read of each
+#    station, vertical-v2's `readers.py --version`) or by another runtime is not hooked, so a read inside it is not
+#    seen; a run of any v1 entry is still caught by the entry's own marker, and a launch of a v1 path from a hooked
+#    parent by its `subprocess.Popen` event.
 # 4. The end-to-end replay (`../evals/replay/replay.py`) with ship-v2, handoff-v2, vertical-v2, readers and records
 #    taken from the INSTALLED copies (`--root`), so build-v2, signoff-v2 and recheck-v2 are the ones ship-v2's own
 #    lookup finds installed: a full ship loop on both paths (clean; findings, fix, recheck), handoff-v2's photograph,
@@ -23,7 +27,8 @@
 #    control run that reports PASS is a broken tripwire.
 # A pass: the replay holds; every trace line of ship-v2 and vertical-v2 names a v2 identity (build-v2, signoff-v2,
 # recheck-v2; readers for vertical-v2's summons), interface 1, route 3b, its root the installed copy of that name and
-# under no v1 folder; the hook armed in every station process the replay ran (counted from its own log); the installed
+# under no v1 folder; the hook armed in every station command the replay ran (each replay command matched to an armed
+# record of its own by its argv, `tripwire.unmatched`, never a comparison of totals); the installed
 # copies are unchanged by the replay; and no marker. The guard and the temp rule are the setups' (as ten-stations.sh).
 # One JSON document on stdout. Exit 0 when every expectation held (PASS), 1 otherwise (FAIL), 2 usage.
 set -eu
@@ -288,17 +293,23 @@ if not missing and not report["problems"]:
         report["problems"].append("the trace holds no line")
     if bad:
         report["problems"].append("%d trace line(s) do not name the installed v2 identity" % len(bad))
-    # the hook armed in every station process the replay ran
-    stations = 0
-    for path in (summary or {}).get("paths", {}).values():
-        stations += sum(1 for c in path.get("commands") or [] if c.get("station") not in ("executor",))
-    armed_under = sum(1 for a in tripwire.armed(markers)
-                      if (a.get("argv") or [""])[0] and under((a.get("argv") or [""])[0], cache))
-    report["hook"] = {"armed_processes": len(tripwire.armed(markers)),
-                      "armed_in_installed_station_scripts": armed_under, "station_commands_in_the_replay": stations}
-    if armed_under < stations or stations == 0:
-        report["problems"].append("the hook armed in %d installed station processes, fewer than the replay's %d "
-                                  "station commands" % (armed_under, stations))
+    # the hook armed in every station command the replay ran: each command matched to an armed record of its own
+    commands = []
+    for kind, path in sorted(((summary or {}).get("paths") or {}).items()):
+        commands += [dict(c, path=kind) for c in path.get("commands") or [] if c.get("station") != "executor"]
+    armed = tripwire.armed(markers)
+    armed_under = sum(1 for a in armed if (a.get("argv") or [""])[0] and under((a.get("argv") or [""])[0], cache))
+    missed = tripwire.unmatched(commands, armed, cache)
+    report["hook"] = {"armed_processes": len(armed), "armed_in_installed_station_scripts": armed_under,
+                      "station_commands_in_the_replay": len(commands),
+                      "commands_matched_to_an_armed_record": len(commands) - len(missed),
+                      "unmatched": ["%s %s %s %s" % (c.get("path"), c.get("station"), c.get("command"), c.get("argv"))
+                                    for c in missed][:20],
+                      "not_hooked_by_design": "children started isolated (-I) or by another runtime; a v1 entry run "
+                                              "there is still caught by its own marker"}
+    if not commands or missed:
+        report["problems"].append("%d of the replay's %d station commands have no armed record of their own (the hook "
+                                  "did not load in them)" % (len(missed), len(commands)))
 else:
     report["problems"].append("the replay was not run: %s" % (", ".join(missing) or "the install did not hold"))
 

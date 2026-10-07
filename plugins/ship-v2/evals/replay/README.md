@@ -42,6 +42,10 @@ last-pick memory and its lock are the tree's own, never a checkout under the rea
   refuted outside finding on the findings path.
 - `confined`: this checkout's plugins tree is unchanged (paths, sizes, modification times).
 
+Each command a path logs (`commands` in the summary) carries `argv`, the head of the station process's own argv (its
+script and the next two words) as the trace proof's audit hook records it, so `../../setups/trace-proof.sh` matches
+every station command to an armed record of its own.
+
 ## The fixture
 
 `fixtures/turnstile/workspace/` is the project (a bench-rig turn counter, one slice); its build doc is
@@ -56,6 +60,8 @@ as `fix` printed it (`save_step`: `git add` and `git commit --only` of signoff-v
 lane contract A30 (1)): recheck-v2's own stated precondition for the loop (its contract section 9, E13's F8). The
 commands run through this replay's git, which adds only the fixture repository's hooks-off and no-signing settings.
 Without the step ship-v2 refuses the recheck visit, naming the step and the file
-(`skills/ship-v2/scripts/tests/test_save_step.py`, the join's probe shape on the real stations). The
+(`skills/ship-v2/scripts/tests/test_save_step.py`, the join's probe shape on the real stations); when the step cannot
+be taken, `report` at `fixed` ends the run `recheck-stopped`, naming the file (the E15 lane contract A31 (1),
+`test_unsaved_mirror.py`). The
 build doc's `Footprint:` is the one-line form ship-v2 reads; build-v2 reads it as empty today (the first item on the
 E15 punch list), so its result lists the slice's paths as out of scope, each with the reason the answer gives.

@@ -10,7 +10,8 @@ names the stages it runs at; a command against another stage is exit 2 naming th
     built        build-v2 COMPLETE                   -> visit --station signoff-v2
     visiting     a visit handed to the executor      -> visit --result
     fixing       findings to fix in this lap         -> fix
-    fixed        the lap's fixes recorded            -> visit --station recheck-v2
+    fixed        the lap's fixes recorded            -> visit --station recheck-v2 (after the save step); report
+                                                        when the save step was not taken (`recheck-stopped`)
     lap-needed   recheck not clear, a lap remains    -> lap
     exhausted    recheck not clear, no lap remains   -> report (stop condition 1); `lap` is refused, exit 5
     clean        ALL CLEAR                           -> report

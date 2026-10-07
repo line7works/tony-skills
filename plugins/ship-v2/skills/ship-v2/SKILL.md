@@ -161,6 +161,11 @@ untracked, or differs from its committed bytes, `visit --station recheck-v2` ref
 naming the step and the file: take the step, then run it again. The script takes your commit as the sanctioned
 step when it holds exactly the mirror as it stood; any other file in it is held as any other move.
 
+If the step cannot be taken (the owner declines it, a pre-commit hook or signing refuses the commit, git cannot
+commit), never bypass the hook and never edit the mirror: run `report` (step 7) at this point. The run ends STOPPED,
+`recheck-stopped`, its reason naming the unsaved file and why the step was not taken; recheck-v2 is not visited.
+With the mirror committed, `report` here is out of turn: the next move is the recheck visit.
+
 ```sh
 uv run scripts/ship.py visit --run-dir <run dir> --station recheck-v2
 uv run scripts/ship.py visit --run-dir <run dir> --result

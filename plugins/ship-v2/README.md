@@ -7,14 +7,16 @@ are renamed at cutover.
 
 ## Status
 
-Version 0.1.0, interface version 1. Built in E15 slice 2; the join's proofs added in E15 slice 3, and slice 3's fix
+Version 0.1.0, interface version 1. Built in E15 slice 2; the join's proofs added in E15 slice 3, slice 3's fix
 round 1 (the E15 lane contract A30: the save step named before every recheck-v2 visit, recheck-v2's other endings read
-as `recheck-stopped`). Counts measured on the fix round's tree, each suite run under `/usr/bin/python3` 3.9.6 and
+as `recheck-stopped`) and fix round 2 (A31: `report` at `fixed` while the verdict mirror is unsaved ends the run
+`recheck-stopped`; a test that every refusal leaves a terminal status reachable; the trace proof matches each replay
+command to an armed record). Counts measured on fix round 2's tree, each suite run under `/usr/bin/python3` 3.9.6 and
 under `uv run` with `jsonschema==4.25.1`; the two runtimes give the same counts.
 
 | Suite | Tests (both runtimes) |
 |---|---|
-| `skills/ship-v2/scripts/tests` | 393 (359 from slice 2, 15 in `test_join_proofs.py`, 19 in `test_save_step.py`) |
+| `skills/ship-v2/scripts/tests` | 437 (359 from slice 2, 19 in `test_join_proofs.py`, 19 in `test_save_step.py`, 11 in `test_unsaved_mirror.py`, 29 in `test_terminal_class.py`) |
 | `skills/ship-v2/adapters/claude-code/tests` | 45 |
 | `skills/ship-v2/adapters/codex/tests` | 24 |
 | `skills/ship-v2/scripts/validate-examples.py` | 30 accepted, 33 rejected examples; 0 failures |
@@ -28,16 +30,17 @@ Each prints one JSON document, exits 0 only when every expectation held, and run
 is given (the setups' home guard: never under `~/.claude`, `~/.codex` or `~/.local/share/skills-v2-*`, TMPDIR, TEMP and
 TMP held to the same rule, the guard's interpreter started with the three cleared). Tests: `test_join_proofs.py`.
 
-| Proof | What it shows | Measured (slice 3 fix round 1, Claude Code 2.1.292 and codex-cli 0.157.0) |
+| Proof | What it shows | Measured (slice 3 fix round 2, Claude Code 2.1.292 and codex-cli 0.157.0) |
 |---|---|---|
 | `setups/ten-stations.sh` | inspect-v2's seven-stations proof widened to the ten v2 stations and records, one marketplace, installed: every `skill-identity` from its installed copy; every copied records client by route 3b; inspect-v2's code book by route 3b; ship-v2's own sibling lookup resolving and identifying build-v2, signoff-v2 and recheck-v2 installed (route 3b, interface 1, no refusal); each station's manual-only controls as installed (handoff-v2 both, vertical-v2 and ship-v2 neither); the negatives (records renamed away, blueprint-v2 renamed away, each of ship-v2's three siblings renamed away) | exit 0 on both harnesses |
-| `setups/trace-proof.sh` with `setups/tripwire.py` | the done-when trace (E15-7): every v2 plugin installed with the six v1 back-half plugins beside their v2, each v1 copy a tripwire (its entry leaves a marker when run; an audit hook on `PYTHONPATH` leaves one when a hooked process opens, lists or launches a v1 path), then the end-to-end replay over the installed copies | exit 0 on both harnesses: 18 trace lines, all build-v2, signoff-v2, recheck-v2 or readers at their installed copies, route 3b, interface 1; no marker; the hook armed in every station process (235 for 102 station commands). The controls `--control read` and `--control run` each leave a marker and report FAIL (exit 1) on both harnesses |
+| `setups/trace-proof.sh` with `setups/tripwire.py` | the done-when trace (E15-7): every v2 plugin installed with the six v1 back-half plugins beside their v2, each v1 copy a tripwire (its entry leaves a marker when run; an audit hook on `PYTHONPATH` leaves one when a hooked process opens, lists or launches a v1 path), then the end-to-end replay over the installed copies. The hook's reach, as measured: it loads only in Python processes that load `site` with its folder on `PYTHONPATH`; the children started isolated (`-I`: ship-v2's `skill-identity` read of each station, vertical-v2's `readers.py --version`) or by another runtime are not hooked, so a read inside them is not seen, while a run of any v1 entry is still caught by the entry's own marker in any mode, and a launch of a v1 path from a hooked parent by its `subprocess.Popen` event. So the proof matches each station command the replay ran to an armed record of its own (by its argv, `tripwire.unmatched`), never a comparison of totals | exit 0 on both harnesses: 18 trace lines, all build-v2, signoff-v2, recheck-v2 or readers at their installed copies, route 3b, interface 1; no marker; each of the replay's 102 station commands matched to an armed record of its own (236 processes armed, 235 of them in the installed station scripts; the isolated identity reads are not among them, by design). The controls `--control read` and `--control run` each leave a marker and report FAIL (exit 1) on both harnesses |
 | `evals/replay/replay.py` | the back of the loop end to end on recorded answers (no model call): ship-v2's loop with the real build-v2, signoff-v2 and recheck-v2, handoff-v2's photograph, vertical-v2's gate, packets and summons; a clean path and a path with a finding, a fix and a recheck | exit 0 in both runtimes: clean ends ALL CLEAR with recheck not run, Laps 0; findings ends ALL CLEAR with one lap, the executor having taken the save step as `fix` printed it (a local commit of exactly signoff-v2's verdict mirror); handoff-v2's cards and open set equal the records'; every packet cold |
 
 The installers, `verify-install.sh` and `negative-tests.sh` of this core, on both harnesses: install 0, verify 0 (no
 finding, 73 references checked, identity equal), the nine negative cases all ran (exit 0). Measured again in slice 3's
-fix round 1: install 0 and verify 0 (76 references) on both harnesses; the negative cases were not rerun (no setup
-file changed).
+fix round 1: install 0 and verify 0 (76 references) on both harnesses, and in fix round 2: install 0 and verify 0 (77
+references, identity equal, no finding) on both harnesses; the negative cases were not rerun (no installer or
+negative-case file changed).
 
 ## Layout
 

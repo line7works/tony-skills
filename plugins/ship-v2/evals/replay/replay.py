@@ -128,6 +128,17 @@ def interpreter():
             % (sys.executable, why))
 
 
+def process_argv(argv):
+    """The head of the station process's own `sys.argv` (its script and the next two words), as the trace proof's audit
+    hook records it when the process arms (`setups/tripwire.py`'s `armed.log`): the argv from the first `.py` script
+    on, whatever interpreter or `uv run` words come before it."""
+    words = [str(a) for a in argv]
+    for index, word in enumerate(words):
+        if word.endswith(".py"):
+            return words[index:index + 3]
+    return words[:3]
+
+
 def tree_state(root, skip=()):
     """{relative path: (size, mtime_ns)} under root, `.git` and the names in `skip` excepted."""
     out = {}
@@ -264,7 +275,8 @@ class Path(object):
                 doc = json.loads(out)
             except ValueError:
                 doc = None
-        entry = {"station": label[0], "command": label[1], "exit": proc.returncode, "want": want}
+        entry = {"station": label[0], "command": label[1], "exit": proc.returncode, "want": want,
+                 "argv": process_argv(argv)}
         if isinstance(doc, dict):
             for key in ("next", "status", "reason"):
                 if isinstance(doc.get(key), str):

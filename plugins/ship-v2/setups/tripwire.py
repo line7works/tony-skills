@@ -6,6 +6,7 @@ marker when any file of theirs is read or run.
     write_hook(folder) -> path of sitecustomize.py the audit hook a proof puts first on its own PYTHONPATH
     markers(folder) -> [marker]                    every marker left, in order
     armed(folder) -> [line]                        every process the hook was loaded into
+    unmatched(commands, armed, root) -> [command]  each expected station command with no armed record of its own
     verdict(marks) -> {"verdict": PASS | FAIL, "markers": n, "why"}
 
 THE COPY. A v1 plugin is copied whole into `dest`, then every file in it is replaced: its manifest stays as it was
@@ -26,6 +27,15 @@ watched `<v1>` is not under it) appends a marker
 naming the event, the path and the process. A process started isolated (`-I`) or by another runtime is not hooked: a
 read there is not seen, and a run of a v1 entry is still caught by the entry itself, and the launch by the hooked
 parent's `subprocess.Popen` event.
+
+THE REACH, as measured (slice 3 check 1's C3-2). The hook sees only the Python processes that load `site` with its
+folder on `PYTHONPATH`. A child started isolated (`-I`, as ship-v2's `stations.identify` starts each station's
+`skill-identity` and vertical-v2 starts `readers.py --version`), or started with `-E` or `-S`, or by another runtime
+(`sh`, `git`), is not hooked: a read inside it leaves no marker. A run of a v1 entry is still caught, by the entry's
+own marker in any mode, and a launch of a v1 path from a hooked parent by its `subprocess.Popen` event. So a proof never
+compares totals of armed records and commands: it matches each station command it ran to an armed record of its own
+(`unmatched`), by the process's argv as the hook records it (its script by real path, then the next two words), the
+script inside the installed copies, and fails on any command with none.
 
 THE VERDICT. Any marker is FAIL. Standard library only, Python 3.9.
 """
@@ -199,3 +209,35 @@ def verdict(marks):
         return {"verdict": "FAIL", "markers": len(marks),
                 "why": "a v1 file was read or run: %s %s" % (marks[0].get("event"), marks[0].get("path"))}
     return {"verdict": "PASS", "markers": 0, "why": "no v1 file was read or run"}
+
+
+def _key(argv):
+    words = [str(w) for w in (argv or [])][:3]
+    if not words or not words[0]:
+        return None
+    return tuple([os.path.realpath(words[0])] + words[1:])
+
+
+def _inside(path, root):
+    path, root = os.path.realpath(path).casefold(), os.path.realpath(root).casefold().rstrip(os.sep)
+    return path == root or path.startswith(root + os.sep)
+
+
+def unmatched(commands, armed, root):
+    """Each expected command ({"argv": [script, word, word], ...}) that has no armed record of its own: one record per
+    command, matched by the process's argv head (the script by real path, then the next two words), the script inside
+    `root`. A command whose script lies outside `root`, or that carries no argv, is unmatched too. Never a comparison of
+    totals: an un-hooked command stays unmatched however many other processes armed (THE REACH)."""
+    pool = {}
+    for line in armed or ():
+        key = _key(line.get("argv"))
+        if key is not None and _inside(key[0], root):
+            pool[key] = pool.get(key, 0) + 1
+    out = []
+    for command in commands or ():
+        key = _key(command.get("argv"))
+        if key is None or not _inside(key[0], root) or not pool.get(key):
+            out.append(command)
+            continue
+        pool[key] -= 1
+    return out

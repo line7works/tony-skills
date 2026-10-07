@@ -238,6 +238,55 @@ class TheTripwire(Fixture):
         self.assertEqual(got.returncode, 0, got.stderr)
         self.assertEqual(self.tw.markers(self.markers), [], name)
 
+    def script(self, folder, name="driver.py"):
+        """A station-shaped script under `folder` that does nothing."""
+        path = os.path.join(self.tmp, folder, "skills", "station", "scripts", name)
+        testlib.write_text(path, "import sys\nsys.exit(0)\n")
+        return path
+
+    def run_script(self, script, words, isolated=False):
+        flags = ["-I"] if isolated else []
+        got = subprocess.run([sys.executable] + flags + [script] + list(words), env=self.hooked, cwd=self.tmp,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        self.assertEqual(got.returncode, 0, got.stderr)
+
+    def test_each_command_is_matched_to_an_armed_record_of_its_own(self):
+        """Slice 3 check 1's C3-2: the proof matches each replay station command to an armed record by the process's
+        argv head (script by real path, then two words), inside the installed root; never a comparison of totals."""
+        root = os.path.join(self.tmp, "installed")
+        script = self.script("installed")
+        for words in (["visit", "--run-dir", "D"], ["report", "--run-dir", "D"]):
+            self.run_script(script, words)
+        commands = [{"argv": [script, "visit", "--run-dir"]}, {"argv": [script, "report", "--run-dir"]}]
+        self.assertEqual(self.tw.unmatched(commands, self.tw.armed(self.markers), root), [])
+
+    def test_an_isolated_child_is_not_hooked_and_stays_unmatched_whatever_the_totals(self):
+        """The reach, as measured: a child started with `-I` loads no hook, so it leaves no armed record and a v1 read
+        inside it leaves no marker. Three hooked runs of one command do not cover the un-hooked one: the old check
+        (armed records at least the commands) would have passed; the match fails it."""
+        root = os.path.join(self.tmp, "installed")
+        script = self.script("installed")
+        for _ in range(3):
+            self.run_script(script, ["visit", "--run-dir", "D"])
+        self.run_script(script, ["skill-identity"], isolated=True)
+        commands = [{"argv": [script, "visit", "--run-dir"]}, {"argv": [script, "skill-identity"]}]
+        armed = self.tw.armed(self.markers)
+        self.assertGreaterEqual(len(armed), len(commands))
+        self.assertEqual(self.tw.unmatched(commands, armed, root), [commands[1]])
+        name = v1("build")
+        got = subprocess.run([sys.executable, "-I", "-c", "open(%r).read()" % os.path.join(
+            self.copy, "skills", name, "SKILL.md")], env=self.hooked, cwd=self.tmp, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, timeout=120)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(self.tw.markers(self.markers), [], "a read inside an isolated child is not seen")
+
+    def test_a_command_outside_the_installed_root_or_without_argv_is_unmatched(self):
+        root = os.path.join(self.tmp, "installed")
+        elsewhere = self.script("elsewhere")
+        self.run_script(elsewhere, ["visit", "--run-dir", "D"])
+        commands = [{"argv": [elsewhere, "visit", "--run-dir"]}, {"station": "ship-v2", "command": "visit"}]
+        self.assertEqual(self.tw.unmatched(commands, self.tw.armed(self.markers), root), commands)
+
     def test_a_v1_root_spelled_another_way_is_still_caught(self):
         name = v1("build")
         link = os.path.join(self.tmp, "via-link")
@@ -280,6 +329,14 @@ class TheReplay(unittest.TestCase):
                      "withheld.json does not name docs/reviews/"):
             self.assertIn(want, joined)
 
+    def test_each_logged_command_carries_its_process_argv(self):
+        """The trace proof matches each command by the argv the hook records: the script and the next two words,
+        whatever interpreter or `uv run` words come before it."""
+        uv = ["uv", "run", "--offline", "--with", "jsonschema==4.25.1", "python"]
+        self.assertEqual(self.replay.process_argv(uv + ["/p/ship.py", "visit", "--station", "x"]),
+                         ["/p/ship.py", "visit", "--station"])
+        self.assertEqual(self.replay.process_argv(["/usr/bin/python3", "/p/hook.py"]), ["/p/hook.py"])
+
     def test_the_packet_checker_passes_a_cold_packet(self):
         cold = self.packet({"workspace/src/a.py": "x = 1\n", "documents/spec.md": "# Plan\n\n## Slice A\nGoal: g\n"},
                            listed={"files": []}, withheld=self.full_withheld())
@@ -302,6 +359,10 @@ class TheReplay(unittest.TestCase):
             loop = summary["paths"][kind]["assertions"]["loop"]
             self.assertEqual((loop["status"], loop["result_line"], loop["card"], loop["laps"]),
                              ("completed", "ALL CLEAR", "signed off", laps), kind)
+        for kind in ("clean", "findings"):
+            for command in summary["paths"][kind]["commands"]:
+                if command["station"] != "executor":
+                    self.assertTrue(command["argv"] and command["argv"][0].endswith(".py"), command)
         traces = testlib.load_json(trace)
         names = sorted(set(line["identity"]["name"] for kind in traces for which in ("ship", "vertical")
                            for line in traces[kind][which]))

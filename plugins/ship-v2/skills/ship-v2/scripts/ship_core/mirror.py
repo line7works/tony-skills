@@ -8,6 +8,7 @@ taken by the executor. Stated once here and once in the contract, coded once.
     step(state, found) -> the step as the executor takes it: its name, the files and why each, the commands
     pending(run, state) -> the step for every mirror not committed as it stands, or None (`fix` prints it)
     refusal(run, state) -> (reason, step) for `visit --station recheck-v2`, or None
+    not_taken(run, state) -> the `recheck-stopped` reason for `report` at `fixed` while a mirror is unsaved, or None
 
 THE MIRROR. The signoff verdict mirror: the file under `docs/reviews/` that signoff-v2's result lists as its
 `verdict_doc`, and that recheck-v2's result lists as its `verdict_doc_copy` when it appends its block there. ship-v2
@@ -25,6 +26,12 @@ that changes a branch, an index or a worktree; `gitio.py` reads only.
 THE REFUSAL. `visit --station recheck-v2` refuses, exit 5 and nothing written, while a recorded mirror is untracked
 (git does not track it, the repository's ignore rules included) or differs from its committed bytes (its bytes on disk
 are not the bytes HEAD holds, or git reports it changed or staged), naming the step and the file (`unsaved`).
+
+THE STEP NOT TAKEN (the E15 lane contract A31 (1), the owner's ruling "End it as recheck stopped"). When the step
+cannot be taken (the owner declines it, a hook refuses the commit, git cannot commit), `report` at `fixed` while a
+recorded mirror is unsaved ends the run STOPPED with the existing tag `recheck-stopped`, its reason naming each unsaved
+file and why, in THE REFUSAL's own words (`not_taken`); no new stop word, recheck-v2 is not visited. With every
+mirror committed as it stands, `report` at `fixed` stays out of turn (exit 2): the next move is the recheck visit.
 
 THE SANCTIONED COMMIT. The window rule takes a commit of the mirror as the session's sanctioned step when the mirror
 is committed exactly as it stood: its identity on disk is the one recorded, and HEAD holds those bytes with nothing
@@ -166,7 +173,22 @@ def refusal(run, state):
     taken = step(state, found)
     reason = ("recheck-v2's own contract requires the signoff verdict mirror committed before its visit, and %s; take "
               "the named step %r yourself, outside any ship script (a local commit of exactly %s, nothing else): %s; "
-              "then run `visit --station recheck-v2` again"
+              "then run `visit --station recheck-v2` again; if the step cannot be taken (the owner declines it, a hook "
+              "refuses the commit, git cannot commit), never bypass the hook: run `report`, which ends the run "
+              "`recheck-stopped`"
               % ("; ".join("%s %s" % (rel, why) for rel, why in found), STEP,
                  ", ".join(rel for rel, _ in found), " then ".join("`%s`" % c for c in taken["commands"])))
     return reason, taken
+
+
+def not_taken(run, state):
+    """The reason `report` at `fixed` ends the run `recheck-stopped` with while a recorded mirror is unsaved (THE STEP
+    NOT TAKEN), naming each file and why in THE REFUSAL's own words; None when every mirror is committed as it
+    stands (then `report` is out of turn there: the next move is the recheck visit)."""
+    found = unsaved(run, state)
+    if not found:
+        return None
+    return ("the named step %r was not taken before recheck-v2's visit: %s; recheck-v2's own contract requires the "
+            "signoff verdict mirror committed before it runs, so recheck-v2 was not visited and the run ends here "
+            "(no ship script commits anything)"
+            % (STEP, "; ".join("%s %s" % (rel, why) for rel, why in found)))
