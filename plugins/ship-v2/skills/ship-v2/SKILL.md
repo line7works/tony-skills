@@ -143,7 +143,23 @@ wants to touch files outside the slice's footprint (the paths its `Footprint:` l
 build-v2's contract computes it) is stop condition 4, whether you name the path or only touch it. A path you touched
 inside the footprint that no fix names is refused: every change traces to a named finding.
 
-## Step 5: Recheck
+## Step 5: Save the verdict mirror, then recheck
+
+**The save step, before every recheck-v2 visit** (the first lap's and the extra lap's). recheck-v2 requires the
+signoff verdict mirror under `docs/reviews/` committed before it runs; it never commits anything itself, and neither
+does any ship script. So you take this named step yourself, outside every script: commit that mirror locally, exactly
+that file and nothing else. `fix` prints it as `save_step` (the file and its two commands):
+
+```sh
+git add -- <mirror>
+git commit --only -m "<message>" -- <mirror>
+```
+
+A local commit and nothing more: no other file, no push, no hook bypassed. If `save_step` says the repository
+ignores the file, stop and ask the owner (Pause, below) before you add it with `--force`. While the mirror is
+untracked, or differs from its committed bytes, `visit --station recheck-v2` refuses (exit 5, nothing written),
+naming the step and the file: take the step, then run it again. The script takes your commit as the sanctioned
+step when it holds exactly the mirror as it stood; any other file in it is held as any other move.
 
 ```sh
 uv run scripts/ship.py visit --run-dir <run dir> --station recheck-v2
@@ -154,7 +170,8 @@ Run recheck-v2 on the fixed findings by its own `SKILL.md`. Its closed checklist
 are its own. Touch nothing while its visit is open, and nothing between its result and the next `lap` but what the
 next lap fixes: the same rule holds what moved then (outside it is stop 4, the doc moved is stop 2, a path inside it
 that no fix names is refused). ALL CLEAR (its own result and no BLOCKER or MAJOR the
-records hold open for the slice) ends the loop: go to step 7.
+records hold open for the slice) ends the loop: go to step 7. A recheck-v2 that ends any other way than `completed`
+or `nothing_open` (`missing_input` included) ends the run with its status: run `report`.
 
 ## Step 6: The one extra lap
 
@@ -165,7 +182,7 @@ recheck-v2 named:
 uv run scripts/ship.py lap --run-dir <run dir>
 ```
 
-then steps 4 and 5 again. Still not ALL CLEAR after that is stop condition 1: run `report`. Never a third lap unasked:
+then steps 4 and 5 again, the save step included (recheck-v2 appended its block to the mirror). Still not ALL CLEAR after that is stop condition 1: run `report`. Never a third lap unasked:
 the owner ordering more laps, in his words in the input, is the only way one happens; `lap` refuses any other (exit
 5, nothing written).
 
@@ -252,4 +269,5 @@ none.
 - Don't answer a station's question to the owner yourself: pass it through and wait.
 - Don't write into the build doc: the stations own their ledgers and cards. The one exception is rule 2's: recording
   the owner's mid-run waiver or reopening word, and the card it moves.
-- Don't push, open a pull request, or merge: the git gates are the owner's, always.
+- Don't push, open a pull request, or merge: the git gates are the owner's, always. The one commit this loop asks of
+  you is the save step's: the verdict mirror alone, locally.

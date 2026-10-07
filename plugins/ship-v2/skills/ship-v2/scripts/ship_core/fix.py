@@ -17,14 +17,16 @@ and, separately, any fix that needs the spec changed (`spec_change`). In order:
    named finding.
 5. Otherwise the lap's fixes are recorded (`fixes.json`), the workspace is pinned again (what moves after it is the
    recheck-v2 window's), and the run goes on to `recheck-v2`, or, for the MINORs the owner ordered after a clean
-   signoff, to `report` (they never gate and never trigger a recheck).
+   signoff, to `report` (they never gate and never trigger a recheck). On the way to recheck-v2 the output names THE
+   SAVE STEP (`save_step`, `mirror.py`, contract section 3.11): the verdict mirror the executor commits before the
+   visit, with the commands, or null when it is committed as it stands already.
 
 `fixes.json` lands in the one save that ends the command (`common.save`, THE SAVE), with the state and the stage, or
 with the stop: a kill never leaves the fixes recorded twice or recorded without the stage they moved the run to.
 """
 import os
 
-from . import common, doc as docmod, report, window
+from . import common, doc as docmod, mirror, report, window
 
 
 def _relative(path):
@@ -95,7 +97,7 @@ def handler(ctx, args):
                                      minors_only=True))
     common.save(run, state, "fixed")
     return ctx.emit(ctx.envelope(next="visit --station recheck-v2", run_id=common.run_id(run), lap=state["lap"],
-                                 recorded=declared, moved=held.moved))
+                                 recorded=declared, moved=held.moved, save_step=mirror.pending(run, state)))
 
 
 def _keep(run, record, outcome):

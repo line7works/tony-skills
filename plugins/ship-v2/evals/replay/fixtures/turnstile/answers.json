@@ -1,0 +1,110 @@
+{
+  "replay_answers": 1,
+  "about": "The recorded answers of the back-of-the-loop replay: what each model's part would hand back, and nothing else. Every check output is captured by replay.py from running the check the slice names; nothing here states an outcome.",
+  "paths": {
+    "clean": {
+      "build": {
+        "edits_from": "edits/build-right",
+        "claimed_status": "complete",
+        "claimed_card": "built",
+        "edits": [
+          {"path": "src/turnstile.py", "reason": "R1 and R2: turn() adds one to the count and reset() sets it back to zero"},
+          {"path": "tests/test_turnstile.py", "reason": "AC1 and AC2: one unittest case each"}
+        ],
+        "notes": "The one named check was run from the workspace root."
+      },
+      "review": {
+        "findings": [],
+        "notes_kept": [],
+        "verdict": "signed off",
+        "notes": "Tried to break the reset: two turns then a reset reads 0, and a reset on a fresh counter reads 0; tried to break the count: five turns read 5."
+      },
+      "vertical": {
+        "ask": {"rows": ["gpt-astra"], "words": "local and gpt-astra"},
+        "lens_reply": "# Lens report\n\nNo findings.\n\nTried to break: two turns then a reset reads 0; a reset on a fresh counter reads 0; five turns read 5.\n",
+        "local": {
+          "method": "each lens read the reviewed copy and ran no check (the local row offers no tool-running profile)",
+          "findings": [],
+          "tried": [
+            {"lens": "spec", "how": "read", "what": "walked AC1 and AC2 against the counter and its tests"},
+            {"lens": "correctness", "how": "read", "what": "traced a reset after turns and a reset on a fresh counter"},
+            {"lens": "seams", "how": "read", "what": "looked for a caller of reset outside the slice and found none"}
+          ]
+        },
+        "outside_reply": "# Outside review\n\nNo findings.\n",
+        "outside": {"findings": []}
+      }
+    },
+    "findings": {
+      "build": {
+        "edits_from": "edits/build-wrong",
+        "claimed_status": "complete",
+        "claimed_card": "built",
+        "edits": [
+          {"path": "src/turnstile.py", "reason": "R1 and R2: turn() adds one to the count and reset() sets it back"},
+          {"path": "tests/test_turnstile.py", "reason": "AC1 and AC2: a unittest case for the count and one for a reset"}
+        ],
+        "notes": "The one named check was run from the workspace root."
+      },
+      "review": {
+        "findings": [
+          {
+            "severity": "MAJOR",
+            "location": "src/turnstile.py:14",
+            "at_line": "            self.turns = 1",
+            "claim": "reset() sets the count to 1 after any turn instead of back to zero",
+            "scenario": "turn twice, then reset: the count reads 1, so AC2 (a reset after two turns reads 0) fails; the slice's test only resets a fresh counter",
+            "evidence_kind": "executed"
+          }
+        ],
+        "notes_kept": [],
+        "verdict": "signed off with conditions",
+        "notes": "Ran a reset after two turns by hand: the count read 1."
+      },
+      "fix": {
+        "edits_from": "edits/fix",
+        "summary": "reset() sets the count back to zero, and a test resets after two turns (AC2)"
+      },
+      "verifier": {
+        "items": [
+          {
+            "disposition": "fixed",
+            "location_after_fix": "src/turnstile.py:13",
+            "detail": "PYTHONPATH=src /usr/bin/python3 -c 'from turnstile import Counter; c=Counter(); c.turn(); c.turn(); c.reset(); print(c.turns)' printed 0"
+          }
+        ],
+        "prose": "Ran the finding's scenario from the workspace root at the fixed head."
+      },
+      "vertical": {
+        "ask": {"rows": ["gpt-astra"], "words": "local and gpt-astra"},
+        "lens_reply": "# Lens report\n\nNo findings.\n\nTried to break: a reset after two turns reads 0; a reset on a fresh counter reads 0.\n",
+        "local": {
+          "method": "each lens read the reviewed copy and ran no check (the local row offers no tool-running profile)",
+          "findings": [],
+          "tried": [
+            {"lens": "spec", "how": "read", "what": "walked AC1 and AC2 against the counter and its three tests"},
+            {"lens": "correctness", "how": "read", "what": "traced a reset after turns and a reset on a fresh counter"},
+            {"lens": "seams", "how": "read", "what": "looked for a caller of reset outside the slice and found none"}
+          ]
+        },
+        "outside_reply": "# Outside review\n\nOne finding: src/encoder.py:3 drops a turn when the encoder overflows.\n",
+        "outside": {
+          "findings": [
+            {
+              "claim": "the encoder drops a turn when it overflows",
+              "confidence": "medium",
+              "location": "src/encoder.py:3",
+              "scenario": "overflow the encoder; one turn goes uncounted",
+              "severity": "MAJOR",
+              "stamp": "REFUTED",
+              "refuted_because": "the reviewed copy holds no src/encoder.py; the encoder is not in this build (a hallucinated location)"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "handoff": {
+    "perishables": ["the counter has no upper bound; a long bench session is worth a look when the encoder slice is planned"]
+  }
+}

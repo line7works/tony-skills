@@ -332,7 +332,7 @@ def result_problems(name, found, identity, doc, visit, facts, prefix):
     stated, version = named_station(name, doc)
     if stated != name:
         out.append("it names the station %r, not %s" % (stated, name))
-    if name == "recheck-v2" and (slice_name is None or build_doc is None):
+    if name == "recheck-v2" and doc.get("status") in RECHECK_GOES_ON and (slice_name is None or build_doc is None):
         out.append("its checklist names no slice or no doc, so it cannot be this visit's")
     if (version is not None or name == "recheck-v2") and version != identity["version"]:
         out.append("its plugin version %r is not the version of the station visited (%r)" % (version,
@@ -350,6 +350,12 @@ def result_problems(name, found, identity, doc, visit, facts, prefix):
                        "run directory")
     return out
 
+
+# recheck-v2's statuses that go on with the loop: each carries a checklist naming its slice and doc. Every other status
+# (`missing_input`, `stale_source`, `verifier_unavailable`, `recording_failed`, `stopped`) carries its own envelope,
+# with no checklist where its schema gives none, and is bound to the visit by its run block alone; it ends the run
+# `recheck-stopped` (the E15 lane contract A30 (2), contract section 3.4)
+RECHECK_GOES_ON = ("completed", "nothing_open")
 
 BUILD_WORDS = {"completed": "COMPLETE", "checks_not_passed": "PARTIAL", "not_complete": "PARTIAL",
                "answer_refused": "STOPPED", "stopped": "STOPPED"}
@@ -370,7 +376,7 @@ def outcome(name, doc):
                      "location": f.get("location"), "claim": f.get("claim")} for f in doc.get("findings") or []]
         return {"status": status, "word": status if stopped else (verdict or "signed off"), "stopped": stopped,
                 "verdict": verdict, "findings": findings, "wrote_nothing": bool(doc.get("writes_none"))}
-    stopped = status not in ("completed", "nothing_open")
+    stopped = status not in RECHECK_GOES_ON
     result = doc.get("result")
     if status == "nothing_open":
         word = "nothing open"

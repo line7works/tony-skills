@@ -29,6 +29,10 @@ THE RULE. At each check point everything that moved since the last pin is held, 
    - recheck-v2: the project files its `records_written` lists, each row's hash before and after.
 2. ship-v2's own sanctioned writes since the pin: each grant's `Status:` line (`state["own"]`: its receipt's hash
    before and after, in order).
+3. The session's sanctioned save step (THE SAVE STEP, the E15 lane contract A30 (1), `mirror.py`): a commit of the
+   signoff verdict mirror ship-v2 recorded at a station's close, when the mirror is committed exactly as it stood
+   (`mirror.saved_as_it_stood`: its identity on disk the one recorded, HEAD holding those bytes, nothing changed or
+   staged). Any other file in that commit is held as any move is.
 
 The build doc counts as theirs only when those writes, the station's in their order and ship-v2's in theirs,
 interleaved, run as one chain of hashes from the doc at the pin to the doc as it stands, so a hand edit before, between
@@ -50,7 +54,7 @@ import stat
 
 from station_core import fsio
 
-from . import common, doc as docmod, pin
+from . import common, doc as docmod, mirror, pin
 
 ANY = "*any bytes*"          # a link's `before` for build-v2's sanctioned ledger write: the build loop's own bytes
 
@@ -94,15 +98,7 @@ def own(state, receipt):
 
 def _rel(ws, path):
     """A listed path as a normalized workspace-relative path, or None (outside the workspace, or not a path)."""
-    if not isinstance(path, str) or not path:
-        return None
-    if os.path.isabs(path):
-        real, base = os.path.realpath(path), os.path.realpath(ws)
-        if not fsio.inside(real, base) or real == base:
-            return None
-        path = os.path.relpath(real, base)
-    path = os.path.normpath(path)
-    return None if path.startswith("..") or os.path.isabs(path) else path
+    return mirror.relative(ws, path)
 
 
 def _sha(value):
@@ -222,7 +218,8 @@ def hold(run, state, where, station=None, named=(), leave_inside=False, footprin
         if path not in files:
             return False
         return files[path] is None or files[path] == fsio.sha256_file_or_none(os.path.join(ws, path))
-    moved = [p for p in pin.moved(ws, base) if p != rel and not theirs(p)]
+    moved = [p for p in pin.moved(ws, base)
+             if p != rel and not theirs(p) and not mirror.saved_as_it_stood(ws, state, p)]
     if doc_moved or rel in declared:
         return Held(stop=("spec-change", "the build doc %s moved %s, and not by a write the station's result lists or "
                                          "ship-v2's own `Status:` write%s: the doc holds the slice's spec and a fix is "

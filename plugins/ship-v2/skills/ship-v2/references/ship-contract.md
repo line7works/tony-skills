@@ -1,9 +1,10 @@
 # Ship v2 core: behavioral contract
 
 What this station does, what it reads, what it may write, what stops it, and the words it uses for a state. Written for
-E15 slice 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 10 and 12, amendments A1 to A29) and
+E15 slice 2 of the skills v2 rebuild, against the E15 lane contract (sections 6, 10 and 12, amendments A1 to A30) and
 the control room's readings CR-21 to CR-27 in the slice 2 brief, with slice 2 check 1's findings C2-1 to C2-8 (fix
-round 1), re-check 1's R1S2-1 to R1S2-7 (fix round 2) and Astra's look 6's L6-1 (fix round 3). Where this document and that contract differ, the
+round 1), re-check 1's R1S2-1 to R1S2-7 (fix round 2), Astra's look 6's L6-1 (fix round 3) and the slice 3 join's
+two seams (A30, slice 3 fix round 1). Where this document and that contract differ, the
 contract is the authority and this document is the defect. `references/back-loop.md` is the discipline the three back
 cores share; this document is this core's own.
 
@@ -46,6 +47,7 @@ portable text.
 command to run instead. Every phase reads and writes only the run directory, except section 6's grant writes (the records events and the
 slice's `Status:` line). Every visit and every step between visits is held by one rule, THE WINDOW RULE (section 3.5).
 Every write of the run's state and its checkpoint goes through one routine, THE SAVE (section 3.10).
+Before every recheck-v2 visit the executor takes one named step outside every script, THE SAVE STEP (section 3.11).
 Every run file this core reads or writes is checked first with `os.lstat`: a link, a pipe or a file outside the run
 directory is refused, never followed.
 
@@ -86,7 +88,7 @@ The checkpoint's `phase` holds the run's stage; each command runs at the stages 
 | `visiting` | `visit --station` | `visit --result`; `report` when the station ended without a result this run can take (`visit-unfinished`) |
 | `built` | build-v2 COMPLETE | `visit --station signoff-v2` |
 | `fixing` | signoff-v2 with a BLOCKER or MAJOR charged to the slice (or MINORs the owner ordered); `lap` | `fix` |
-| `fixed` | `fix` (the workspace pinned again) | `visit --station recheck-v2` |
+| `fixed` | `fix` (the workspace pinned again) | the executor's save step (section 3.11), then `visit --station recheck-v2` |
 | `lap-needed` | recheck-v2 not ALL CLEAR, a lap left | `lap` |
 | `exhausted` | recheck-v2 not ALL CLEAR, no lap left | `report` (stop condition 1); `lap` is refused |
 | `clean` | ALL CLEAR | `report` |
@@ -125,7 +127,10 @@ held like every other file of the root: it must resolve inside the root by ident
 station is refused before the opening line (a `refused` line, `station-refused`; C2-5). Before anything of the station
 is read, the window since the last step is held by THE WINDOW RULE (section 3.5; between build-v2's result and
 signoff-v2's visit, after the lap's fixes and before recheck-v2's), and when the opening line is written the workspace
-is pinned: what it holds when the visit opens.
+is pinned: what it holds when the visit opens. Before recheck-v2's visit, after that window holds and before anything of
+the station is read, the verdict mirror must be committed as it stands: while it is untracked or differs from its
+committed bytes the visit is refused, exit 5, nothing written, naming the step and the file (THE SAVE STEP, section
+3.11).
 
 **Closing.** `visit --result` reads `<visit run dir>/result.json`, the station's own result, written by the station
 run by its own `SKILL.md`. No result yet is exit 2. Before it is read, the station is resolved and identified again: a
@@ -137,7 +142,12 @@ names another station, or its plugin version is not the version visited; or, on 
 report-only result that wrote nothing (recheck-v2, which has no report-only mode, must have written only run
 artifacts). build-v2 and signoff-v2 name their slice, doc and workspace in their run fields and their version in
 `plugin_version`; recheck-v2's run block names none of them, so its `checklist.slice` and `checklist.build_doc` are its
-slice and doc and its `run.skill.name` and `run.skill.version` its name and version (slice 2 check 1's C2-4).
+slice and doc and its `run.skill.name` and `run.skill.version` its name and version (slice 2 check 1's C2-4). A
+recheck-v2 result whose status is `completed` or `nothing_open` must carry that checklist; any other status
+(`missing_input`, `stale_source`, `verifier_unavailable`, `recording_failed`, `stopped`) carries its own envelope, which
+has no checklist where its schema gives none, so it is bound to the visit by its run block alone (its run id, run
+directory, name and version; a checklist it does carry must still name this slice and doc), and a result with no run
+block is refused (the E15 lane contract A30 (2)).
 
 **The visit's window.** When the result holds, and before its closing line, the window the visit was open in is held
 by THE WINDOW RULE (section 3.5), net of the station's own listed writes: a path inside the footprint nothing names is
@@ -156,7 +166,7 @@ Then the next step, from the station's own words and the records:
 | signoff-v2 | a status other than `completed`, an answer it refused, or a refusal reason | `signoff-stopped`, its status carried |
 | signoff-v2 | completed, and the records hold a BLOCKER or MAJOR open for the slice (or a fix-introduced defect, or a MINOR the owner ordered) | `fixing`, lap 1, the named findings printed |
 | signoff-v2 | completed, nothing to fix | `clean` (ALL CLEAR, recheck not run) |
-| recheck-v2 | a status other than `completed` or `nothing_open` | `recheck-stopped`, its status carried |
+| recheck-v2 | a status other than `completed` or `nothing_open` (`missing_input` included, A30 (2)) | `recheck-stopped`, its status carried |
 | recheck-v2 | `result` `all_clear` (or `nothing_open`) and no BLOCKER or MAJOR open for the slice in the records | `clean` |
 | recheck-v2 | otherwise, with a lap left | `lap-needed` |
 | recheck-v2 | otherwise, with none left | `exhausted` |
@@ -207,6 +217,9 @@ otherwise is stop 2, a path outside the footprint is stop 4, an unnamed path ins
 - **ship-v2's own sanctioned writes**: each grant's `Status:` line since the pin (section 6; its receipt's hash before
   and after, recorded in `ship.json`'s `own`), so ship-v2's own write is never a station's or a fix's move (re-check 1's
   R1S2-4).
+- **The session's sanctioned save step** (section 3.11): a commit of a verdict mirror ship-v2 recorded, when that
+  mirror is committed exactly as it stood, is the session's step and no move; any other file in the same commit is held
+  by this rule as any move is.
 - **The doc** counts as theirs only when those writes, the station's in their order and ship-v2's in theirs,
   interleaved, run as one chain of hashes from the doc at the pin to the doc as it stands, so a hand edit before,
   between or after them is never taken for theirs. **Another project file** counts as the station's when the station
@@ -317,6 +330,38 @@ hand). One rule, stated once here and once in `scripts/ship_core/common.py` (`sa
   contract). It does not claim durability across a power loss (no `fsync`). Tested by a kill at every line between
   each saving command's first and last write (`scripts/tests/test_kill_sweep.py`, `killpoint.py`) and by L6-1's own
   case (`test_crash_safe_save.py`).
+
+### 3.11 THE SAVE STEP
+
+The E15 lane contract A30 (1), the owner's ruling "Ship names the save step". Not THE SAVE of section 3.10 (the
+script's own run-directory write): this is a commit the executor makes. Stated once here and once in
+`scripts/ship_core/mirror.py`, coded once:
+
+- **The mirror.** The signoff verdict mirror: the file under `docs/reviews/` that signoff-v2's result lists as its
+  `verdict_doc`, and that recheck-v2's result lists as its `verdict_doc_copy` when it appends its block there. ship-v2
+  records it at that station's close, after the visit's window held, as it stood then (its identity with lstat
+  semantics, `pin.identity`). A row naming a path outside the workspace or outside `docs/reviews/`, or a path that is not
+  a regular file, is no mirror; a report-only run's signoff-v2 writes none, so it has none.
+- **The step.** recheck-v2's own contract (its section 9, E13's F8) requires the mirror committed before a recheck: its
+  boundary check reads any change to untracked content as a violation, so a recheck that appends its block to an
+  untracked mirror ends `not_clear`, cancels its status-line steps and freezes the card. Before every recheck-v2 visit
+  (the first lap's and the extra lap's, after recheck-v2 appended its block) the executor commits the mirror locally,
+  exactly that file and nothing else: a named step outside any ship script, as the lane contract's A2 Q2 made
+  handoff-v2's checkpoint commit. `fix` prints it as `save_step` (the files, why each needs it, and the two commands,
+  `git add -- <mirror>` then `git commit --only -m <message> -- <mirror>`; null when nothing needs it), and so does the
+  refusal below. No ship script runs a git command that changes a branch, an index or a worktree
+  (`scripts/ship_core/gitio.py` reads only; `scripts/tests/test_static.py`). A mirror the repository's ignore rules
+  leave out takes `git add --force`: the printed reason says so, and that is the owner's call (a pause).
+- **The refusal.** `visit --station recheck-v2` refuses, exit 5, nothing written, the run still at `fixed`, while a
+  recorded mirror is untracked (git does not track it, ignored files included) or differs from its committed bytes
+  (git reports it changed or staged, or the bytes on disk are not the blob HEAD holds), naming the step and the file
+  and carrying `save_step`. The window since the last step is held first (section 3.5).
+- **The sanctioned commit.** THE WINDOW RULE (section 3.5) takes a commit of the mirror as the session's sanctioned step
+  when the mirror is committed exactly as it stood: its identity on disk is the one recorded, and HEAD holds those
+  bytes with nothing changed or staged. Any other file in that commit is held by the rule as any move is (one committed
+  as it stood at the pin is no move; one changed since the pin and committed is a move: outside the footprint stop 4,
+  inside it unnamed refused). A mirror edited by hand and then committed is not as it stood: a move outside the
+  footprint, stop 4.
 
 ## 4. The input
 
@@ -497,7 +542,7 @@ The exits are the back loop's: 0, 1, 2, 3, 4, 5, 10 (back-loop section 2). A sto
 | `doc-unreadable` | select, fix | a doc line the two readings refuse or take differently (CR-27), named |
 | `build-not-complete` | visit | stop condition 3: build-v2 PARTIAL or STOPPED |
 | `signoff-stopped` | visit | signoff-v2's own stop or refusal, its status carried |
-| `recheck-stopped` | visit | recheck-v2's own stop, its status carried |
+| `recheck-stopped` | visit | recheck-v2's own stop, its status carried (`missing_input` and every status other than `completed` or `nothing_open`, A30 (2)) |
 | `spec-change` | fix, visit, lap, pause, report | stop condition 2: a fix needs the spec changed, or the build doc moved but by a sanctioned write (THE WINDOW RULE, section 3.5) |
 | `outside-footprint` | fix, visit, lap, pause, report | stop condition 4: a path outside the slice's footprint moved or was named (THE WINDOW RULE, section 3.5) |
 | `extra-lap-exhausted` | report | stop condition 1: the extra lap spent without ALL CLEAR |
@@ -520,7 +565,7 @@ key outside this repository.
 
 Run a station's phases (the one station command it runs is `skill-identity`); answer a question meant for the owner;
 turn a pause into a stop; take a third lap without the owner's words; write into the build doc, but the `Status:` line
-a grant's card move sets (section 6); write a card event but that grant's `card_set`, or any finding or disposition; run a git command that changes a branch, an index or a worktree; push, open a pull request or
+a grant's card move sets (section 6); write a card event but that grant's `card_set`, or any finding or disposition; run a git command that changes a branch, an index or a worktree (the save step's commit is the executor's, printed and never run, section 3.11); push, open a pull request or
 merge (`scripts/tests/test_static.py`); launch a harness or summon a reader; read a v1 skill's files.
 
 ## 15. Interface
@@ -531,4 +576,4 @@ syntax, standard library plus `jsonschema==4.25.1` through `uv run` (PEP 723) an
 (section 5); git 2.50.1. Run-directory artifacts: `input.json`, `checkpoint.json`, `ship.json`, `trace.jsonl`,
 `visits/<seq>-<station>/` (each the station's own run), `laps.json`, `fixes.json`, `pauses.json`, `events.json`,
 `records-events.json` (an append's input), `receipt-<pause>.json` (a grant's transaction, section 6), `chat.md`,
-`result.json`; while a save is under way, its journal `save.json` and a `.<name>.ship-v2-tmp` (section 3.10). `ship.json` holds the window rule's pin (`pin`) and ship-v2's own writes since it (`own`).
+`result.json`; while a save is under way, its journal `save.json` and a `.<name>.ship-v2-tmp` (section 3.10). `ship.json` holds the window rule's pin (`pin`), ship-v2's own writes since it (`own`) and the verdict mirrors recorded as they stood (`mirrors`, section 3.11).

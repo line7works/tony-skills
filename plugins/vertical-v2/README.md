@@ -9,16 +9,35 @@ installed, and both are renamed at cutover.
 ## Status
 
 Version 0.1.0, interface version 1. Built in E15 slice 1 (hand-back 1) on the E15 back frame
-(`skills/vertical-v2/references/back-loop.md`, `skills/vertical-v2/references/back-files.txt`). The
-measured counts below are the control room's, filled at the step's close.
+(`skills/vertical-v2/references/back-loop.md`, `skills/vertical-v2/references/back-files.txt`). Counts measured on the
+E15 slice 3 tree, each suite run under `/usr/bin/python3` 3.9.6 and under `uv run` with `jsonschema==4.25.1`; the two
+runtimes give the same counts.
 
-| Suite | Tests |
+| Suite | Tests (both runtimes) |
 |---|---|
-| `skills/vertical-v2/scripts/tests` | (to be measured) |
-| `skills/vertical-v2/adapters/claude-code/tests` | (to be measured) |
-| `skills/vertical-v2/adapters/codex/tests` | (to be measured) |
-| `skills/vertical-v2/scripts/validate-examples.py` | (to be measured) |
-| seeded cases (`evals/seeded-cases/`) | (to be measured) |
+| `skills/vertical-v2/scripts/tests` | 647 |
+| `skills/vertical-v2/adapters/claude-code/tests` | 18 |
+| `skills/vertical-v2/adapters/codex/tests` | 19 |
+| `skills/vertical-v2/scripts/validate-examples.py` | 27 accepted, 39 rejected examples; 0 failures |
+| seeded cases (`evals/seeded-cases/`) | 24 cases: V1 5, V2 5, V3 4, V4 3, V5 3, T1 4 |
+
+## The join's proofs (E15 slice 3)
+
+Measured on Claude Code 2.1.291 and codex-cli 0.157.0, each in a fresh isolated home:
+
+- This core's `install.sh`, `verify-install.sh` and `negative-tests.sh` on both harnesses: install 0, verify 0 (no
+  finding, 83 references checked, the installed identity equal to the checkout's), the nine negative cases all ran
+  (exit 0).
+- ship-v2's `setups/ten-stations.sh`: this core installed beside the other nine v2 stations and records; its
+  `skill-identity` answers from its installed copy without the records component, its copied client resolves the
+  installed component by route 3b and refuses when it is renamed away; no manual-only control (owner pick P5: the
+  summons is kept). Exit 0 on both harnesses.
+- ship-v2's `setups/trace-proof.sh`: vertical-v2 installed beside a v1 tripwire, its gate, packets and summons run over
+  the installed copies; every one of its trace lines names readers at the installed copy, route 3b, interface 1; no
+  v1 file read or run. PASS on both harnesses.
+- ship-v2's `evals/replay/replay.py`: after a real ship loop and handoff-v2, the gate passes, every packet and summons
+  copy is cold (no prior verdict, no records log, no ledger section or `Status:` line, no line of the review record,
+  its file list's hashes held), and no outside request exists before `record-local`.
 
 ## Layout
 

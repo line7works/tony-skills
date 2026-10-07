@@ -74,6 +74,37 @@ def dirt(workspace):
     return sorted(set(out))
 
 
+def object_format(workspace):
+    """The repository's object format (`sha1` or `sha256`), `rev-parse --show-object-format`; `sha1` when git names
+    none."""
+    proc = run(workspace, ["rev-parse", "--show-object-format"], check=False)
+    found = proc.stdout.decode("utf-8", "replace").strip() if proc.returncode == 0 else ""
+    return found or "sha1"
+
+
+def blob_at_head(workspace, rel):
+    """The object id HEAD holds at the workspace-relative path `rel` (`rev-parse --verify --quiet HEAD:<rel>`), or
+    None when HEAD holds nothing there (or there is no HEAD)."""
+    proc = run(workspace, ["rev-parse", "--verify", "--quiet", "HEAD:%s" % rel], check=False)
+    found = proc.stdout.decode("utf-8", "replace").strip() if proc.returncode == 0 else ""
+    return found or None
+
+
+def status_of(workspace, rel):
+    """Every `git status --porcelain` entry for the one path `rel` (taken literally, never as a pattern), ignored files
+    included: [(the two-letter code, path)]; [] when git holds it unchanged at HEAD."""
+    raw = run(workspace, ["status", "--porcelain", "-z", "--untracked-files=all", "--ignored=matching", "--",
+                          ":(literal)%s" % rel]).stdout.decode("utf-8", "replace")
+    parts = raw.split("\0")
+    out = []
+    index = 0
+    while index < len(parts) and parts[index]:
+        entry = parts[index]
+        out.append((entry[:2], entry[3:]))
+        index += 2 if (entry[:1] in ("R", "C") or entry[1:2] in ("R", "C")) else 1
+    return out
+
+
 def changed_between(workspace, old, new):
     """Every path the commits from `old` to `new` change (`git diff --name-only --no-renames -z`), sorted."""
     raw = run(workspace, ["diff", "--name-only", "--no-renames", "-z", old, new]).stdout.decode("utf-8", "replace")

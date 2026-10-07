@@ -7,16 +7,34 @@ Strictly user-invoked. The `-v2` suffix stays while v1 handoff is installed, and
 
 ## Status
 
-Version 0.1.0, interface version 1. Built in E15 slice 1, hand-back 2. The measured counts are the control room's,
-filled at the step's close.
+Version 0.1.0, interface version 1. Built in E15 slice 1, hand-back 2. Counts measured on the E15 slice 3 tree, each
+suite run under `/usr/bin/python3` 3.9.6 and under `uv run` with `jsonschema==4.25.1`; the two runtimes give the same
+counts.
 
-| Suite | Tests |
+| Suite | Tests (both runtimes) |
 |---|---|
-| `skills/handoff-v2/scripts/tests` | (to be measured) |
-| `skills/handoff-v2/adapters/claude-code/tests` | (to be measured) |
-| `skills/handoff-v2/adapters/codex/tests` | (to be measured) |
-| `skills/handoff-v2/scripts/validate-examples.py` | (to be measured) |
-| `evals/seeded-cases` (families H1 to H4 and T1) | (to be measured) |
+| `skills/handoff-v2/scripts/tests` | 403 |
+| `skills/handoff-v2/adapters/claude-code/tests` | 27 |
+| `skills/handoff-v2/adapters/codex/tests` | 23 |
+| `skills/handoff-v2/scripts/validate-examples.py` | 32 accepted, 37 rejected examples; 0 failures |
+| `evals/seeded-cases` | 20 cases: H1 4, H2 4, H3 4, H4 4, T1 4 |
+
+## The join's proofs (E15 slice 3)
+
+Measured on Claude Code 2.1.291 and codex-cli 0.157.0, each in a fresh isolated home:
+
+- This core's `install.sh`, `verify-install.sh` and `negative-tests.sh` on both harnesses: install 0, verify 0 (no
+  finding, 59 references checked, the installed identity equal to the checkout's), the nine negative cases all ran
+  (exit 0).
+- Manual-only (owner pick P5): `setups/manual-only.sh` exit 0 on both harnesses: the installed core and the probe
+  each carry `disable-model-invocation: true` and `allow_implicit_invocation: false`, and both prompts of the live
+  measurement exist. The live measurement (a words prompt and an explicit prompt in a signed-in session) was not run
+  in slice 3: an isolated Claude Code config has no sign-in, and a Codex session needs the credential copied from
+  `~/.codex`, which no builder opens. ship-v2's `setups/ten-stations.sh` reads the same two controls on this core's
+  installed copy beside the other nine stations (both present), and on vertical-v2 and ship-v2 (neither).
+- ship-v2's `evals/replay/replay.py`: after a real ship loop on both paths, the photograph's cards and open set are the
+  records component's `state`, its branch and tree are git's, the block carries those cards, and the loop complete
+  gives no kickoff line.
 
 ## Layout
 

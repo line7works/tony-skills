@@ -9,7 +9,9 @@ its identity, the route, the visit's run directory) is written, and only then is
 the station's `SKILL.md` to run by, the summon line, the run id and run directory the visit uses (`visits/<seq>-<name>`
 under this run's directory, which the station's own `check-input` creates), and the caller fields (`ship-v2`,
 `station`). Before anything of the station is read, the window since the last step is held, and when the opening line
-is written the workspace is pinned (the window rule, `window.py`).
+is written the workspace is pinned (the window rule, `window.py`). Before recheck-v2's visit, the verdict mirror must be
+committed as it stands (THE SAVE STEP, `mirror.py`, the E15 lane contract A30 (1)): while it is untracked or differs
+from its committed bytes the visit is refused, exit 5, nothing written, naming the step and the file.
 
 `visit --result`: the station's own result file, `<visit run dir>/result.json`, read after the executor ran the
 station by its own `SKILL.md`. Before it is read, the station is resolved and identified again: one that changed
@@ -21,9 +23,11 @@ visit's: refused, exit 5, nothing written, the run still at the visit. Then the 
 net of the station's own listed writes and ship-v2's own (`window.py`): a path inside the footprint nothing names is
 refused there, exit 5. A result that holds is recorded with its terminal status on the closing trace line (`visit`,
 the station's status); the window's stop (2 or 4), if any, ends the run after it; otherwise the workspace is pinned
-again and the loop's next step is decided from the station's own words and the records (contract section 3.4's
-table): stop 3 on a build that is not COMPLETE; the run's end on a signoff-v2 or recheck-v2 stop or refusal; the
-fixes, ALL CLEAR, a lap or the extra lap exhausted. `judge` is the same reading without a write, for `report` at
+again, the verdict mirror a signoff-v2 or recheck-v2 result lists is recorded as it stood (`mirror.note`), and the
+loop's next step is decided from the station's own words and the records (contract section 3.4's table): stop 3 on a
+build that is not COMPLETE; the run's end on a signoff-v2 or recheck-v2 stop or refusal (recheck-v2's
+`missing_input` and every status other than `completed` or `nothing_open` is `recheck-stopped`, A30 (2)); the fixes,
+ALL CLEAR, a lap or the extra lap exhausted. `judge` is the same reading without a write, for `report` at
 `visiting` (slice 2 re-check 1's R1S2-5).
 
 Each trace line is staged (`common.stage_trace`) and lands in the one save that ends the command (`common.save`, THE
@@ -37,7 +41,7 @@ from station_core import driver, fsio, records_link
 from station_core.records_client import ComponentUnavailable
 from back_core import trace
 
-from . import common, forms, record, report, stations, window
+from . import common, forms, mirror, record, report, stations, window
 
 EXPECT = {"hooked": "build-v2", "built": "signoff-v2", "fixed": "recheck-v2"}
 # the window a visit's opening holds, by the stage it opens at (the window rule's words)
@@ -106,6 +110,11 @@ def open_visit(ctx, run, args):
         return report.ending(ctx, run, state, between.stop[0], between.stop[1], condition=between.stop[2])
     if between.refuse is not None:
         return common.refuse(ctx, run, between.refuse)
+    if expected == "recheck-v2":
+        unsaved = mirror.refusal(run, state)      # THE SAVE STEP (contract section 3.11): refused, nothing written
+        if unsaved is not None:
+            return ctx.emit(ctx.envelope(accepted=False, run_id=common.run_id(run), save_step=unsaved[1],
+                                         reason=unsaved[0] + "; nothing was written and the run stays where it was"), 5)
     held, ended = _resolve(ctx, run, state, expected, run_dir)
     if held is None:
         return ended
@@ -247,6 +256,7 @@ def close_visit(ctx, run, args):
     if held.stop is not None:
         return report.ending(ctx, run, state, held.stop[0], held.stop[1], condition=held.stop[2])
     window.take(run, state)                 # after the station's own writes: the next window starts here
+    mirror.note(run, state, name, doc)      # the verdict mirror its result lists, as it stood (section 3.11)
     if name == "build-v2":
         if not told["complete"]:
             return report.ending(ctx, run, state, "build-not-complete",
