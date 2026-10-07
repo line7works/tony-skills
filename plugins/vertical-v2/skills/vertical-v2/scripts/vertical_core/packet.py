@@ -29,7 +29,21 @@ leave it out:
    holds a character outside the character list (a notes candidate, withheld and named with the line and the
    character, never a stop, A16 (2) and its send-back 1, `readings.notes_unlisted`);
 4. it is `REVIEW.md` at the root (the inspection sheet: never in a workspace; a local lens receives the
-   commit's bytes as a document when it is the kit sheet, and no outside packet ever carries it).
+   commit's bytes as a document when it is the kit sheet, and no outside packet ever carries it);
+5. it is another plan (THE OTHER-PLANS RULE, the E15 lane contract A32, the full review's finding 1; `other_plans`):
+   the build doc under review is the only plan a reviewer receives, so any other path two consecutive components of
+   which read `docs` then `plans`, compared without regard to case, wherever they stand (a file of any kind, a link
+   included), is left out; and so is any other `.md` regular file the build-doc form reads as a build doc
+   (`plan_heading`): one holding a level 2 heading that THE WITHHELD-NAME RULE (`spec.withheld_of`) reads as
+   `## Punch list` or `## Handoffs` (the ledger), or a level 2 heading on the form's slice pattern
+   (`## Slice <name> <dash> <short>`), found in either of two readings: a line reading of every line outside an
+   accepted fence (`fences.scan`), its indent and any list-item or block-quote markers set aside, ATX headings by
+   their `#`s and Setext headings by their underline (`---` is level 2), and the CommonMark reader's headings,
+   rendered (`commonmark.headings`, wherever they stand). A heading of level 1 or 3 and up is not read for this
+   (`# Handoff` titles the handoff station's own docs), a fenced example in an accepted fence is a sample unless the
+   CommonMark reader renders it as a heading, and a file that is not Markdown is never read for it. Every one is
+   named with its reason; a plan-shaped file never stops the run. The rule runs after (3)'s notes test, so a notes
+   file that also reads as a plan is named as the builder's notes.
 
 The build doc's file in a workspace holds the spec. A commit entry that is not a blob (a submodule) is
 not a file and is not copied. A local packet holds the workspace, `documents/spec.md`, the sheet as
@@ -47,9 +61,9 @@ import json
 import os
 import re
 
-from station_core import driver, fsio, validate
+from station_core import driver, fsio, templates, validate
 
-from . import fences, gitio, notes as notesmod, readings, sheet as sheetmod, spec as specmod
+from . import commonmark, fences, gitio, notes as notesmod, readings, sheet as sheetmod, spec as specmod
 
 SHEET = "REVIEW.md"
 RECORD_FOLDERS = (("docs", "reviews", "a prior verdict (docs/reviews/)"),
@@ -63,6 +77,14 @@ SHEET_WHY = "the repo's inspection sheet: the local lenses only (its checks are 
 LISTS = ("files.json", "withheld.json")
 SLOTS = ("[BUILD_DOC]", "[BASE_COMMIT]", "[BOUNDARY_FILES]")
 REGULAR = ("100644", "100755")
+PLANS = ("docs", "plans")                                   # A32: the plans folder, wherever it stands
+PLANS_WHY = ("another plan (docs/plans/): the build doc under review is the only plan a reviewer receives, so every "
+             "other file under docs/plans/ is left out (A32)")
+FORM_WHY = ("another plan: its line %d holds the level 2 heading %r, which the build-doc form reads as %s, so the file "
+            "reads as a build doc, and the build doc under review is the only plan a reviewer receives (A32)")
+SLICE_MARK = "a slice heading (## Slice <name> <dash> <short>)"
+PLAN_ATX = re.compile(r"^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
+PLAN_UNDERLINE = re.compile(r"^(=+|-+)[ \t]*$")
 
 
 class PacketError(RuntimeError):
@@ -123,6 +145,80 @@ def commit_notes(workspace, commit, doc):
                if kind == "blob" and notes_candidate(mode, path, doc)]
     contents = gitio.blobs(workspace, [oid for oid, path in entries]) if entries else {}
     return declared_notes([(path, contents[oid]) for oid, path in entries])
+
+
+def in_plans(path):
+    """True when two consecutive components of `path` read `docs` then `plans`, letter case aside (rule (5))."""
+    low = [part.lower() for part in path.split("/")]
+    return any((low[index], low[index + 1]) == PLANS for index in range(len(low) - 1))
+
+
+def plan_form(level, name):
+    """The build-doc form's mark a heading carries, or None (rule (5)): a level 2 heading that THE WITHHELD-NAME RULE
+    reads as a ledger section, `## Punch list` or `## Handoffs`; or a level 2 heading on the form's slice pattern."""
+    if level != 2:
+        return None
+    what = specmod.withheld_of(name)
+    if what in specmod.LEDGER:
+        return what
+    if templates.BUILD["slice"].match("## " + name):
+        return SLICE_MARK
+    return None
+
+
+def _line_headings(text):
+    """[(line, level, name)]: the line reading of rule (5). Every line outside an accepted fence (`fences.scan`), its
+    prefix (indent, list-item and block-quote markers) set aside: an ATX heading by its `#`s, its closing hashes
+    dropped; a Setext heading's text (the run of lines above an `===` or `---` underline) at its first line."""
+    raw = fences.split_lines(text)
+    fenced = fences.scan(raw).fenced
+    out, para = [], []
+    for number, line in enumerate(raw, 1):
+        if number in fenced:
+            para = []
+            continue
+        bare = fences.bare(line, number)
+        rest = bare[fences.PREFIX_ONLY.match(bare).end():]
+        atx = PLAN_ATX.match(rest)
+        if atx:
+            name = specmod.CLOSING.sub("", atx.group(2) or "")
+            out.append((number, len(atx.group(1)), " ".join(name.split())))
+            para = []
+            continue
+        under = PLAN_UNDERLINE.match(rest)
+        if under and para:
+            out.append((para[0][0], 1 if under.group(1)[0] == "=" else 2, " ".join(" ".join(t for n, t in para).split())))
+            para = []
+            continue
+        para = para + [(number, rest.strip())] if rest.strip() else []
+    return out
+
+
+def plan_heading(text):
+    """(line, heading name, the form's mark) for the first heading of a Markdown file that the build-doc form reads as
+    a build doc's, in either reading (rule (5): the line reading, `_line_headings`, and the CommonMark reader's
+    rendered headings), else None."""
+    found = [(line, name, plan_form(level, name)) for line, level, name in _line_headings(text)]
+    found += [(line, name, plan_form(level, name)) for level, name, line in commonmark.headings(commonmark.tokens(text))]
+    found = sorted(item for item in found if item[2] is not None)
+    return found[0] if found else None
+
+
+def other_plans(entries, doc):
+    """[(path, why it is withheld)] for [(mode, path, bytes)] in the order given: THE OTHER-PLANS RULE (rule (5)), never
+    the build doc under review itself."""
+    out = []
+    for mode, path, data in entries:
+        if path == doc:
+            continue
+        if in_plans(path):
+            out.append((path, PLANS_WHY))
+            continue
+        if mode in REGULAR and path.lower().endswith(".md"):
+            found = plan_heading(data.decode("utf-8", "replace"))
+            if found is not None:
+                out.append((path, FORM_WHY % found))
+    return out
 
 
 def staged_names(rels):
@@ -187,6 +283,11 @@ class Snapshot(object):
             self.left.append({"what": path, "why": why})
         declared = set(path for path, why in declared)
         kept = [entry for entry in kept if entry[2] not in declared]
+        plans = other_plans([(mode, path, contents[oid]) for mode, oid, path in kept], doc)    # A32, rule (5)
+        for path, why in plans:
+            self.left.append({"what": path, "why": why})
+        plans = set(path for path, why in plans)
+        kept = [entry for entry in kept if entry[2] not in plans]
         self.tree, self.modes = {}, {}
         for mode, oid, path in kept:
             self.tree[path] = self.spec.encode("utf-8") if path == doc else contents[oid]

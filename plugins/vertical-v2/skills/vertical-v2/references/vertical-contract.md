@@ -15,7 +15,8 @@ C1A7-2), fix round 8 applied A13 (two readings: the line rules and a vendored Co
 decision from the doc the same way), fix round 9 applied A14 and A15 (the label bug, three near misses, hidden labels),
 fix round 10 applied A16 (a character allowlist, folded label and heading-name tests, folded withheld names), and fix
 round 11 applied A17 (the fold drops the marks of accented letters, refusal (b) sets aside leading punctuation, wider
-withheld names, notes headings read with spaces). Where this
+withheld names, notes headings read with spaces), and the full review's fix round applied A32 (other plans left
+out: the build doc under review is the only plan a reviewer receives; section 5, the allow rule's (5)). Where this
 document and that contract differ, the contract is the authority and this document is the defect.
 `references/back-loop.md` is the discipline the three back cores share; this document is this core's own.
 
@@ -57,7 +58,8 @@ section 6 in this core's own words (ruling E15-6), and the lens briefs in `refer
 the local lenses review a copy of the reviewed commit with no history instead of a detached worktree (A2,
 Q1); every reviewer workspace and packet is cut by one function from the reviewed commit only, fresh for
 every summons, under one allow rule (A4; section 5), its spec has the ledger and the builder's working
-records removed, and it carries a hashed file list and a withheld list (ruling E15-8, widened by A3); the
+records removed, it carries no other plan (A32), and it carries a hashed file list and a withheld list (ruling
+E15-8, widened by A3); the
 local verdict is fixed by a receipt that `request --outside` holds the run to (A4; sections 3.5, 3.6); the cards come
 from the records component as well as the `Status:` lines (ruling E15-9); every reader summons is a
 trace line (ruling E15-7); the build doc is read twice, by this core's line rules and by a vendored CommonMark
@@ -327,7 +329,8 @@ holds: (1) it is not a plain relative path; (2) two consecutive components of it
 they stand; (3) any one of its components, a folder's name as well as the file's, lower-cased with `-`,
 `_`, `.` and spaces removed, holds `buildernotes` or `buildnotes` (the builder's notes, B4), or it is a `.md`
 regular file whose first heading declares it the builder's notes (C1A3-3, the slice review's rule, restated
-below); (4) it is `REVIEW.md` at the root. The build doc's file in a workspace holds the spec. A submodule is not a file
+below); (4) it is `REVIEW.md` at the root; (5) it is another plan (below, "Other plans", A32). The build doc's file in a
+workspace holds the spec. A submodule is not a file
 and is not copied. What each packet holds: a local lens, the workspace, `documents/spec.md`, the commit's
 `REVIEW.md` as `documents/REVIEW.md` when it is a regular file and the kit sheet, and its mandate; an
 outside row on `repo`, the workspace and the outside mandate; an outside row on `packet-only`, the
@@ -336,6 +339,28 @@ name: the first in path order keeps it and each later one takes it with `.2`, `.
 extension, never a name another path stages to, C1A-6) and the outside mandate. The inspection sheet is
 read from the commit's `REVIEW.md` alone (B1): an untracked or changed working-tree `REVIEW.md` never picks
 a lens, never reaches a mandate, and never reaches a packet.
+
+**Other plans** (A32, the full review's finding 1; THE OTHER-PLANS RULE, stated once here and once in code,
+`packet.other_plans`). Every packet and every summons copy, local and outside, preview, first send and retry, carries
+the build doc under review alone among the plans, as its spec. Left out and named in every `withheld.json` with its
+reason, never a stop: (a) every other path two consecutive components of which read `docs` then `plans`, letter case
+aside, wherever they stand (as (2) reads `docs/reviews`), a file of any kind; (b) every other `.md` regular file the
+build-doc form reads as a build doc: one holding a level 2 heading that the withheld-name rule ("The spec" below)
+reads as `## Punch list` or `## Handoffs`, or a level 2 heading on the form's slice pattern (`## Slice <name>`, the
+form's dash, `<short>`), found by either of two readings: a line reading of every line outside an accepted fence ("The
+fence rule" below), its indent and any list-item or block-quote markers set aside, ATX headings by their `#`s and
+Setext headings by their underline (`---` is level 2); and the CommonMark reader's headings, rendered ("Two readings"
+below), wherever they stand. A level 1 or level 3 and lower heading is not read for (b) (`# Handoff` titles the handoff
+station's own documents), a sample inside an accepted fence counts only when the CommonMark reader renders it as a
+heading, and a file that is not Markdown is never read for (b). The rule runs after (3)'s notes test, so a notes file
+that also reads as a plan is named as the builder's notes. Nothing else in a packet changes: the spec is cleaned as
+before, the mandates fill the same slots, and a withheld plan's path still appears in the boundary lines when the
+build changed it (names only, as for any withheld path). Measured on this repository's `docs/` (29 top-level files)
+and 19 plugin folders (305 Markdown files): every top-level `docs/*-build-plan.md` (12) reads as a plan; outside them,
+(b) also withholds the four copies of the E14 frame's `station-loop.md` (a `## 9. The hand-offs` heading), the
+`signoff-v2` README's `## Punch list (E13 ...)` section and three `recheck-v2` fixture case files that hold build docs,
+and (a) withholds the records component's 22 Markdown fixture plans under `fixtures/legacy/docs/plans/`; it errs toward
+withholding.
 
 **A notes file declared by its first heading** (C1A3-3; `scripts/vertical_core/notes.py`). The slice review
 withholds a Markdown file whose first heading says it is the builder's notes; so does this core, reading the

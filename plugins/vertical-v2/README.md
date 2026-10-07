@@ -9,13 +9,15 @@ installed, and both are renamed at cutover.
 ## Status
 
 Version 0.1.0, interface version 1. Built in E15 slice 1 (hand-back 1) on the E15 back frame
-(`skills/vertical-v2/references/back-loop.md`, `skills/vertical-v2/references/back-files.txt`). Counts measured on the
-E15 slice 3 tree, each suite run under `/usr/bin/python3` 3.9.6 and under `uv run` with `jsonschema==4.25.1`; the two
-runtimes give the same counts.
+(`skills/vertical-v2/references/back-loop.md`, `skills/vertical-v2/references/back-files.txt`). Since the full
+review's fix round (the E15 lane contract A32) every packet and summons copy carries the build doc under review alone
+among the plans: every other file under `docs/plans/`, and any other Markdown file the build-doc form reads as a build
+doc, is withheld and named. Counts measured on that round's tree, each suite run under `/usr/bin/python3` 3.9.6 and
+under `uv run` with `jsonschema==4.25.1`; the two runtimes give the same counts.
 
 | Suite | Tests (both runtimes) |
 |---|---|
-| `skills/vertical-v2/scripts/tests` | 647 |
+| `skills/vertical-v2/scripts/tests` | 654 |
 | `skills/vertical-v2/adapters/claude-code/tests` | 18 |
 | `skills/vertical-v2/adapters/codex/tests` | 19 |
 | `skills/vertical-v2/scripts/validate-examples.py` | 27 accepted, 39 rejected examples; 0 failures |

@@ -70,6 +70,10 @@ the numbered slice style (`## 2. Slice B`, `## Next: Slice B`, `## 2. Slice B: b
 Slice 1: the frame`), over no `Status:` line yet or a bold `**Status:** built`, stops at that heading by refusal (b);
 and a line that renders as a `Status:` label outside every slice (a bold label in the header, a code-span label under
 `## Summary`, a bold label under a numbered heading) is withheld from every packet and named, never a stop.
+Since A32 (the full review's finding 1) the guard also holds another plan beside the one under review: a second plan
+under `docs/plans/` (a `Status:` line, a prior verdict in its `## Punch list`, builder advocacy in its `## Handoffs`) and
+a file outside `docs/plans/` the build-doc form reads as a build doc (a `## Punch list` heading), each withheld from
+every packet and named; `test_other_plans.py` holds the rule's shapes and controls.
 `TheAstraProbes` drives the outside reviewer's probes through the real CLI.
 """
 import json
@@ -92,7 +96,10 @@ UNCOMMITTED_SHEET = ("# Review sheet\n\n## Passes\n- correctness: off\n\n## Seve
 MARKERS = ("PRIOR-VERDICT-MARKER", "RECORDS-LOG-MARKER", "NOTES-FILE-MARKER", "NOTES-FOLDER-MARKER",
            "ASSUMPTION-MARKER", "DEVIATION-MARKER", "DISCOVERED-MARKER", "HANDOFF-MARKER", "PUNCH-MARKER",
            "HEADER-STATUS-MARKER", "Status: signed off", "UNTRACKED-ADVOCACY", "TOKEN=not-a-real-value",
-           "IGNORED-MARKER", "PLANTED-IN-AN-EARLIER-COPY", "HEADING-NOTES-MARKER")
+           "IGNORED-MARKER", "PLANTED-IN-AN-EARLIER-COPY", "HEADING-NOTES-MARKER",
+           "OTHER-PLAN-STATUS", "OTHER-PLAN-VERDICT", "OTHER-PLAN-ADVOCACY", "OTHER-FORM-MARKER")
+OTHER_PLAN = "docs/plans/2026-08-01-previous.md"
+OTHER_FORM = "notes/old-plan.md"
 
 
 def class_doc():
@@ -154,6 +161,10 @@ def class_repo(tmp):
              "docs/builder-notes/session.md": "NOTES-FOLDER-MARKER skim slice B\n",
              "notes/session-log.md": "<!-- kept for the owner -->\n\n# Builder's notes\n\nHEADING-NOTES-MARKER skim B\n",
              "notes/plain.md": "# Bench notes\n\nNot the builder's notes.\n",
+             OTHER_PLAN: ("# Previous plan\n\n## Slice X\nStatus: signed off OTHER-PLAN-STATUS\n\n## Punch list\n"
+                          "OTHER-PLAN-VERDICT: accepted after review.\n\n## Handoffs\n"
+                          "OTHER-PLAN-ADVOCACY: implementation is correct.\n"),
+             OTHER_FORM: "# Old bench plan\n\n## Punch list\n- OTHER-FORM-MARKER accepted after review\n",
              ".gitattributes": "src/ver.txt export-subst\n",
              "src/ver.txt": "$Format:%B$\n"}
     for rel, text in sorted(files.items()):
@@ -180,7 +191,7 @@ OUTSIDE_PACKET_ONLY = sorted(["mandate.md", "documents/.gitattributes", "documen
 STATUS_LINES = [number for number, line in enumerate(class_doc().split("\n"), 1)
                 if line.startswith("Status:") and "stays" not in line]
 COMMON_WITHHELD = sorted(["docs/builder-notes.md", "docs/builder-notes/session.md", "docs/records/turnstile.jsonl",
-                          "docs/reviews/2026-09-24-signoff-turnstile-A.md", "notes/session-log.md"]
+                          "docs/reviews/2026-09-24-signoff-turnstile-A.md", "notes/session-log.md", OTHER_PLAN, OTHER_FORM]
                          + ["%s Status: line %d" % (DOC, n) for n in STATUS_LINES] + [
                           "%s ## Build assumptions" % DOC, "%s ## Deviations" % DOC, "%s ## Discovered" % DOC,
                           "%s ## Handoffs" % DOC, "%s ## Punch list" % DOC,
@@ -282,6 +293,21 @@ class TheClassGuard(unittest.TestCase):
         whys = dict((w["what"], w["why"]) for w in testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"])
         self.assertIn("first heading", whys["notes/session-log.md"])
         self.assertTrue(os.path.isfile(os.path.join(dest, "workspace", "notes", "plain.md")))
+
+    def test_another_plan_and_a_file_on_the_build_doc_form_are_withheld_and_named(self):
+        """A32: the build doc under review is the only plan a reviewer receives."""
+        for spec, name in (({"name": "local-spec", "side": "local", "lens": "spec", "profile": "repo"}, "l"),
+                           ({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"}, "o"),
+                           ({"name": "outside-deepseek", "side": "outside", "row": "deepseek", "profile": "packet-only"}, "p")):
+            built, dest = self.cut(spec, name)
+            whys = dict((w["what"], w["why"]) for w in testlib.load_json(os.path.join(dest, "withheld.json"))["withheld"])
+            self.assertIn("docs/plans/", whys[OTHER_PLAN], name)
+            self.assertIn("A32", whys[OTHER_PLAN], name)
+            self.assertIn("line 3", whys[OTHER_FORM], name)
+            self.assertIn("## Punch list", whys[OTHER_FORM], name)
+            self.assertIn("A32", whys[OTHER_FORM], name)
+            for rel in (OTHER_PLAN, OTHER_FORM):
+                self.assertFalse(any(m.get("path") == rel or m.get("source") == rel for m in built["meta"].values()), name)
 
     def recommit_doc(self, text):
         testlib.write_text(os.path.join(self.ws, DOC), text)
@@ -986,8 +1012,9 @@ class TheClassGuard(unittest.TestCase):
             self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
 
     def test_the_strict_shapes_in_another_markdown_file_never_stop_the_run(self):
-        """The rule reads the build doc; another `.md` file of the commit is copied as it is (its first heading is
-        still read for the builder's-notes rule, never a stop)."""
+        """The rule reads the build doc; another `.md` file of the commit is never stopped on (its first heading is
+        still read for the builder's-notes rule, never a stop). Since A32 this file, which holds the build-doc form's
+        slice headings and ledger headings, reads as another plan, so it is withheld and named instead of copied."""
         body = "# Bench guide\n\n" + "\n\n".join("\n".join(shape) for what, shape, first
                                                      in self.STRICT_SHAPES + self.HEADER_SHAPES + self.PLAIN_SHAPES
                                                      + self.PLAIN_HEADER_SHAPES) + "\n"
@@ -996,7 +1023,10 @@ class TheClassGuard(unittest.TestCase):
         testlib.git(self.ws, ["commit", "-q", "-m", "a guide"], when="2026-09-20T12:00:00-07:00")
         head = testlib.git(self.ws, ["rev-parse", "HEAD"]).strip()
         snap = packet.Snapshot(self.ws, head, DOC)
-        self.assertEqual(snap.tree["notes/bench-guide.md"], body.encode("utf-8"))
+        self.assertNotIn("notes/bench-guide.md", snap.tree)
+        whys = [item["why"] for item in snap.left if item["what"] == "notes/bench-guide.md"]
+        self.assertEqual(len(whys), 1, whys)
+        self.assertIn("A32", whys[0])
 
     def test_the_copies_hold_the_commits_bytes_with_no_attribute_applied(self):
         built, dest = self.cut({"name": "outside-gpt-astra", "side": "outside", "row": "gpt-astra", "profile": "repo"}, "o")

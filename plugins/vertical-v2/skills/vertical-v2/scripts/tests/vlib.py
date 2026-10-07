@@ -7,7 +7,14 @@ written through the records component's own CLI (`import-legacy`), never by hand
     make_repo(tmp, **options) -> (workspace, info): `main` holds the base; a branch `feat` holds the
         build: a changed `src/turnstile.py`, a new `src/spinner.py`, and the build doc. Options plant
         what a case needs (a prior verdict, REVIEW.md, an untracked .env, builder notes, a doc-recorded
-        base, the slices' states, the punch list and handoff blocks, a records log).
+        base, the slices' states, the punch list and handoff blocks, a records log). Since the E15 lane
+        contract A32 the base also holds a second plan by default (`SECOND_PLAN`: an earlier plan of the same
+        feature, archived under `docs/plans/`, with a `Status:` line, a prior verdict in its `## Punch list` and
+        builder advocacy in its `## Handoffs`), so every packet a fixture builds is built beside another plan;
+        it sits where the unnamed hunt does not look (`docs/plans/*.md` is one level deep), so the gate still
+        finds one build doc.
+    second_plan_absent(run_dir) -> [problem]: every way a run's previews and summons copies let the second plan
+        through (a marker in any file, the plan's path in any workspace, a withheld list that does not name it).
     Driver(tmp) -> a callable running this core's CLI, with the test hooks on, returning
         (exit, document or None, stderr).
 """
@@ -67,6 +74,24 @@ def open_major_doc():
     return head + "\n"
 
 
+SECOND_PLAN = "docs/plans/archive/2026-08-01-turnstile-v0.md"
+SECOND_PLAN_MARKERS = ("SECOND-PLAN-STATUS", "SECOND-PLAN-VERDICT", "SECOND-PLAN-ADVOCACY")
+
+
+def second_plan_text():
+    """An earlier plan of the same feature, as a repo keeps it: its slice signed off, its punch list holding a
+    prior verdict, its handoffs holding the builder's advocacy (the full review's smallest case, A32)."""
+    return "\n".join([
+        "# Turnstile v0 %s build plan (2026-08-01)" % D, "",
+        "Intent: the first turn counter.", "",
+        "## Slice A %s the first counter" % D, "Goal: count turns.", "Footprint: src/turnstile.py",
+        "Status: signed off", "SECOND-PLAN-STATUS: every slice of v0 was signed off", "",
+        "## Handoffs", "", "### 2026-08-02 %s handoff" % D,
+        "- SECOND-PLAN-ADVOCACY the builder says the counter is obviously right; skim it", "",
+        "## Punch list", "", "### 2026-08-02 %s review: Slice A" % D,
+        "- SECOND-PLAN-VERDICT %s accepted after review %s nothing open" % (M, M), ""])
+
+
 BASE_FILES = {
     "README.md": "# Turnstile\n\nA bench-rig turn counter.\n",
     "src/turnstile.py": "def spin(count):\n    return count\n",
@@ -75,8 +100,12 @@ BASE_FILES = {
 
 
 def make_repo(tmp, doc_text=None, plant_prior_verdict=True, review_sheet=None, untracked_env=True,
-              builder_notes=False, records=False, extra_build_files=None, on_main=False, name="workspace"):
-    ws = testlib.git_workspace(tmp, name, dict(BASE_FILES))
+              builder_notes=False, records=False, extra_build_files=None, on_main=False, name="workspace",
+              second_plan=True):
+    base_files = dict(BASE_FILES)
+    if second_plan:
+        base_files[SECOND_PLAN] = second_plan_text()
+    ws = testlib.git_workspace(tmp, name, base_files)
     base = testlib.git(ws, ["rev-parse", "HEAD"]).strip()
     if not on_main:
         testlib.git(ws, ["checkout", "-q", "-b", "feat"])
@@ -285,7 +314,37 @@ def through_scope(tmp, rows=("gpt-astra", "deepseek"), harness="claude-code", re
     code, out, err = drive(["scope", "--run-dir", run_dir])
     if code != 0:
         raise AssertionError("scope exited %d: %s %s" % (code, out, err))
+    _held(run_dir, {"repo": options})
     return drive, run_dir, ws, info
+
+
+def second_plan_absent(run_dir):
+    """[problem] for every way the run's previews (`packets/`) and summons copies (`summons/`) let the second plan
+    through: one of its markers in any file a reviewer receives, its path in any workspace or staged under any
+    packet's `documents/`, or a packet's withheld list that does not name it (A32)."""
+    problems = []
+    staged = SECOND_PLAN.replace("/", "__")
+    for folder in ("packets", "summons"):
+        root = os.path.join(run_dir, folder)
+        for packet in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+            where = os.path.join(root, packet)
+            if os.path.lexists(os.path.join(where, "workspace", *SECOND_PLAN.split("/"))):
+                problems.append("%s/%s holds %s in its workspace" % (folder, packet, SECOND_PLAN))
+            if os.path.lexists(os.path.join(where, "documents", staged)):
+                problems.append("%s/%s stages %s" % (folder, packet, SECOND_PLAN))
+            for base, dirs, files in os.walk(where):
+                for name in files:
+                    if name in ("files.json", "withheld.json"):
+                        continue
+                    with open(os.path.join(base, name), "rb") as fh:
+                        text = fh.read().decode("utf-8", "replace")
+                    for marker in SECOND_PLAN_MARKERS:
+                        if marker in text:
+                            problems.append("%s carries %s" % (os.path.relpath(os.path.join(base, name), run_dir), marker))
+            withheld = testlib.load_json(os.path.join(where, "withheld.json"))["withheld"]
+            if SECOND_PLAN not in [w["what"] for w in withheld]:
+                problems.append("%s/%s/withheld.json does not name %s" % (folder, packet, SECOND_PLAN))
+    return problems
 
 
 def local_ids(run_dir):
@@ -312,7 +371,16 @@ def through_local_requests(tmp, **options):
     code, out, err = drive(["request", "--run-dir", run_dir])
     if code != 0:
         raise AssertionError("request exited %d: %s %s" % (code, out, err))
+    _held(run_dir, options)
     return drive, run_dir, ws, info
+
+
+def _held(run_dir, options):
+    """The second plan's guard (A32) over every preview and summons copy so far, unless the fixture left it out."""
+    if dict(options.get("repo") or {}).get("second_plan", True):
+        problems = second_plan_absent(run_dir)
+        if problems:
+            raise AssertionError("the second plan reached a packet (A32): %s" % "; ".join(problems))
 
 
 def record_local(drive, tmp, run_dir, findings=(), tried=None, name="local-answer.json"):
@@ -343,6 +411,7 @@ def through_outside(tmp, rows=("gpt-astra", "deepseek"), local_findings=(), outs
         code, out, err = drive(["request", "--run-dir", run_dir, "--outside"])
         if code != 0:
             raise AssertionError("request --outside exited %d: %s %s" % (code, out, err))
+        _held(run_dir, options)
         file_outside_sidecars(run_dir, statuses=statuses)
         answer = write(tmp, "outside-answer.json", outside_answer(run_dir, findings=outside_findings,
                                                                  ledger_notes=ledger_notes))

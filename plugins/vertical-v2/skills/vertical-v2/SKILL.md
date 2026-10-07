@@ -112,7 +112,7 @@ uv run scripts/vertical.py scope --run-dir <run dir>
 
 It reads the reviewed commit (never the working tree), takes the inspection sheet from it, and cuts one
 preview packet per local lens and per outside row named through the one packet builder (no history, no
-untracked file, no review record, the build doc reduced to its spec), each with its file list (with
+untracked file, no review record, no other plan, the build doc reduced to its spec), each with its file list (with
 hashes) and its withheld list. State the depth line it prints before launching anything. The previews are
 for you to inspect; every request below gets its own fresh copy from the same builder. A build doc holding a
 fence line off the left margin, inside a list item or a block quote, or never closed, or any raw HTML line
@@ -196,7 +196,7 @@ request, no merge.
 1. The gate is real: every slice `signed off`, or report and stop; only the owner's words collapse it.
 2. The ask is real: every run, wait for the answer; nothing is remembered between runs.
 3. Secrets are physically absent: reviewers read copies of the reviewed commit's tracked files, never the live tree.
-4. Cold means cold: no prior verdict, no ledger, no chat, no other reviewer's output in any packet.
+4. Cold means cold: no prior verdict, no ledger, no other plan, no chat, no other reviewer's output in any packet.
 5. Nothing unverified lands in the verdict; `Refuted: N` is always reported.
 6. Survivors continue: a dropped outside reviewer is recorded with its status and reason.
 7. One write: the verdict doc, dated, never overwriting.
