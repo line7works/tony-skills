@@ -2,7 +2,7 @@
 
 A Claude Code plugin marketplace: the skills Tony Coon builds and runs on his
 own machines, published so anyone can install them.
-Twenty-two plugins covering twenty-two skills — a full build loop (blueprint → build → signoff → recheck, with
+Thirty-two plugins covering thirty-two skills — a full build loop (blueprint → build → signoff → recheck, with
 /ship to run a whole lap), project lifecycle bootstrapping, image generation,
 adversarial reviews, and a handful of workshop utilities — plus a `tools/`
 shelf of non-plugin tools and specs.
@@ -96,7 +96,7 @@ Code:
 ## Layout
 
 ```
-.claude-plugin/marketplace.json   the catalog — 29 entries
+.claude-plugin/marketplace.json   the catalog — 32 entries
 plugins/<name>/                   one plugin per skill (sun bundles sunrise+sunset)
   .claude-plugin/plugin.json
   skills/<skill>/SKILL.md         (+ assets/, nested or at plugin root)
