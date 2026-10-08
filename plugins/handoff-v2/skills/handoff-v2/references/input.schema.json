@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/handoff-v2/input.schema.json",
+  "title": "handoff-v2 input",
+  "description": "One run's input, closed at every level (references/back-loop.md section 3; references/handoff-contract.md section 4). The owner's words this core needs arrive in `station`, verbatim; the questions and the answers arrive later, in their own files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "input_version",
+    "run_id",
+    "workspace",
+    "run_dir",
+    "invocation"
+  ],
+  "properties": {
+    "input_version": {
+      "const": 1,
+      "description": "the bump path a closed schema needs"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "maxLength": 128,
+      "description": "this run's own id, single-use, one path segment"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of the git work tree the core reads"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of this run's directory, outside the workspace"
+    },
+    "report_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "the run writes nothing outside its run directory"
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
+      "description": "filled by the adapter's invocation.py, never typed",
+      "properties": {
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the harness this run is driven from"
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "the session this run happens in, as the adapter read it from the harness's own record"
+        }
+      }
+    },
+    "station": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "this core's own fields, each optional",
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "the block's date (YYYY-MM-DD); absent: today's UTC date from the run's clock"
+        },
+        "slice": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^\\S+$",
+          "description": "the slice just finished, as the invocation names it; absent: the last slice in document order whose card is not `not started`"
+        },
+        "feature": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "words"
+          ],
+          "description": "the owner's name for the doc's identity, taken only when none derives (CR-15)",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 80,
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            },
+            "words": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 600,
+              "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

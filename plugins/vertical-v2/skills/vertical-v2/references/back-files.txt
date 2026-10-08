@@ -1,0 +1,76 @@
+# The back frame: the files identical in vertical-v2, handoff-v2 and ship-v2 (ruling E15-3, the E15
+# lane contract section 7). One path per line, relative to the plugin root; {core} stands for the
+# core's own name. The tag after two spaces names where the bytes come from:
+#   [precon-v2]            copied byte for byte from precon-v2's canonical copy; no E14 file changes
+#   [vertical-v2]          new in E15 and shared by the three cores; vertical-v2 holds the canonical copy
+#   [precon-v2, seeded]    copied from precon-v2; carried once the core holds a seeded-case family
+#   [vertical-v2, seeded]  new in E15; carried once the core holds a seeded-case family
+# scripts/tests/test_back_equal.py compares every listed file with its source's copy (reported as
+# skipped, never as passed, where that copy is not beside this core) and with the other back cores.
+# test_setup_guard.py is a seeded row because it drives the seeded cases' observe.py and a family's
+# build.py with no skip when they are absent; until a core holds a family, the byte-identical setups it
+# guards are proved by vertical-v2's run. A builder that needs a copied file to change stops and asks:
+# the change would reach the four E14 cores, which E15-2 freezes. Nothing listed here is edited inside
+# one core.
+skills/{core}/references/back-files.txt  [vertical-v2]
+skills/{core}/references/back-loop.md  [vertical-v2]
+skills/{core}/references/trace.schema.json  [vertical-v2]
+skills/{core}/scripts/station_core/__init__.py  [precon-v2]
+skills/{core}/scripts/station_core/answer.py  [precon-v2]
+skills/{core}/scripts/station_core/driver.py  [precon-v2]
+skills/{core}/scripts/station_core/exits.py  [precon-v2]
+skills/{core}/scripts/station_core/fsio.py  [precon-v2]
+skills/{core}/scripts/station_core/hunt.py  [precon-v2]
+skills/{core}/scripts/station_core/inputs.py  [precon-v2]
+skills/{core}/scripts/station_core/ledger.py  [precon-v2]
+skills/{core}/scripts/station_core/readers_request.py  [precon-v2]
+skills/{core}/scripts/station_core/readers_roster.py  [precon-v2]
+skills/{core}/scripts/station_core/records_client.py  [precon-v2]
+skills/{core}/scripts/station_core/records_link.py  [precon-v2]
+skills/{core}/scripts/station_core/runlog.py  [precon-v2]
+skills/{core}/scripts/station_core/sibling.py  [precon-v2]
+skills/{core}/scripts/station_core/templates.py  [precon-v2]
+skills/{core}/scripts/station_core/validate.py  [precon-v2]
+skills/{core}/scripts/back_core/__init__.py  [vertical-v2]
+skills/{core}/scripts/back_core/backdriver.py  [vertical-v2]
+skills/{core}/scripts/back_core/trace.py  [vertical-v2]
+skills/{core}/scripts/validate-trace.py  [vertical-v2]
+skills/{core}/scripts/validate-result.py  [precon-v2]
+skills/{core}/scripts/tests/testlib.py  [precon-v2]
+skills/{core}/scripts/tests/test_setup_guard.py  [precon-v2, seeded]
+skills/{core}/scripts/tests/test_sibling.py  [precon-v2]
+skills/{core}/scripts/tests/test_readers_request.py  [precon-v2]
+skills/{core}/scripts/tests/test_readers_roster.py  [precon-v2]
+skills/{core}/scripts/tests/test_records_link.py  [precon-v2]
+skills/{core}/scripts/tests/test_ledger.py  [precon-v2]
+skills/{core}/scripts/tests/test_runlog.py  [precon-v2]
+skills/{core}/scripts/tests/test_back_equal.py  [vertical-v2]
+skills/{core}/scripts/tests/test_no_v1_import.py  [vertical-v2]
+skills/{core}/scripts/tests/test_trace.py  [vertical-v2]
+skills/{core}/scripts/tests/test_backdriver.py  [vertical-v2]
+skills/{core}/scripts/tests/test_seeded_cases.py  [precon-v2, seeded]
+skills/{core}/adapters/claude-code/_common.py  [precon-v2]
+skills/{core}/adapters/claude-code/tests/testlib.py  [precon-v2]
+skills/{core}/adapters/claude-code/tests/fixtures/README.md  [precon-v2]
+skills/{core}/adapters/claude-code/tests/fixtures/session-transcript.jsonl  [precon-v2]
+skills/{core}/adapters/codex/_common.py  [precon-v2]
+skills/{core}/adapters/codex/tests/testlib.py  [precon-v2]
+skills/{core}/adapters/codex/tests/fixtures/README.md  [precon-v2]
+skills/{core}/adapters/codex/tests/fixtures/real-rollout.jsonl  [precon-v2]
+setups/README.md  [vertical-v2]
+setups/verify-package.py  [precon-v2]
+setups/negative-cases.py  [precon-v2]
+setups/safe-python.sh  [precon-v2]
+setups/claude-code/install.sh  [precon-v2]
+setups/claude-code/verify-install.sh  [precon-v2]
+setups/claude-code/negative-tests.sh  [precon-v2]
+setups/claude-code/launch.sh  [precon-v2]
+setups/codex/install.sh  [precon-v2]
+setups/codex/verify-install.sh  [precon-v2]
+setups/codex/negative-tests.sh  [precon-v2]
+setups/codex/launch.sh  [precon-v2]
+setups/codex/prompts/lock-probe.md  [precon-v2]
+evals/seeded-cases/RUNNING.md  [precon-v2, seeded]
+evals/seeded-cases/observe.py  [precon-v2, seeded]
+evals/seeded-cases/_lib/caselib.py  [precon-v2, seeded]
+evals/seeded-cases/_lib/backlib.py  [vertical-v2, seeded]

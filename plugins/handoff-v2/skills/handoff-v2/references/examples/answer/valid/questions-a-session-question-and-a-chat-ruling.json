@@ -1,0 +1,15 @@
+{
+  "answer_version": 1,
+  "kind": "questions",
+  "questions": [
+    {
+      "source": "session-question",
+      "text": "does the spinner wrap at 99"
+    },
+    {
+      "source": "chat-ruling",
+      "text": "the owner said waive the double tap MAJOR"
+    }
+  ],
+  "run_id": "handoff-0001"
+}

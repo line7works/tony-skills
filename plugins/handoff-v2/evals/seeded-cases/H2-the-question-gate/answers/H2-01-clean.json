@@ -1,0 +1,37 @@
+{
+  "answers": [
+    {
+      "answered": true,
+      "effect": {
+        "kind": "note"
+      },
+      "question": "q1",
+      "words": "yes, at 99"
+    },
+    {
+      "answered": true,
+      "effect": {
+        "kind": "note"
+      },
+      "question": "q2",
+      "words": "noted, the encoder waits"
+    }
+  ],
+  "case": "H2-01-clean",
+  "perishables": [
+    "the bench clock drifts"
+  ],
+  "questions": [
+    {
+      "source": "session-question",
+      "text": "does the spinner wrap at 99"
+    },
+    {
+      "source": "chat-ruling",
+      "text": "the owner said the encoder waits for the next build"
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

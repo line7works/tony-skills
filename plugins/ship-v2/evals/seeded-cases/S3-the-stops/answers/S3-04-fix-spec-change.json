@@ -1,0 +1,35 @@
+{
+  "case": "S3-04-fix-spec-change",
+  "role": "executor",
+  "script": [
+    {
+      "do": "visit",
+      "result": "completed",
+      "station": "build-v2",
+      "writes": "card-built"
+    },
+    {
+      "do": "visit",
+      "result": "findings",
+      "station": "signoff-v2",
+      "writes": "raise-major"
+    },
+    {
+      "do": "fix",
+      "fixes": [],
+      "lap": 1,
+      "spec_change": [
+        {
+          "finding_at": "src/turnstile.py:2",
+          "why": "the slice asks one turn per tap and the fix needs two"
+        }
+      ],
+      "touch": {}
+    },
+    {
+      "do": "report"
+    }
+  ],
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "vertical-v2",
+  "description": "The whole-build adversarial review after every slice is signed off: the gate read from the records and the build doc, the base and source scope computed by script, cold packets with prior verdicts and author advocacy left out, the local fleet first, outside reviewers on the owner's word, every outside finding verified, one verdict doc. The portable vertical core of the skills v2 rebuild; the -v2 suffix stays while v1 vertical is installed and both are renamed at cutover.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

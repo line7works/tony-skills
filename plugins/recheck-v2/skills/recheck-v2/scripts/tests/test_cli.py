@@ -68,18 +68,23 @@ class CommandLine(unittest.TestCase):
     def test_exit_3_without_jsonschema(self):
         stub = testlib.stub_without_jsonschema(self.dir)
         env = dict(os.environ, PYTHONPATH=stub)
-        for args in (("skill-identity",), ("identity", os.path.join(self.cdir, "workspace")), ("start", os.path.join(self.cdir, "input.json"))):
+        for args in (("identity", os.path.join(self.cdir, "workspace")), ("start", os.path.join(self.cdir, "input.json"))):
             code, out, err = self.run_cli(*args, env=env)
             self.assertEqual(code, 3, args); self.assertEqual(out, ""); self.assertEqual(err.strip(), testlib.MISSING_DEPENDENCY)
-        env = dict(os.environ, RECHECK_TEST="1", RECHECK_TEST_NO_JSONSCHEMA="1")
+        # skill-identity answers without jsonschema (the E15 lane contract A27 (2); test_skill_identity_interface.py)
         code, out, err = self.run_cli("skill-identity", env=env)
+        self.assertEqual(code, 0, err); self.assertEqual(json.loads(out)["interface_version"], 1)
+        env = dict(os.environ, RECHECK_TEST="1", RECHECK_TEST_NO_JSONSCHEMA="1")
+        code, out, err = self.run_cli("identity", os.path.join(self.cdir, "workspace"), env=env)
         self.assertEqual(code, 3); self.assertEqual(err.strip(), testlib.MISSING_DEPENDENCY)
+        code, out, err = self.run_cli("skill-identity", env=env)
+        self.assertEqual(code, 0, err); json.loads(out)
         # the hook is inert without RECHECK_TEST=1
         env = dict(os.environ, RECHECK_TEST_NO_JSONSCHEMA="1")
         env.pop("RECHECK_TEST", None)
-        code, out, err = self.run_cli("skill-identity", env=env)
+        code, out, err = self.run_cli("identity", os.path.join(self.cdir, "workspace"), env=env)
         self.assertEqual(code, 0, err); json.loads(out)
-        code, out, err = self.run_cli("skill-identity", python="/usr/bin/python3")
+        code, out, err = self.run_cli("identity", os.path.join(self.cdir, "workspace"), python="/usr/bin/python3")
         if code != 3:
             self.skipTest("/usr/bin/python3 has jsonschema installed; the stub path above covers exit 3")
         self.assertEqual(err.strip(), testlib.MISSING_DEPENDENCY)
@@ -142,7 +147,8 @@ class CommandLine(unittest.TestCase):
         code, out, err = self.run_cli("skill-identity", cwd=self.other)
         self.assertEqual(code, 0, err)
         got = json.loads(out)
-        self.assertEqual(sorted(got), ["commit", "content_sha256", "name", "version"])
+        self.assertEqual(sorted(got), ["commit", "content_sha256", "interface_version", "name", "version"])
+        self.assertEqual(got["interface_version"], 1)
         self.assertEqual(got["name"], "recheck-v2")
         self.assertTrue(len(got["content_sha256"]) == 64)
         self.assertTrue(got["commit"] == "unversioned" or len(got["commit"]) == 40)

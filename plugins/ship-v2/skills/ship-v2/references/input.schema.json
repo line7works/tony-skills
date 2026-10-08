@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/ship-v2/input.schema.json",
+  "title": "ship-v2 input",
+  "description": "One ship-v2 run's input, closed at every level (references/back-loop.md section 3; references/ship-contract.md section 4). The shared fields, and `station`: what the invocation said, as data. The owner's words a run needs (MINOR fixes ordered, laps beyond the extra lap) arrive here verbatim, never remembered between runs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "input_version",
+    "run_id",
+    "workspace",
+    "run_dir",
+    "invocation"
+  ],
+  "properties": {
+    "input_version": {
+      "const": 1,
+      "description": "the bump path a closed schema needs"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "maxLength": 128,
+      "description": "this run's own id, single-use, one path segment"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of the git work tree the core reads"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of this run's directory, outside the workspace"
+    },
+    "report_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "the run writes nothing outside its run directory"
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
+      "description": "filled by the adapter's invocation.py, never typed",
+      "properties": {
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the harness this run is driven from"
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "the session this run happens in, as the adapter read it from the harness's own record"
+        }
+      }
+    },
+    "station": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ship-v2's own fields, each optional",
+      "properties": {
+        "slice": {
+          "type": "string",
+          "pattern": "^\\S+$",
+          "maxLength": 64,
+          "description": "the slice the invocation names (`/ship-v2 <slice> [doc]`); without it, select pauses and asks"
+        },
+        "minor_fixes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "words"
+          ],
+          "properties": {
+            "words": {
+              "type": "string",
+              "minLength": 1,
+              "description": "the owner's words ordering the slice's MINORs fixed, verbatim; at least one character that is not white space (slice 2 check 1's C2-7)",
+              "pattern": "\\S"
+            }
+          },
+          "description": "present only when the invocation ordered MINOR fixes (v1's step 3 and 4): they never gate and never trigger a recheck"
+        },
+        "extra_laps": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "count",
+            "words"
+          ],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9,
+              "description": "how many laps beyond the one extra lap the owner ordered"
+            },
+            "words": {
+              "type": "string",
+              "minLength": 1,
+              "description": "his words, verbatim; at least one character that is not white space (slice 2 check 1's C2-7)",
+              "pattern": "\\S"
+            }
+          },
+          "description": "present only when the owner ordered more laps in words (CR-22): the only way a third lap happens"
+        }
+      }
+    }
+  }
+}

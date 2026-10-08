@@ -1,0 +1,3 @@
+interface:
+  display_name: "Vertical v2"
+  short_description: "Review a whole signed-off build against its base, local first, outside on the owner's word"

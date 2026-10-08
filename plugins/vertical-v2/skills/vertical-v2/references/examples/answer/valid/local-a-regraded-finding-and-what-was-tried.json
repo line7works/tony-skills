@@ -1,0 +1,34 @@
+{
+  "answer_version": 1,
+  "findings": [
+    {
+      "claim": "reset returns zero, not the count",
+      "confidence": "high",
+      "found_by": [
+        "run-0001-local-correctness"
+      ],
+      "location": "src/turnstile.py:4",
+      "regrade_reason": "no data-loss path",
+      "reported_severity": "BLOCKER",
+      "scenario": "a reset mid-session reports 0 turns",
+      "severity": "MAJOR",
+      "stamp": "CONFIRMED"
+    }
+  ],
+  "kind": "local",
+  "method": "each lens ran the unit tests in its copy",
+  "run_id": "run-0001",
+  "tried": [
+    {
+      "how": "read",
+      "lens": "spec",
+      "what": "walked every acceptance criterion"
+    },
+    {
+      "how": "executed",
+      "lens": "seams",
+      "output": "Ran 6 tests in 0.01s\nOK",
+      "what": "ran the suite twice"
+    }
+  ]
+}

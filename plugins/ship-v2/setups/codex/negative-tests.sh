@@ -1,0 +1,19 @@
+#!/bin/sh
+# The negative installation tests of this core on Codex (E13 slice 3, 3.3).
+# Adapted from plugins/recheck-v2/setups/codex/negative-tests.sh and prepare-negative.py; the
+# cases live in ../negative-cases.py, shared with the Claude Code setup. Byte-identical in
+# build-v2 and signoff-v2 (E13) and in the four front cores (E14, where the plugin list is a case).
+#
+# Usage: negative-tests.sh <fresh output directory> [--live]
+# The free half always runs (codex plugin marketplace add / plugin add and the cache, no
+# session); --live adds the catalog sessions. Every case gets its own throwaway CODEX_HOME under
+# the output directory and no credential; the live ~/.codex is never touched.
+set -eu
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+[ $# -ge 1 ] || { echo "usage: negative-tests.sh <fresh output directory> [--live]" >&2; exit 2; }
+command -v codex >/dev/null 2>&1 || { echo "negative-tests.sh: codex is not on PATH" >&2; exit 3; }
+export PYTHONDONTWRITEBYTECODE=1
+OUT="$1"; shift
+# Through ../safe-python.sh: the interpreter starts with TMPDIR, TEMP and TMP cleared and their values reach
+# negative-cases.py's guard (E14 punch list, the outside confirm's F1).
+exec sh "$SCRIPT_DIR/../safe-python.sh" "$SCRIPT_DIR/../negative-cases.py" --harness codex --out "$OUT" "$@"

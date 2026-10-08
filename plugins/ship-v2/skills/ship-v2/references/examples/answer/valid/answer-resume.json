@@ -1,0 +1,10 @@
+{
+  "answer_version": 1,
+  "effect": {
+    "kind": "resume"
+  },
+  "kind": "answer",
+  "pause": 1,
+  "run_id": "run-0001",
+  "words": "yes, build on it"
+}

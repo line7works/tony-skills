@@ -1,0 +1,15 @@
+{
+  "ask": {
+    "rows": [
+      "gpt-astra"
+    ],
+    "words": "local plus GPT"
+  },
+  "case": "V5-03-row-not-named",
+  "request_rows": [
+    "gemini"
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

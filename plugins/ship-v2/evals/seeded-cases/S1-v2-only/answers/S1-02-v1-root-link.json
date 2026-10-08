@@ -1,0 +1,17 @@
+{
+  "case": "S1-02-v1-root-link",
+  "role": "executor",
+  "script": [
+    {
+      "do": "visit",
+      "result": "completed",
+      "station": "build-v2",
+      "writes": "card-built"
+    },
+    {
+      "do": "report"
+    }
+  ],
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/back-frame/trace.schema.json",
+  "title": "station trace line",
+  "description": "One line of a back core's trace.jsonl (ruling E15-7): one station visit, one reader summons, or one station refused before the visit. Closed at every level. A visit or summons carries the identity the station's own CLI returned, the route that resolved it, the run directory the visit used and its terminal status; a summons also names its call id and readers row; a refused line names the refusal's rules. Shared by vertical-v2, handoff-v2 and ship-v2 (references/back-files.txt).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["trace_version", "seq", "at", "kind", "caller", "expected", "identity", "route", "run_dir"],
+  "properties": {
+    "trace_version": {"const": 1, "description": "the version of this line shape"},
+    "seq": {"type": "integer", "minimum": 0, "description": "the 0-based line index; file order is time order"},
+    "at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$", "description": "UTC instant the line was written"},
+    "kind": {"enum": ["visit", "summons", "refused"], "description": "visit: a station run; summons: a reader call; refused: a station refused before the visit"},
+    "caller": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*-v2$", "description": "the back core that wrote the line"},
+    "expected": {"type": "string", "minLength": 1, "description": "the name the caller expected the station to carry (a -v2 station, or readers)"},
+    "identity": {
+      "description": "the identity the station's own CLI returned before the visit; null only on a refused line whose station could not be read",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "root", "interface_version", "commit", "content_sha256"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1},
+            "root": {"type": "string", "minLength": 1, "description": "the resolved root of the station's plugin"},
+            "interface_version": {"type": ["integer", "null"], "description": "the interface version the station's CLI reported"},
+            "commit": {"type": ["string", "null"]},
+            "content_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
+      ]
+    },
+    "route": {"enum": ["3a", "3b", "argument", null], "description": "how the station's root was resolved; null only on a refused line"},
+    "run_dir": {"type": "string", "minLength": 1, "description": "the run directory the visit used (or would have used)"},
+    "status": {"type": "string", "minLength": 1, "description": "the visit's or the call's terminal status, as the station or readers reported it"},
+    "call_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$", "description": "summons only: the readers call id"},
+    "row": {"type": "string", "minLength": 1, "description": "summons only: the readers row"},
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rules", "reason"],
+      "description": "refused only: why the station was refused before the visit",
+      "properties": {
+        "rules": {"type": "array", "minItems": 1, "uniqueItems": true,
+                  "items": {"enum": ["v1-name", "name-mismatch", "v1-root", "unknown-interface", "no-identity"]}},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"required": ["kind"], "properties": {"kind": {"const": "summons"}}},
+     "then": {"required": ["status", "call_id", "row"], "not": {"required": ["refusal"]},
+              "properties": {"identity": {"not": {"type": "null"}}, "route": {"enum": ["3a", "3b", "argument"]}}}},
+    {"if": {"required": ["kind"], "properties": {"kind": {"const": "visit"}}},
+     "then": {"required": ["status"], "allOf": [{"not": {"required": ["refusal"]}}, {"not": {"required": ["call_id"]}}, {"not": {"required": ["row"]}}],
+              "properties": {"identity": {"not": {"type": "null"}}, "route": {"enum": ["3a", "3b", "argument"]}}}},
+    {"if": {"required": ["kind"], "properties": {"kind": {"const": "refused"}}},
+     "then": {"required": ["refusal"], "allOf": [{"not": {"required": ["status"]}}, {"not": {"required": ["call_id"]}}, {"not": {"required": ["row"]}}]}}
+  ]
+}

@@ -1,0 +1,599 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/ship-v2/result.schema.json",
+  "title": "ship-v2 result",
+  "description": "One ship-v2 run's result, written by `report`, closed at every level (references/ship-contract.md section 9; references/back-loop.md section 4). Every run ends in a terminal status, every stop included, with its trace. `writes` lists ship-v2's own writes only: its run artifacts and the records log its grant events reached; the stations it visits write their own records and report them in their own results.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "interface_version",
+    "plugin_version",
+    "station",
+    "run_id",
+    "run_dir",
+    "status",
+    "stop_tag",
+    "reason",
+    "report_only",
+    "wrote_nothing",
+    "writes",
+    "invocation",
+    "trace",
+    "station_result"
+  ],
+  "properties": {
+    "interface_version": {
+      "const": 1
+    },
+    "plugin_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "station": {
+      "const": "ship-v2"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "stopped"
+      ],
+      "description": "completed: ALL CLEAR; stopped: any stop"
+    },
+    "stop_tag": {
+      "enum": [
+        "station-refused",
+        "records-refused",
+        "doc-unreadable",
+        "build-not-complete",
+        "signoff-stopped",
+        "recheck-stopped",
+        "spec-change",
+        "outside-footprint",
+        "extra-lap-exhausted",
+        "card-drift",
+        "outside-edit",
+        "visit-unfinished",
+        null
+      ],
+      "description": "the stop's one tag; null on a completion. The shared tags: `station-refused` (a station that is not the expected v2 sibling, refused before the visit, a `refused` trace line) and `records-refused` (the records component refused the owner's grant, its sentence carried). This core's own: `doc-unreadable` (a doc line the two readings refuse or take differently, CR-27), `build-not-complete` (stop condition 3), `signoff-stopped` and `recheck-stopped` (the station's own stop or refusal, its status carried; `recheck-stopped` also when `report` at `fixed` ends a run whose verdict mirror was not committed, the save step not taken, the E15 lane contract A31 (1)), `spec-change` (stop condition 2), `outside-footprint` (stop condition 4) and `extra-lap-exhausted` (stop condition 1). Since slice 2 fix round 1: `card-drift` (select: the slice's last card_set landed and its Status: line did not, the E15 lane contract A27 (1) with A24 (1)), `outside-edit` (pause: the doc moved between this run's grant append and its Status: write; the events reported as landed, nothing reverted) and `visit-unfinished` (report at visiting: the station ended without a result this run can take, slice 2 check 1's C2-6)"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_only": {
+      "type": "boolean"
+    },
+    "wrote_nothing": {
+      "type": "boolean"
+    },
+    "writes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind",
+          "sha256_before",
+          "sha256_after"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "run_artifact",
+              "records_log",
+              "build_doc"
+            ]
+          },
+          "sha256_before": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sha256_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      },
+      "description": "ship-v2's own writes: its run artifacts, the records log a grant reached, and the build doc's Status: line a grant's card move wrote (the E15 lane contract A27 (1))"
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
+      "properties": {
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caller": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "description": "as the input carried it"
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "lines",
+        "visits",
+        "refused"
+      ],
+      "description": "the run's trace.jsonl (ruling E15-7): its lines, the visits closed with a terminal status, and the stations refused before a visit",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "visits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "refused": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "station_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc",
+        "slice",
+        "hook",
+        "result_line",
+        "condition",
+        "build",
+        "signoff",
+        "recheck",
+        "card",
+        "laps",
+        "visits",
+        "fixed",
+        "remains",
+        "pauses",
+        "events",
+        "chat"
+      ],
+      "properties": {
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "slice": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hook": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "harness",
+            "armed",
+            "label",
+            "how",
+            "evidence"
+          ],
+          "properties": {
+            "harness": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "armed": {
+              "type": "boolean"
+            },
+            "label": {
+              "enum": [
+                "armed",
+                "NOT armed (run unwrapped)"
+              ]
+            },
+            "how": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "result_line": {
+          "type": "string",
+          "minLength": 1
+        },
+        "condition": {
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            null
+          ],
+          "description": "the stop condition by v1's number, or null"
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signoff": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recheck": {
+          "type": "string",
+          "minLength": 1
+        },
+        "card": {
+          "type": "string",
+          "minLength": 1
+        },
+        "laps": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "taken",
+            "allowed",
+            "owner_words",
+            "opened"
+          ],
+          "properties": {
+            "taken": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "allowed": {
+              "type": "integer",
+              "minimum": 2
+            },
+            "owner_words": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "opened": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "lap",
+                  "owner_words"
+                ],
+                "properties": {
+                  "lap": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "owner_words": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "visits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "station",
+              "status",
+              "word",
+              "run_dir",
+              "lap"
+            ],
+            "properties": {
+              "station": {
+                "enum": [
+                  "build-v2",
+                  "signoff-v2",
+                  "recheck-v2"
+                ]
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "word": {
+                "type": "string",
+                "minLength": 1
+              },
+              "run_dir": {
+                "type": "string",
+                "minLength": 1
+              },
+              "lap": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "fixed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "finding",
+              "location",
+              "line",
+              "id",
+              "lap"
+            ],
+            "properties": {
+              "finding": {
+                "type": "string",
+                "minLength": 1
+              },
+              "location": {
+                "type": "string",
+                "minLength": 1
+              },
+              "line": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "lap": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        "remains": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "finding",
+              "severity",
+              "needed",
+              "id",
+              "slice"
+            ],
+            "properties": {
+              "finding": {
+                "type": "string",
+                "minLength": 1
+              },
+              "severity": {
+                "type": "string",
+                "minLength": 1
+              },
+              "needed": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "slice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "pauses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pause",
+              "source",
+              "station",
+              "question",
+              "answered",
+              "words"
+            ],
+            "properties": {
+              "pause": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "source": {
+                "enum": [
+                  "station",
+                  "ship"
+                ]
+              },
+              "station": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1
+              },
+              "answered": {
+                "type": "boolean"
+              },
+              "words": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "finding",
+              "words",
+              "appended"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "waived",
+                  "reopened"
+                ]
+              },
+              "finding": {
+                "type": "string",
+                "minLength": 1
+              },
+              "words": {
+                "type": "string",
+                "minLength": 1
+              },
+              "appended": {
+                "type": "boolean"
+              },
+              "card": {
+                "description": "the card the grant moved by v1's rule (a card_set and its Status: line, A27 (1)), or null when it moved none",
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "slice",
+                      "line",
+                      "before",
+                      "after"
+                    ],
+                    "properties": {
+                      "slice": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "line": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "before": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "after": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "chat": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "station_result": {
+            "properties": {
+              "condition": {
+                "const": null
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

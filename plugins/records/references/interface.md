@@ -507,7 +507,7 @@ not one is exit 2 and no state is printed.
 | 4 | validation | an input, an event, or a log line failed validation, or `--doc` is not a ledger address (amendment A8: `docs/records/`, a verdict doc, or a path through a symbolic link). `error: "invalid"`. |
 | 5 | ambiguous identity | section 7's identity cases, and section 11.5's ambiguous legacy lines. `error: "ambiguous_identity"`. The response explains every case. |
 | 6 | stale source | a clear without a known matching workspace identity, or a fixed disposition over a raised finding not open, or a waiver over a raised finding neither open nor fixed (amendment A2). `error: "stale_source"`. |
-| 7 | conflict | a chain break, a head mismatch, a held lock, a log holding an event that names another document, or a legacy document whose imported record lines changed or moved. `error: "conflict"`. |
+| 7 | conflict | a chain break, a head mismatch, a held lock, a log holding an event that names another document, or a legacy document whose imported record lines changed, were dropped or were reordered, or that grew above its imported tail (`import-legacy`, "Section 11.7"). `error: "conflict"`. |
 
 0 to 4 are the A7a meanings; 5, 6 and 7 are this component's. Every non-zero exit that carries a
 body carries `ok: false`, `error`, and `reason`, and writes nothing.
@@ -1004,6 +1004,21 @@ already gave the log is what `previously_imported` answers for. Recognised lines
 `lines_classified`, the way previously imported lines are, and outside section 11.7's tail rule,
 because a line the log already records cannot be news arriving above the tail.
 
+**Section 11.7, the document has only grown, as the E15 lane contract A23 (1) widened it.** A
+second pass re-reads every RECORD line an earlier pass imported (a `card_observed` is not one; see
+"A `Status:` line is an observation" below). When each still reads its `origin.raw` on its
+`origin.line`, nothing moved. Otherwise the imported lines are matched IN ORDER by `origin.raw`
+among the lines the reader classifies as records now: each to the first record line below the
+previous match that reads it byte for byte. A line that only moved (its raw bytes unchanged and
+its order among the imported lines unchanged, as when a station writes a handoff block or a ledger
+line above the punch list) is the line that was imported, and is not imported again. A line that
+changed, was dropped or was reordered is exit 7 (`conflict`) naming the first such imported line
+(`line`, `imported_raw`, `current_raw`), and nothing is written. A new record above the imported
+tail, read where the imported lines stand now, is exit 7 too (`line`, `current_raw`,
+`last_imported_line`): file order is time order. Matched by bytes alone, a record line written
+above an imported line with the same bytes would take that line's place; a station that writes
+above the punch list writes no such line.
+
 Every imported clear keeps its effect and carries `{"known": false}`, so history is not changed;
 derived state marks the finding `cleared_unbound` (owner ruling O4). An imported event's `at` is
 the block heading's date, or the grant's date on a waiver or reopening line; `source` stays
@@ -1107,7 +1122,7 @@ Two further lines stop a document, both from amendment A9, and a resolutions ans
 | `spec` | the specification address. |
 | `spec.doc` | the ledger document. |
 | `spec.slice` | null at this level. |
-| `line` | on a conflict, the document line that changed, moved, or appeared above the imported tail; on a duplicate-answer refusal, the line answered twice. |
+| `line` | on a conflict, the imported line that changed, was dropped or was reordered (its number when it was imported), or the new record above the imported tail (section 11.7 above); on a duplicate-answer refusal, the line answered twice. |
 | `answers` | only on a duplicate-answer refusal: the answer already held for that line and the duplicate that arrived after it. |
 | `answers[]` | one of the two. |
 | `answers[].*` | one answer exactly as the resolutions file wrote it; `references/resolutions.schema.json` is its description, and this document does not repeat it. |
@@ -1275,7 +1290,8 @@ below.
   and never by line number, or when the log holds none for that slice. A slice whose `Status:`
   line is gone appends nothing, and a pass whose only news is one flipped card appends
   `import_started`, that `card_observed`, and `import_finished`. RECORD lines keep section 11.7
-  as written: one that changed, moved, or appeared above the imported tail is exit 7.
+  as `import-legacy` states it: one that changed, was dropped, was reordered, or appeared above
+  the imported tail is exit 7; one that only moved is accepted (E15 A23 (1)).
 - **A clear cannot be written against another revision.** That is what exit 6 is for, and the
   importer is the one writer exempt from it, only for a legacy record, only through
   `import-legacy`, and the exemption has no flag on this CLI.

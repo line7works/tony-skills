@@ -1,0 +1,40 @@
+{
+  "ask": {
+    "rows": [
+      "gpt-astra"
+    ],
+    "words": "local plus GPT"
+  },
+  "case": "V4-01-clean",
+  "outside": [
+    {
+      "findings": [
+        {
+          "claim": "reset returns zero, not the count",
+          "confidence": "high",
+          "found_by": [
+            "{RUN}-gpt-astra"
+          ],
+          "location": "src/turnstile.py:4",
+          "scenario": "a reset mid-session reports 0 turns",
+          "severity": "MAJOR",
+          "stamp": "CONFIRMED"
+        }
+      ]
+    }
+  ],
+  "readers": {
+    "gpt-astra": {
+      "model": "model-of-gpt-astra",
+      "raw": "- MAJOR src/turnstile.py:4 reset returns zero, not the count\n",
+      "status": "ok"
+    },
+    "local": {
+      "raw": "Findings: none. Tried: the suite and a double tap; both held.\n",
+      "status": "ok"
+    }
+  },
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

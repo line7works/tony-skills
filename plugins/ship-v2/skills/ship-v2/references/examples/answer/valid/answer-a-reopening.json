@@ -1,0 +1,11 @@
+{
+  "answer_version": 1,
+  "effect": {
+    "finding": "f1:0123456789abcdef0123",
+    "kind": "reopen"
+  },
+  "kind": "answer",
+  "pause": 1,
+  "run_id": "run-0001",
+  "words": "Reopen it, it came back"
+}

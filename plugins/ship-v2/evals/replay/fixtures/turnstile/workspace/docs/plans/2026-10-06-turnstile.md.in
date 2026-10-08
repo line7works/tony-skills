@@ -1,0 +1,26 @@
+# Turnstile {DASH} build plan (2026-10-06)
+
+Intent: a small turn counter for the bench rig, so one bench session reports its turns.
+Constraints: Python 3.9 standard library only; the check runs through `sh checks/unit.sh`.
+Out of scope: a web dashboard
+
+## Slice A {DASH} the counter
+Goal: the counter counts turns and resets to zero.
+Requirements:
+- R1: a turn adds one to the count
+- R2: a reset sets the count back to zero
+Acceptance criteria:
+- AC1: two turns read 2 (verify: a test in tests/test_turnstile.py)
+- AC2: a reset after two turns reads 0 (verify: a test in tests/test_turnstile.py)
+Footprint: `src/turnstile.py`, `tests/`
+Checks:
+- unit: sh checks/unit.sh
+Not in this slice: the encoder
+Depends on: nothing
+Status: not started
+
+## Build assumptions
+## Deviations
+## Discovered
+## Handoffs
+## Punch list

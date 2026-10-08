@@ -1,0 +1,9 @@
+{
+  "answer_version": 1,
+  "finding": null,
+  "kind": "question",
+  "run_id": "run-0001",
+  "source": "station",
+  "station": "build",
+  "text": "The slice carries an open BLOCKER. Build on it anyway? (yes/no)"
+}

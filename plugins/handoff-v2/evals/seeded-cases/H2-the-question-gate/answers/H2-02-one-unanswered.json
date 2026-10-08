@@ -1,0 +1,31 @@
+{
+  "answers": [
+    {
+      "answered": true,
+      "effect": {
+        "kind": "note"
+      },
+      "question": "q1",
+      "words": "yes, at 99"
+    },
+    {
+      "answered": false,
+      "question": "q2"
+    }
+  ],
+  "case": "H2-02-one-unanswered",
+  "perishables": [],
+  "questions": [
+    {
+      "source": "session-question",
+      "text": "does the spinner wrap at 99"
+    },
+    {
+      "source": "chat-ruling",
+      "text": "the owner said the encoder waits for the next build"
+    }
+  ],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,77 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-test-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "no build doc matches 'spinner' in the repo's tiers (docs/plans/, then docs/<feature>-build-plan.md, then an Intent: line, then a phase or slice doc): ask the owner which build doc this is, and run again with --doc",
+  "report_only": false,
+  "run_dir": "/work/example/run",
+  "run_id": "run",
+  "selection": {
+    "candidates": [],
+    "how": "phase-or-slice",
+    "name": "spinner",
+    "outcome": "none",
+    "searched": [
+      {
+        "found": [],
+        "given": true,
+        "globs": [
+          "docs/plans/*-{name}.md",
+          "docs/plans/{name}.md"
+        ],
+        "home": "repo-plans",
+        "root": "workspace",
+        "tier": 1
+      },
+      {
+        "found": [],
+        "given": true,
+        "globs": [
+          "docs/{name}-build-plan.md"
+        ],
+        "home": "repo-flat",
+        "root": "workspace",
+        "tier": 2
+      },
+      {
+        "found": [],
+        "given": true,
+        "globs": [
+          "docs/*phase*.md",
+          "docs/*slice*.md",
+          "plan/*.md"
+        ],
+        "home": "phase-or-slice",
+        "root": "workspace",
+        "tier": 3
+      }
+    ]
+  },
+  "station": "handoff-v2",
+  "station_result": {
+    "after": null,
+    "answers": null,
+    "block": null,
+    "cards_after": null,
+    "chat": null,
+    "checkpoint": null,
+    "doc": null,
+    "events": [],
+    "feature": null,
+    "identity_how": null,
+    "next_move": null,
+    "photograph": null,
+    "pointer": null,
+    "questions": null
+  },
+  "status": "stopped",
+  "stop_tag": "selection-none",
+  "trace": null,
+  "writes": [],
+  "wrote_nothing": true
+}

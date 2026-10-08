@@ -1,0 +1,19 @@
+{
+  "answers": [
+    {
+      "answered": true,
+      "effect": {
+        "kind": "next-slice",
+        "slice": "C"
+      },
+      "question": "r-next",
+      "words": "the encoder first"
+    }
+  ],
+  "case": "H4-04-owner-names-the-next-slice",
+  "perishables": [],
+  "questions": [],
+  "role": "executor",
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

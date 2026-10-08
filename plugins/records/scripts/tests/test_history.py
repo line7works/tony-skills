@@ -5,8 +5,9 @@
     2. a second import of an unchanged document appends nothing (`imported: 0`);
     3. a second import of a document that has only grown at its tail appends only the new
        records, proved by re-reading every previously imported line;
-    4. a document whose previously imported lines changed or moved is exit 7 (`conflict`)
-       naming the first such line, and nothing is written.
+    4. a document whose previously imported lines changed, were dropped or were reordered is
+       exit 7 (`conflict`) naming the first such line, and nothing is written; a line that only
+       moved is accepted (the E15 lane contract A23 (1), `test_moved_lines.py`).
 
 The two bullets that are not numbered rules are here too: `origin.recorded_commit` is what
 `git blame` gives for the line, never the source it verified, and an imported event's `at` is
@@ -225,13 +226,15 @@ class BulletFourAnImportedLineThatChangedOrMoved(HistoryCase):
         self.assertIn("changed or moved", body["reason"])
         self.assertIn("Nothing was written", body["reason"])
 
-    def test_a_line_that_moved_is_caught_too(self):
+    def test_a_line_that_only_moved_is_accepted(self):
+        """The E15 lane contract A23 (1): its bytes and its order among the imported lines unchanged."""
         self.run_import(HISTORY)
         before = self.log_bytes(HISTORY)
         text = self.read(HISTORY)
         self.write(HISTORY, "<!-- a line inserted above every record -->\n" + text)
         code, body, err = self.run_import(HISTORY)
-        self.assertEqual(code, 7, "%s %s" % (body, err))
+        self.assertEqual(code, 0, "%s %s" % (body, err))
+        self.assertEqual(body["imported"], 0)
         self.assertEqual(self.log_bytes(HISTORY), before)
 
     def test_a_deleted_record_is_caught_too(self):
@@ -253,8 +256,8 @@ class BulletFourAnImportedLineThatChangedOrMoved(HistoryCase):
 class BulletThreeAndAHalfARecordAboveTheImportedTail(HistoryCase):
     """Section 11.7's "only grown at its tail", with E12-4: file order is time order.
 
-    `check_only_grown` proves the lines an earlier pass read are still where they were and still
-    say what they said. It cannot see a record written into the gap ABOVE them, which would land
+    `match_moved` proves the lines an earlier pass read still say what they said, in their order
+    (E15 A23 (1): a line that only moved is still that line). It cannot see a record written into the gap ABOVE them, which would land
     in the log after records that sit below it in the file. That is the send-back's F1.
     """
 

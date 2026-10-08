@@ -1,0 +1,208 @@
+#!/bin/sh
+# One headless Codex session of this core's setup (E13 slice 3, brief 3.3 and 3.5).
+#
+# Adapted from plugins/recheck-v2/setups/codex/launch.sh. Byte-identical in the six v2 cores that
+# carry it (the four front cores, build-v2 and signoff-v2; E14 punch list), held equal by the front
+# cores' test_shared_equal.py and by build-v2's and signoff-v2's test_setup_guard.py, which compare
+# their copy with precon-v2's. The home guard below (E14 slice 3c): the out-dir, the condition home
+# and each --writable root may not be or sit under ~/.claude, ~/.codex or
+# ~/.local/share/skills-v2-*, as given or resolved, and neither may TMPDIR, TEMP or TMP (exit 2,
+# nothing created). The core is this script's own plugin folder.
+#
+# Usage: launch.sh <prompt-file> <workspace> <out-dir> [--writable DIR]...
+# The condition home is <CORE>_CODEX_HOME (BUILD_V2_CODEX_HOME or SIGNOFF_V2_CODEX_HOME), which
+# install.sh built. The session runs in its OWN per-launch home, <out-dir>/codex-home, derived
+# from the condition home by the session lock below (E13 pick P6, SB-14), so its rollout and its
+# children's rollouts are private to this launch. The lock's lines are byte-identical to those
+# in plugins/recheck-v2/setups/codex/launch.sh (a runner test holds the three copies equal).
+#
+# Unlike the pilot's current launch.sh, which runs behind the sealed bench's wall with Codex's
+# own sandbox off, this setup keeps Codex's own sandbox: workspace-write, approvals never,
+# TMPDIR and /tmp NOT writable (so <out-dir>, wherever it sits, is not writable by the tool
+# shells and the executor's rollout stays unwritable to them, E9-37), --add-dir only the
+# per-launch child home and each --writable root. Network stays off for every core: signoff-v2's
+# Codex adapter launches no nested reviewer (Astra's F6); it writes a readers request for the
+# claude-opus-cli row (E14 A3) that the executor dispatches through readers, outside this
+# launcher.
+#
+# Copies to <out-dir>: events.jsonl, final.md, stderr.log, command.json, rollout.jsonl (the
+# executor's own rollout, from <out-dir>/codex-home/sessions) and launch.json. Exit: the codex
+# process's own status; 2 usage; 3 a directory named does not exist.
+set -eu
+if [ "$#" -lt 3 ]; then echo 'usage: launch.sh prompt-file workspace out-dir [--writable dir]...' >&2; exit 2; fi
+PROMPT_FILE="$1"; WORKSPACE="$2"; OUT_DIR="$3"; shift 3
+WRITABLE=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --writable)
+      [ "$#" -ge 2 ] || { echo 'launch.sh: --writable takes a value' >&2; exit 2; }
+      WRITABLE="$WRITABLE $2"; shift 2 ;;
+    *) echo "launch.sh: unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+CORE=$(basename -- "$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)")
+VAR=$(printf '%s' "$CORE" | tr 'a-z-' 'A-Z_')_CODEX_HOME
+CONDITION=$(eval "printf '%s' \"\${$VAR:-}\"")
+# The home guard, before anything is created (E14 slice 3c fix 3-2): the installers' GUARD, byte for byte.
+# shellcheck disable=SC2086
+for checked in "$OUT_DIR" "$CONDITION" $WRITABLE; do
+  env -u TMPDIR -u TEMP -u TMP python3 - "$checked" "$HOME" "launch.sh" "${TMPDIR-}" "${TEMP-}" "${TMP-}" <<'GUARD' >/dev/null || exit 2
+import os, sys
+target, home, name = sys.argv[1:4]
+
+
+def refuse(why):
+    sys.stderr.write("%s: %s; nothing created\n" % (name, why))
+    sys.exit(2)
+
+
+def forms(path):
+    return (os.path.abspath(path), os.path.realpath(path))
+
+
+def rest(path, base):
+    """The part of `path` below `base` ("" when they are the same), or None; compared casefolded."""
+    p, b = path.casefold(), base.casefold().rstrip(os.sep)
+    return "" if p == b else (p[len(b) + 1:] if p.startswith(b + os.sep) else None)
+
+
+def same_below(path, base):
+    """The part of `path` below `base` by the file system's own identity ("" when they are the same
+    folder), or None. macOS names one folder by more than one path that neither abspath nor realpath
+    rewrites (/System/Volumes/Data/..., /.nofollow/..., /.resolve/N/...), so the nearest existing
+    ancestor of `path` is compared with `base` by device and inode."""
+    try:
+        want = os.stat(base)
+    except OSError:
+        return None
+    probe, tail = os.path.realpath(path), []
+    while True:
+        try:
+            if os.path.samestat(os.stat(probe), want):
+                return os.sep.join(reversed(tail)).casefold()
+        except OSError:
+            pass
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None
+        tail.append(os.path.basename(probe))
+        probe = parent
+
+
+def below_home(path, base):
+    """`same_below`, and for a `base` that does not exist yet the same answer read through HOME: `path` is
+    compared with HOME by device and inode and the part below HOME is read against `base`'s place below it."""
+    got = same_below(path, base)
+    if got is not None:
+        return got
+    below = same_below(path, home)
+    if below is None:
+        return None
+    rel = os.path.relpath(base, home).casefold()
+    return "" if below == rel else (below[len(rel) + 1:] if below.startswith(rel + os.sep) else None)
+
+
+if not os.path.isabs(home):
+    refuse("HOME is not an absolute path")
+share = os.path.join(home, ".local", "share")
+homes = (os.path.join(home, ".claude"), os.path.join(home, ".codex"),
+         os.path.join(share, "skills-v2-pilot"), os.path.join(share, "skills-v2-locked"))
+temps = [value for value in sys.argv[4:7] if value] or ["/tmp"]
+for given in [target] + temps:
+    for path in forms(given):
+        for forbidden in homes:
+            if (any(rest(path, base) is not None for base in forms(forbidden))
+                    or below_home(path, forbidden) is not None):
+                refuse("%s is under %s, which no setup may touch" % (given, forbidden))
+        for below in [rest(path, base) for base in forms(share)] + [below_home(path, share)]:
+            if below and below.split(os.sep)[0].startswith("skills-v2-"):
+                refuse("%s is under %s, which no setup may touch"
+                       % (given, os.path.join(share, below.split(os.sep)[0])))
+print(os.path.realpath(target))
+GUARD
+done
+[ -n "$CONDITION" ] && [ -d "$CONDITION" ] || { echo "launch.sh: $VAR must name the installed condition home" >&2; exit 3; }
+for checked in $WRITABLE; do
+  [ -d "$checked" ] || { echo "launch.sh: no writable directory: $checked" >&2; exit 3; }
+done
+export CODEX_HOME="$CONDITION"
+export PYTHONDONTWRITEBYTECODE=1
+export UV_CACHE_DIR="$CODEX_HOME/child/uv-cache"
+# shellcheck disable=SC2086
+python3 - "$PROMPT_FILE" "$WORKSPACE" "$OUT_DIR" "$CORE" $WRITABLE <<'PY'
+import json, os, shutil, subprocess, sys
+from pathlib import Path
+# >>> session lock (E13 pick P6, SB-14): one private Codex home per launch >>>
+def session_lock(condition, out):
+    """This launch's own CODEX_HOME, inside its own out-dir, derived from the condition home.
+
+    Measured on codex-cli 0.155.1 (E13 slice 3): a headless launch writes its rollout under
+    `$CODEX_HOME/sessions/YYYY/MM/DD/`, and no setting moves that folder but CODEX_HOME itself
+    (`CODEX_SQLITE_HOME` moves only the state databases; `--ephemeral` keeps no rollout, and the
+    adapters read theirs). Codex's own sandbox refuses no read, and Codex rewrites
+    `$CODEX_HOME/config.toml` on every launch. So the lock is a per-launch home: both config
+    files copied with the child-home pointer rewritten (UV_CACHE_DIR stays the condition's warmed
+    cache, which is not a session record), the credential LINKED to the condition's (one file,
+    never copied), the plugin and skill folders COPIED (E9-40 derives the sessions root from the
+    helper's resolved path, so a link would send the adapters back to the shared home), and a
+    private child home for the tool shells and the verifier children. Every session this launch
+    starts is then under <out>/codex-home; a sibling launch's folder is another trial's record,
+    which the bench's wall refuses and the runner's read-boundary preflight proves.
+    """
+    import re, shutil
+    mine = out / 'codex-home'
+    if mine.exists() or mine.is_symlink():
+        raise SystemExit('the per-launch home ' + str(mine) + ' already exists; a launch home is never reused')
+    mine.mkdir()
+    for folder in ('plugins', 'skills'):
+        if (condition / folder).is_dir():
+            shutil.copytree(str(condition / folder), str(mine / folder),
+                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    for path in (list((mine / 'plugins').rglob('*.json')) if (mine / 'plugins').is_dir() else []):
+        path.write_text(path.read_text().replace(str(condition), str(mine)))
+    child = mine / 'child'
+    child.mkdir()
+    pointer = re.compile(r'^CODEX_HOME = .*$', re.M)
+    for source, target in ((condition / 'config.toml', mine / 'config.toml'),
+                           (condition / 'child' / 'config.toml', child / 'config.toml')):
+        if source.is_file():
+            target.write_text(pointer.sub(lambda _m: 'CODEX_HOME = ' + json.dumps(str(child)),
+                                          source.read_text()))
+    credential = condition / 'auth.json'
+    if credential.exists() or credential.is_symlink():
+        for link in (mine / 'auth.json', child / 'auth.json'):
+            link.symlink_to(credential)
+    return mine
+# <<< session lock <<<
+prompt,ws,out=map(lambda x:Path(x).resolve(),sys.argv[1:4])
+core=sys.argv[4]
+writable=[Path(x).resolve() for x in sys.argv[5:]]
+spent=[n for n in ['events.jsonl','launch.json','final.md','rollout.jsonl','stderr.log','codex-home'] if (out/n).exists()]
+if spent:raise SystemExit('out-dir already holds '+', '.join(spent)+'; refusing to overwrite a live session')
+out.mkdir(parents=True,exist_ok=True)
+condition=Path(os.environ['CODEX_HOME']).resolve()
+home=session_lock(condition,out)
+env=dict(os.environ,CODEX_HOME=str(home))
+cmd=['codex','exec','--json','-o',str(out/'final.md'),'-C',str(ws),'--add-dir',str(home/'child')]
+for extra in writable:cmd+=['--add-dir',str(extra)]
+cmd+=['-s','workspace-write','-c','approval_policy=never',
+      '-c','sandbox_workspace_write.exclude_tmpdir_env_var=true',
+      '-c','sandbox_workspace_write.exclude_slash_tmp=true']
+cmd+=['-']
+(out/'command.json').write_text(json.dumps(cmd))
+with prompt.open('rb') as inp,(out/'events.jsonl').open('wb') as events,(out/'stderr.log').open('wb') as err:
+ code=subprocess.run(cmd,stdin=inp,stdout=events,stderr=err,env=env).returncode
+thread=None
+for line in (out/'events.jsonl').read_text().splitlines():
+ try:d=json.loads(line)
+ except ValueError:continue
+ if d.get('type')=='thread.started':thread=d.get('thread_id')
+records=list((home/'sessions').rglob('rollout-*'+thread+'.jsonl')) if thread else []
+if len(records)==1:shutil.copyfile(str(records[0]),str(out/'rollout.jsonl'))
+summary={'exit':code,'thread_id':thread,'rollout':str(out/'rollout.jsonl') if len(records)==1 else None,
+         'codex_home':str(home),'condition_home':str(condition),'session_lock':'per-launch home (E13 P6, SB-14)',
+         'codex_version':subprocess.run(['codex','--version'],stdout=subprocess.PIPE).stdout.decode().strip()}
+(out/'launch.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary))
+sys.exit(code)
+PY

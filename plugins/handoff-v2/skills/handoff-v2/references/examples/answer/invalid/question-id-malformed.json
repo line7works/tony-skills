@@ -1,0 +1,16 @@
+{
+  "answer_version": 1,
+  "answers": [
+    {
+      "answered": true,
+      "effect": {
+        "kind": "note"
+      },
+      "question": "Q1",
+      "words": "yes"
+    }
+  ],
+  "kind": "answers",
+  "perishables": [],
+  "run_id": "handoff-0001"
+}

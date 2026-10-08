@@ -1,0 +1,75 @@
+{
+  "case": "S2-02-third-lap-unworded",
+  "role": "executor",
+  "script": [
+    {
+      "do": "visit",
+      "result": "completed",
+      "station": "build-v2",
+      "writes": "card-built"
+    },
+    {
+      "do": "visit",
+      "result": "findings",
+      "station": "signoff-v2",
+      "writes": "raise-major"
+    },
+    {
+      "do": "fix",
+      "fixes": [
+        {
+          "finding_at": "src/turnstile.py:2",
+          "paths": [
+            "src/turnstile.py"
+          ],
+          "summary": "attempt 1 at the double tap"
+        }
+      ],
+      "lap": 1,
+      "spec_change": [],
+      "touch": {
+        "src/turnstile.py": "def spin(count):\n    return count + 2\n"
+      }
+    },
+    {
+      "do": "visit",
+      "result": "not_clear",
+      "station": "recheck-v2",
+      "writes": "not-fixed"
+    },
+    {
+      "do": "lap"
+    },
+    {
+      "do": "fix",
+      "fixes": [
+        {
+          "finding_at": "src/turnstile.py:2",
+          "paths": [
+            "src/turnstile.py"
+          ],
+          "summary": "attempt 2 at the double tap"
+        }
+      ],
+      "lap": 2,
+      "spec_change": [],
+      "touch": {
+        "src/turnstile.py": "def spin(count):\n    return count + 3\n"
+      }
+    },
+    {
+      "do": "visit",
+      "result": "not_clear",
+      "station": "recheck-v2",
+      "writes": "not-fixed"
+    },
+    {
+      "do": "lap"
+    },
+    {
+      "do": "report"
+    }
+  ],
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

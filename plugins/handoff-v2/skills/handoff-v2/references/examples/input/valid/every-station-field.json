@@ -1,0 +1,20 @@
+{
+  "input_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-example-1"
+  },
+  "run_dir": "/work/example/run",
+  "run_id": "handoff-0001",
+  "station": {
+    "date": "2026-10-04",
+    "feature": {
+      "name": "turnstile",
+      "words": "call it turnstile"
+    },
+    "slice": "A"
+  },
+  "workspace": "/work/example/workspace"
+}

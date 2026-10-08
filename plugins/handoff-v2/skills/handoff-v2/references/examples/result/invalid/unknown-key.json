@@ -1,0 +1,167 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-test-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the handoff is recorded; the thread is safe to clear",
+  "report_only": false,
+  "run_dir": "/work/example/run",
+  "run_id": "run",
+  "selection": {
+    "candidates": [
+      "docs/plans/2026-09-20-turnstile.md"
+    ],
+    "doc": "docs/plans/2026-09-20-turnstile.md",
+    "how": "file-name",
+    "name": "turnstile",
+    "outcome": "one",
+    "searched": [
+      {
+        "found": [
+          "/work/example/workspace/docs/plans/2026-09-20-turnstile.md"
+        ],
+        "given": true,
+        "globs": [
+          "docs/plans/*-{name}.md",
+          "docs/plans/{name}.md"
+        ],
+        "home": "repo-plans",
+        "root": "workspace",
+        "tier": 1
+      },
+      {
+        "found": [],
+        "given": true,
+        "globs": [
+          "docs/{name}-build-plan.md"
+        ],
+        "home": "repo-flat",
+        "root": "workspace",
+        "tier": 2
+      }
+    ]
+  },
+  "station": "handoff-v2",
+  "station_result": {
+    "after": "A",
+    "answers": {
+      "answered": 0,
+      "as_ledger_lines": 0,
+      "asked": 0,
+      "in_block": 0
+    },
+    "block": {
+      "heading": "### 2026-10-04 \u2014 handoff",
+      "line": 35,
+      "text": "### 2026-10-04 \u2014 handoff\n- Next: /ship-v2 B docs/plans/2026-09-20-turnstile.md \u00b7 by hand: /build-v2 B docs/plans/2026-09-20-turnstile.md\n- Cards: A signed off \u00b7 B not started\n- Open: none\n- Repo: feat \u00b7 2 ahead of main \u00b7 checkpointed f01378d214ee\n- Suite: none recorded\n- Perishable: the bench clock drifts\n"
+    },
+    "cards_after": [
+      {
+        "after": null,
+        "card": "signed off",
+        "moved": false,
+        "name": "A"
+      },
+      {
+        "after": null,
+        "card": "not started",
+        "moved": false,
+        "name": "B"
+      }
+    ],
+    "chat": "HANDOFF: turnstile \u2014 after A\nDoc: docs/plans/2026-09-20-turnstile.md  \u00b7  Next: /ship-v2 B docs/plans/2026-09-20-turnstile.md\nRepo: feat \u00b7 2 ahead of main \u00b7 checkpointed f01378d214ee  \u00b7  Suite: none recorded\nQuestions: 0 asked \u00b7 0 answered \u00b7 none  \u00b7  Perishables: 1 carried\n\nBottom line: Slice A is signed off and slice B is next. Clear the thread and type the kickoff line.\n\nThread is safe to clear.\n",
+    "checkpoint": {
+      "commit": "f01378d214eeedd6f6ead4d014d106affe8f5c95",
+      "parent": "de0971697b212a2680b482ecf07db54ef1432a57",
+      "subject": "handoff checkpoint (local): turnstile after A"
+    },
+    "doc": "docs/plans/2026-09-20-turnstile.md",
+    "events": [],
+    "feature": "turnstile",
+    "identity_how": "dated-plan",
+    "next_move": {
+      "alternative": "/build-v2 B docs/plans/2026-09-20-turnstile.md",
+      "doc": "docs/plans/2026-09-20-turnstile.md",
+      "how": "record",
+      "kickoff": "/ship-v2 B docs/plans/2026-09-20-turnstile.md",
+      "line": "/ship-v2 B docs/plans/2026-09-20-turnstile.md \u00b7 by hand: /build-v2 B docs/plans/2026-09-20-turnstile.md",
+      "shape": "clean-boundary",
+      "slice": "B"
+    },
+    "photograph": {
+      "cards": [
+        {
+          "card": "signed off",
+          "card_derived": null,
+          "name": "A",
+          "source": "status-line",
+          "status_line": "signed off"
+        },
+        {
+          "card": "not started",
+          "card_derived": null,
+          "name": "B",
+          "source": "status-line",
+          "status_line": "not started"
+        }
+      ],
+      "open": [],
+      "records": {
+        "events": 0,
+        "exists": false,
+        "head": "0000000000000000000000000000000000000000000000000000000000000000",
+        "log": "docs/records/docs__plans__2026-09-20-turnstile.events.jsonl"
+      },
+      "repo": {
+        "ahead": 1,
+        "base": "main",
+        "branch": "feat",
+        "checkpoint": null,
+        "dirt": [
+          "notes.txt"
+        ],
+        "head": "de0971697b212a2680b482ecf07db54ef1432a57",
+        "tree": "dirty"
+      },
+      "suite": {
+        "path": null,
+        "provenance": null,
+        "sha256": null,
+        "state": "none recorded"
+      }
+    },
+    "pointer": {
+      "block_date": "2026-10-04",
+      "doc": "docs/plans/2026-09-20-turnstile.md",
+      "feature": "turnstile",
+      "file_name": "handoff-turnstile.md",
+      "for_adapter": true,
+      "harness": "claude-code",
+      "index_line": "- [Build loop kickoff: turnstile](handoff-turnstile.md): the kickoff line for docs/plans/2026-09-20-turnstile.md, from the 2026-10-04 handoff block",
+      "kickoff": "/ship-v2 B docs/plans/2026-09-20-turnstile.md",
+      "note": null,
+      "pointer_version": 1,
+      "run_id": "run",
+      "text": "---\nname: handoff-turnstile\ndescription: the build loop's kickoff pointer for docs/plans/2026-09-20-turnstile.md\ntype: project\n---\n\nBuild doc: docs/plans/2026-09-20-turnstile.md\nHandoff block: 2026-10-04\nKickoff: /ship-v2 B docs/plans/2026-09-20-turnstile.md\n",
+      "written": false
+    },
+    "questions": []
+  },
+  "status": "completed",
+  "stop_tag": null,
+  "surprise": 1,
+  "trace": null,
+  "writes": [
+    {
+      "kind": "build_doc",
+      "path": "/work/example/workspace/docs/plans/2026-09-20-turnstile.md",
+      "sha256_after": "76dc5216f958ad33679d6754ba18b260e33309714ed048c85814caac74378aee",
+      "sha256_before": "714d22c8693e65969efa9ffaa224bf1ba05adc5f38c8e18eeb566ed98e6eba95"
+    }
+  ],
+  "wrote_nothing": false
+}

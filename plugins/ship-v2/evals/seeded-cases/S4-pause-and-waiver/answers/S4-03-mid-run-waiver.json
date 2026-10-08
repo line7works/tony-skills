@@ -1,0 +1,42 @@
+{
+  "case": "S4-03-mid-run-waiver",
+  "role": "executor",
+  "script": [
+    {
+      "do": "visit",
+      "result": "completed",
+      "station": "build-v2",
+      "writes": "card-built"
+    },
+    {
+      "do": "visit",
+      "result": "findings",
+      "station": "signoff-v2",
+      "writes": "raise-major"
+    },
+    {
+      "do": "waive",
+      "finding_at": "src/turnstile.py:2",
+      "question": "Only you can rule the MAJOR at src/turnstile.py:2: waive it or hold?",
+      "words": "Waive it, the double tap is a bench quirk"
+    },
+    {
+      "do": "fix",
+      "fixes": [],
+      "lap": 1,
+      "spec_change": [],
+      "touch": {}
+    },
+    {
+      "do": "visit",
+      "result": "all_clear",
+      "station": "recheck-v2",
+      "writes": null
+    },
+    {
+      "do": "report"
+    }
+  ],
+  "seeded_answer": 1,
+  "session_id": "seeded-session"
+}

@@ -1,0 +1,114 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-test-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "the handoff block of 2026-09-25 (line 35 when this run read the doc) changed after the photograph: an earlier block is never edited, so the owner settles the edit before this run writes; nothing was written",
+  "report_only": false,
+  "run_dir": "/work/example/run",
+  "run_id": "run",
+  "selection": {
+    "candidates": [
+      "docs/plans/2026-09-20-turnstile.md"
+    ],
+    "doc": "docs/plans/2026-09-20-turnstile.md",
+    "how": "file-name",
+    "name": "turnstile",
+    "outcome": "one",
+    "searched": [
+      {
+        "found": [
+          "/work/example/workspace/docs/plans/2026-09-20-turnstile.md"
+        ],
+        "given": true,
+        "globs": [
+          "docs/plans/*-{name}.md",
+          "docs/plans/{name}.md"
+        ],
+        "home": "repo-plans",
+        "root": "workspace",
+        "tier": 1
+      },
+      {
+        "found": [],
+        "given": true,
+        "globs": [
+          "docs/{name}-build-plan.md"
+        ],
+        "home": "repo-flat",
+        "root": "workspace",
+        "tier": 2
+      }
+    ]
+  },
+  "station": "handoff-v2",
+  "station_result": {
+    "after": "A",
+    "answers": {
+      "answered": 0,
+      "as_ledger_lines": 0,
+      "asked": 0,
+      "in_block": 0
+    },
+    "block": null,
+    "cards_after": null,
+    "chat": null,
+    "checkpoint": null,
+    "doc": "docs/plans/2026-09-20-turnstile.md",
+    "events": [],
+    "feature": "turnstile",
+    "identity_how": "dated-plan",
+    "next_move": null,
+    "photograph": {
+      "cards": [
+        {
+          "card": "signed off",
+          "card_derived": null,
+          "name": "A",
+          "source": "status-line",
+          "status_line": "signed off"
+        },
+        {
+          "card": "not started",
+          "card_derived": null,
+          "name": "B",
+          "source": "status-line",
+          "status_line": "not started"
+        }
+      ],
+      "open": [],
+      "records": {
+        "events": 0,
+        "exists": false,
+        "head": "0000000000000000000000000000000000000000000000000000000000000000",
+        "log": "docs/records/docs__plans__2026-09-20-turnstile.events.jsonl"
+      },
+      "repo": {
+        "ahead": 1,
+        "base": "main",
+        "branch": "feat",
+        "checkpoint": null,
+        "dirt": [],
+        "head": "9b2f3446521c8f764c8e49cf47570d3f8ca93355",
+        "tree": "clean"
+      },
+      "suite": {
+        "path": null,
+        "provenance": null,
+        "sha256": null,
+        "state": "none recorded"
+      }
+    },
+    "pointer": null,
+    "questions": []
+  },
+  "status": "stopped",
+  "stop_tag": "block-edited",
+  "trace": null,
+  "writes": [],
+  "wrote_nothing": true
+}

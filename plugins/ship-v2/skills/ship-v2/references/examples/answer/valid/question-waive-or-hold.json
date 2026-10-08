@@ -1,0 +1,9 @@
+{
+  "answer_version": 1,
+  "finding": "f1:0123456789abcdef0123",
+  "kind": "question",
+  "run_id": "run-0001",
+  "source": "ship",
+  "station": null,
+  "text": "Only you can rule the MAJOR at src/widget.py:2: waive it or hold?"
+}

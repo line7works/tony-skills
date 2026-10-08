@@ -1,0 +1,5 @@
+interface:
+  display_name: "Handoff v2"
+  short_description: "Prep the build doc and the next session's kickoff line from the record"
+policy:
+  allow_implicit_invocation: false

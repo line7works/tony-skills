@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://line7.works/schemas/vertical-v2/input.schema.json",
+  "title": "vertical-v2 input",
+  "description": "One vertical-v2 run's input, closed at every level (references/back-loop.md section 3; references/vertical-contract.md section 4). The owner's words a run carries (a collapsed gate, a committed-state-only order, a base he gave) arrive verbatim under station.owner_words; the ask's answer arrives later through `ask --answer`, never here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "input_version",
+    "run_id",
+    "workspace",
+    "run_dir",
+    "invocation"
+  ],
+  "properties": {
+    "input_version": {
+      "const": 1,
+      "description": "the bump path a closed schema needs"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "maxLength": 128,
+      "description": "this run's own id, single-use, one path segment"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of the git work tree the core reads"
+    },
+    "run_dir": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/",
+      "description": "absolute path of this run's directory, outside the workspace"
+    },
+    "report_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "the run writes nothing outside its run directory"
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness",
+        "caller",
+        "mode"
+      ],
+      "description": "filled by the adapter's invocation.py, never typed",
+      "properties": {
+        "harness": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the harness this run is driven from"
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "enum": [
+            "direct",
+            "station"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "the session this run happens in, as the adapter read it from the harness's own record"
+        }
+      }
+    },
+    "station": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "vertical-v2's own fields",
+      "properties": {
+        "depth": {
+          "enum": [
+            "LEAN",
+            "DEEP"
+          ],
+          "default": "LEAN",
+          "description": "the depth the executor states before launch: LEAN (spec, correctness, seams) or DEEP (adds security and tests)"
+        },
+        "session_model": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+          "description": "the model id this session's system prompt says it is powered by; rides on the local claude-session requests"
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "the verdict doc's date; absent, today's UTC date"
+        },
+        "owner_words": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "the owner's own words in this run, verbatim; the one source of a collapse, an order or a base",
+          "properties": {
+            "collapse_gate": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S",
+              "description": "the owner's invocation words that collapse the gate (a slice short of signed off proceeds); recorded in the Method line"
+            },
+            "committed_only": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S",
+              "description": "the owner's order to review committed state though dirt touches the boundary or the build doc; recorded in the Method line"
+            },
+            "base": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "commit",
+                "words"
+              ],
+              "description": "the owner's answer to the base question, used only when neither the doc nor the merge base gives one",
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{7,40}$"
+                },
+                "words": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S",
+                  "description": "the owner's words, verbatim"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

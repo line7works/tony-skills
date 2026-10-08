@@ -1,0 +1,83 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-0001"
+  },
+  "next": "done",
+  "plugin_version": "0.1.0",
+  "reason": "ALL CLEAR: the loop ended by its own rules",
+  "report_only": false,
+  "run_dir": "/tmp/ship-v2/run-0001",
+  "run_id": "run-0001",
+  "station": "ship-v2",
+  "station_result": {
+    "build": "COMPLETE",
+    "card": "signed off",
+    "chat": "SHIP: A \u2014 docs/plans/2026-09-20-widget.md\nHook: armed\nResult: ALL CLEAR\nBuild: COMPLETE  \u00b7  Signoff: signed off  \u00b7  Recheck: not run  \u00b7  Card: signed off  \u00b7  Laps: 0\n\nBottom line: Slice A went through the loop. Read the block for what is next.\n",
+    "condition": null,
+    "doc": "docs/plans/2026-09-20-widget.md",
+    "events": [],
+    "fixed": [],
+    "hook": {
+      "armed": true,
+      "evidence": "session.jsonl line 41 (a system record)",
+      "harness": "claude-code",
+      "how": "a record of this session's own transcript shows the Stop hook's confirmation",
+      "label": "armed"
+    },
+    "laps": {
+      "allowed": 2,
+      "opened": [],
+      "owner_words": null,
+      "taken": 0
+    },
+    "pauses": [],
+    "recheck": "not run",
+    "remains": [],
+    "result_line": "ALL CLEAR",
+    "signoff": "signed off",
+    "slice": "A",
+    "visits": [
+      {
+        "lap": 0,
+        "run_dir": "/tmp/ship-v2/run-0001/visits/0-build-v2",
+        "station": "build-v2",
+        "status": "completed",
+        "word": "COMPLETE"
+      },
+      {
+        "lap": 0,
+        "run_dir": "/tmp/ship-v2/run-0001/visits/2-signoff-v2",
+        "station": "signoff-v2",
+        "status": "completed",
+        "word": "signed off"
+      }
+    ]
+  },
+  "status": "completed",
+  "stop_tag": null,
+  "trace": {
+    "lines": 4,
+    "path": "/tmp/ship-v2/run-0001/trace.jsonl",
+    "refused": 0,
+    "visits": 2
+  },
+  "writes": [
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/ship-v2/run-0001/ship.json",
+      "sha256_after": "3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+      "sha256_before": null
+    },
+    {
+      "kind": "run_artifact",
+      "path": "/tmp/ship-v2/run-0001/chat.md",
+      "sha256_after": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "sha256_before": null
+    }
+  ],
+  "wrote_nothing": true
+}

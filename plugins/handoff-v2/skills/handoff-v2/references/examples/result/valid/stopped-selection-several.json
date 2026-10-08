@@ -1,0 +1,71 @@
+{
+  "interface_version": 1,
+  "invocation": {
+    "caller": "user",
+    "harness": "claude-code",
+    "mode": "direct",
+    "session_id": "session-test-1"
+  },
+  "plugin_version": "0.1.0",
+  "reason": "several build docs match (docs/plans/2026-09-20-turnstile.md, docs/plans/2026-09-21-turnstile.md): list them for the owner and run again with --doc naming his pick; none is picked here",
+  "report_only": false,
+  "run_dir": "/work/example/run",
+  "run_id": "run",
+  "selection": {
+    "candidates": [
+      "docs/plans/2026-09-20-turnstile.md",
+      "docs/plans/2026-09-21-turnstile.md"
+    ],
+    "how": "file-name",
+    "name": "turnstile",
+    "outcome": "several",
+    "searched": [
+      {
+        "found": [
+          "/work/example/workspace/docs/plans/2026-09-20-turnstile.md",
+          "/work/example/workspace/docs/plans/2026-09-21-turnstile.md"
+        ],
+        "given": true,
+        "globs": [
+          "docs/plans/*-{name}.md",
+          "docs/plans/{name}.md"
+        ],
+        "home": "repo-plans",
+        "root": "workspace",
+        "tier": 1
+      },
+      {
+        "found": [],
+        "given": true,
+        "globs": [
+          "docs/{name}-build-plan.md"
+        ],
+        "home": "repo-flat",
+        "root": "workspace",
+        "tier": 2
+      }
+    ]
+  },
+  "station": "handoff-v2",
+  "station_result": {
+    "after": null,
+    "answers": null,
+    "block": null,
+    "cards_after": null,
+    "chat": null,
+    "checkpoint": null,
+    "doc": null,
+    "events": [],
+    "feature": null,
+    "identity_how": null,
+    "next_move": null,
+    "photograph": null,
+    "pointer": null,
+    "questions": null
+  },
+  "status": "stopped",
+  "stop_tag": "selection-several",
+  "trace": null,
+  "writes": [],
+  "wrote_nothing": true
+}

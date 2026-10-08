@@ -1,0 +1,19 @@
+{
+  "answer_version": 1,
+  "findings": [
+    {
+      "claim": "reset returns zero, not the count",
+      "confidence": "high",
+      "found_by": [
+        "run-0001-gpt-astra"
+      ],
+      "location": "src/turnstile.py",
+      "scenario": "a reset mid-session reports 0 turns",
+      "severity": "MAJOR",
+      "stamp": "CONFIRMED"
+    }
+  ],
+  "kind": "outside",
+  "ledger_notes": "one repeat: the skipped turn the slice A review caught, fixed and held",
+  "run_id": "run-0001"
+}

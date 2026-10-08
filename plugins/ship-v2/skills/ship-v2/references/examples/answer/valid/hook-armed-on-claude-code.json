@@ -1,0 +1,8 @@
+{
+  "answer_version": 1,
+  "armed": true,
+  "evidence": "session.jsonl line 41 (a system record)",
+  "harness": "claude-code",
+  "how": "a record of this session's own transcript shows the Stop hook's confirmation",
+  "kind": "hook"
+}
