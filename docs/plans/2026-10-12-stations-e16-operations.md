@@ -239,7 +239,8 @@ Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and rul
   named; nothing is deleted. How likely it is was not measured.
 - **RK5, a program of the shortcut's name installed in the instant it is added** (accepted by the
   owner, A6, and no wider than this). The tool checks that no program has the shortcut's name,
-  then adds the line. A program of that exact name installed between the check and the add is
+  then adds the line, in sunrise and when a restore puts it back. A program of that exact name
+  installed between the check and the add is
   hidden by the shortcut until the line is removed. It shows the first time the name is typed;
   nothing is lost. Not measured.
 - **The run directory** (accepted by the owner, A6). Every proof the tool makes rests on nothing
