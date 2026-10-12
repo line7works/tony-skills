@@ -592,42 +592,64 @@ offer, with the reason in the preview.
 ### 3.5 Order
 
 **ORD-1. Outputs, needs, and what meets them.** Every operation provides one named output. An
-operation's needs are written against output names, each at one level, and it runs only when every
-need is met.
+operation's needs are written against output names, each at one of four levels (state, made, passed,
+answered), and it runs only when every need is met. There are thirteen final statuses, the rows of
+this table. Each cell says what a provider that ended in that status is to a need at that level:
+`meets`; `stop`; `his` (the owner's own answer or his own "leave it" is why); or `branch` (a branch
+of the plan that was not taken).
 
-| Level | Met when the output's provider is |
-|---|---|
-| state | `done`, `already so` (at planning or in the run), `not proven`, `adopted`, `done by owner, read back`; and `done by owner, on his word` only where the need is marked as accepting his word |
-| made | `done` |
-| passed | a check whose latest attempt is `passed`, as OP-8 limits it; or `unavailable`, only where the need is marked as accepting it |
-| answered | `answered` with a value the need names |
+| The provider's final status | state | made | passed | answered |
+|---|---|---|---|---|
+| `done` | meets | meets | stop | stop |
+| `already so`, at planning or in the run | meets | stop | stop | stop |
+| `not proven` | meets | stop | stop | stop |
+| `adopted` | meets | stop | stop | stop |
+| `passed` | stop | stop | meets, as OP-8 limits it | stop |
+| `unavailable` | stop | stop | meets where the need is marked as accepting it; otherwise stop | stop |
+| `refused` | branch | branch | branch | branch |
+| `done by owner, read back` | meets | stop | stop | stop |
+| `done by owner, on his word` | meets where the need is marked as accepting his word; otherwise stop | stop | stop | stop |
+| `answered` | stop | stop | stop | meets with a value the need names; his with any other value |
+| `left` | his | his | his | his |
+| `not needed` | branch | branch | branch | branch |
+| `held` | his | his | his | his |
 
-The final statuses are: `done`, `already so`, `not proven`, `adopted`, `passed`, `unavailable`,
-`refused`, `done by owner, read back`, `done by owner, on his word`, `answered`, `left`,
-`not needed`, `held`. A need can no longer be met when every operation that provides its output is
-final and none of them meets the need at its level, whatever those final statuses are. The operation
-that has such a need is then recorded `held`, with the need and the provider's status as its reason,
-and that is true in turn of what needs it.
+A need can no longer be met when every operation that provides its output is final and none of them
+meets it. What follows is then decided by those providers' cells, in this order. If any of them is
+`stop`, the run stops (RUN-12): the form gives the reason kind "need unmet" and names the operation
+that has the need, the need, and the provider's status; that operation gets no status, so the run
+stays open and a re-plan can settle it (RUN-11, ORD-2). This is the owner's ruling for `not proven`
+(A11) and the governing rule's for every other `stop` cell (GOV-1). Otherwise, if any of them is
+`his`, the operation that has the need is recorded `held`, with the need and the provider's status
+as its reason, and the run goes on (the owner's rulings, A6 at O14, and A11). `held` is recorded in
+this case and in no other, which is why a `held` provider is itself `his`. Otherwise every one of
+them is `branch`, and the run stops in the same way as for a `stop` cell (GOV-1).
 
-Test on fakes: a table-driven test over every pair of final status and level asserts run, or `held`
-with the reason, as this rule says; among its cases: a made-level need on a provider that ended
-`not proven`, an answered-level need on an answer of another value, and a passed-level need that
-does not accept `unavailable`; in each the dependents are `held`, nothing is left unable to run and
-not final, and the run ends `ended with exceptions`.
+Test on fakes: a table-driven test over all fifty-two pairs of final status and level, each with one
+provider, asserts its cell: for `meets`, the operation runs; for `stop` and for `branch`, the run
+ends `stopped` with the reason kind "need unmet" and the operation, the need and the status named,
+no `held` record is written, the run is open, and no last record is published; for `his`, the
+operation is `held` with its reason, the rest of the run goes on, and the run ends
+`ended with exceptions`. With two providers: `not proven` beside `left` stops; `refused` beside
+`left` is `held`; `refused` beside `not needed` stops. After such a stop, a re-plan that settles the
+need as ORD-2 says, and has its own go, lets the run go on.
 
 **ORD-2. A need on an output that nothing provides.** When a manifest is built, a need that names an
 output no operation in it provides is settled then, by the treatment the row declares for that need:
 `then not applicable` (the needing operation is left out as well, and so on down the line) or
 `then not needed` (the need is dropped). A need at the state level is instead met outright where the
 look read that state as already holding. A need at the made level on an output that only an adopt
-provides counts as unprovided. A need with no declared treatment, a need left pointing at nothing,
-or a circle of needs, fails the build and names the row. Nothing about the shape of the plan is
-settled after the go.
+provides counts as unprovided. So does, at a re-plan, a need that the journal shows can no longer be
+met (ORD-1): it is settled by the same declared treatment, and the new preview names the operation
+left out or the need dropped, and the status that caused it. A need with no declared treatment, a
+need left pointing at nothing, or a circle of needs, fails the build and names the row. Nothing
+about the shape of the plan is settled after the go.
 
 Test on fakes: over a lane's rows, every combination of project type and flag that the lane's brief
 lists as one the owner may ask for builds a manifest in which no need points at nothing; a planted
 row with a need that has no treatment, and a planted circle of needs, each fail at build with the
-row named; none of these fails during a run.
+row named; none of these fails during a run; and a re-plan after a "need unmet" stop builds a
+manifest in which that need is settled by its row's treatment and the preview says so.
 
 **ORD-3. Conditions and alternatives.** An operation may carry one condition, of one of three kinds.
 On a planning fact: settled when the manifest is built, and the operation is `in` or
