@@ -130,9 +130,20 @@ configuration changes what is reported.
 
 ## 6. Scope adherence
 
-The `contract` phase writes the slice's requirements and its named paths — the `Footprint:` list
-— to `<run_dir>/contract.json` BEFORE any edit is recorded, so the scope is fixed before the
-comparison rather than fitted to it afterwards.
+The `contract` phase writes the slice's requirements and its named paths (its `Footprint:`, in
+either of the two forms below) to `<run_dir>/contract.json` BEFORE any edit is recorded, so the
+scope is fixed before the comparison rather than fitted to it afterwards.
+
+**The footprint's two forms** (the E15 lane contract A27 (3) and A34 (2)). The one-line form, which
+the build-doc form and every real plan write: a line at column 0 that reads `Footprint:` with a
+value after the colon, `Footprint: <path>, <path>`. The value is split as ship-v2 splits it: commas
+outside backtick spans separate the entries; an entry holding backtick spans names the spans'
+contents; any other entry names its text, trimmed; an empty entry names nothing. The bulleted form:
+a bare `Footprint:` label, then `- ` or `* ` lines, one path each. A slice that holds both is read
+by its one-line form, wherever the two stand, and its bulleted list is then no part of its
+footprint. A slice's first one-line `Footprint:` is its footprint; a later one is not read, and the
+lines under a one-line `Footprint:` are not its entries. Only `Footprint:` has a one-line form:
+`Requirements:`, `Checks:` and `Not in this slice:` are read under their bare labels alone.
 
 At `report`, every path of the source set that the slice does not name, and that is not
 sanctioned (section 5), is listed in `out_of_scope`, each with:

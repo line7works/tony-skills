@@ -11,13 +11,30 @@ and is never rendered. This module:
 - checks a document against its form's labels and headings (`check`): a label missing, renamed or
   out of order, a changed title form, a heading the form does not have, a stamp line that does not
   read the stamp form, an architecture doc's walkthrough target line without its `Who:`, `When:`
-  and `Must be able to:` fields in order and each filled, each one finding with its line;
+  and `Must be able to:` fields in order and each filled, a fence that never closes, each one
+  finding with its line;
 - renders a document from values (`render_scope_doc`, `render_build_doc`,
   `render_architecture_doc`, `render_run_block`, `render_ledger_line`), laid out exactly as the
   form lays it out, so the forms given their own placeholders render back to themselves;
 - renders and parses the lines inspect writes itself (`render_stamp`, `render_question`,
   `render_clean`, `parse_line`, `render_line`); a QUESTION line with a blank path, line, what or
   model, or a clean line with a blank model, is not a line of the form and parses to None.
+
+THE FENCE RULE (the E15 lane contract A34 (1), from A5 (2) and A6; stated once, here, and read by
+one function, `_fences`, which `parse` and `check` both call). A fence OPENS on a line that starts
+at column 0 with three or more backticks or three or more tildes, whatever follows the run on that
+line. It CLOSES only on a later line that starts at column 0 with the same character, repeated at
+least as many times, with nothing after the run but spaces or tabs. Every line between is the
+fence's text, whatever it looks like: a heading, a label, a run of the other character, a shorter
+run of the same one, a run with anything after it. Nothing a fence holds is a label or a heading of
+the document.
+In the outline a fence's opening and closing lines have the role `fence` and the lines it holds the
+role `text`, as they always had. A fence still open at the document's end holds every line after
+its opening line (they read `text`); that opening line has the role `unclosed-fence` (`UNCLOSED`)
+in the outline, so a caller can refuse the document, and `check` returns the finding `the fence
+opened at line N is never closed` for it. A fence line is read at column 0 only: an indented run,
+a run after a list-item or block-quote marker, and raw HTML are ordinary lines here, as before
+(the back cores read those shapes with their own readers).
 
 It never judges what a document says (E14-4): it holds the form, nothing more.
 """
@@ -35,6 +52,8 @@ PARKED_REASONS = ("needs research", "needs prototype")
 PARKED_WAITING = "waiting on "
 LEDGER_SECTIONS = ("## Build assumptions", "## Deviations", "## Discovered", "## Handoffs",
                    "## Punch list")
+FENCE_LINE = re.compile(r"^(`{3,}|~{3,})(.*)$")   # a run at column 0, then the rest of the line
+UNCLOSED = "unclosed-fence"                       # the outline role of a fence's opening line that never closes
 
 
 class FormError(ValueError):
@@ -84,21 +103,41 @@ def reading(name, root=None):
 
 # ---- parse and render ---------------------------------------------------------------------------
 
+def _fences(lines):
+    """THE FENCE RULE (module docstring), for lines without their endings. One entry per line: None
+    for a line outside every fence, "fence" for the opening or closing line of a fence, "text" for a
+    line a fence holds, and `UNCLOSED` for the opening line of a fence still open at the end."""
+    marks = []
+    held = None             # (character, length of the run, index of the opening line) while a fence is open
+    for index, line in enumerate(lines):
+        run = FENCE_LINE.match(line)
+        if held is not None:
+            closes = (run is not None and run.group(1)[0] == held[0] and len(run.group(1)) >= held[1]
+                      and not run.group(2).strip(" \t"))
+            marks.append("fence" if closes else "text")
+            if closes:
+                held = None
+        elif run is not None:
+            held = (run.group(1)[0], len(run.group(1)), index)
+            marks.append("fence")
+        else:
+            marks.append(None)
+    if held is not None:
+        marks[held[2]] = UNCLOSED
+    return marks
+
+
 def parse(name, text):
     """{"kind", "lines", "outline"}: the lines with their endings, and what each one is."""
     if name not in NAMES:
         raise FormError("no template named %r" % name)
     lines = text.splitlines(True)
     outline = []
-    fence = False
+    fenced = _fences([raw.rstrip("\r\n") for raw in lines])
     for index, raw in enumerate(lines, 1):
         line = raw.rstrip("\r\n")
-        if line.startswith("```"):
-            fence = not fence
-            outline.append({"line": index, "role": "fence"})
-            continue
-        if fence:
-            outline.append({"line": index, "role": "text"})
+        if fenced[index - 1] is not None:
+            outline.append({"line": index, "role": fenced[index - 1]})
             continue
         if name == "inspect-lines":
             parsed = parse_line(line)
@@ -220,14 +259,11 @@ def check(name, text):
         findings.append({"line": first, "message": "the title line does not read '%s'" % spec["title_form"]})
 
     contexts = [{"kind": "header", "key": "header", "line": first, "labels": []}]
-    fence = False
+    fenced = _fences(lines)
     for line_no, line in enumerate(lines, 1):
-        if line_no == first:
-            continue
-        if line.startswith("```"):
-            fence = not fence
-            continue
-        if fence:
+        if fenced[line_no - 1] == UNCLOSED:
+            findings.append({"line": line_no, "message": "the fence opened at line %d is never closed" % line_no})
+        if line_no == first or fenced[line_no - 1] is not None:
             continue
         current = contexts[-1]
         if line.startswith("## "):

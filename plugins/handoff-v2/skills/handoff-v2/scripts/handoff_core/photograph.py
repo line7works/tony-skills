@@ -9,6 +9,16 @@ recorded". No test suite is ever run. Before any of that: the doc must still hol
 handoff block the doc held at HEAD must be unchanged in the working copy (`block-edited`). Writes `photograph.json`
 in the run directory and nothing else.
 
+THE SUITE RECORD'S NAME (the E15 lane contract A34 (3); contract section 3.2; `record_name`). The suite's `state` and
+`provenance` are the words the block's `- Suite:` line and the `HANDOFF:` report's `Suite:` field carry, so they name
+the record by where it lies, never by an absolute path: its path relative to the workspace when the record, links
+followed, lies inside the workspace, links followed; its file name alone when it does not. A name that would start
+with `~` is written behind `./`. `suite.path` in `photograph.json` (the run directory, never the build doc) keeps the
+record's resolved absolute path, beside its `sha256`. A record is read as a build-v2 result only when its `run_id` is
+a build-v2 run id (one path segment: a letter or digit, then letters, digits, `.`, `_` or `-`), and its `slice` is
+named only when it is one word that starts with neither `/` nor `~`: nothing a record holds puts a rooted path into
+the words either.
+
 Two stops come here, before the gate, so no answer is ever given to a run that cannot write:
 
 - `card-drift` (the E15 lane contract A24 (1), build-v2's drift rule, build-contract section 10): a slice whose last
@@ -24,6 +34,7 @@ Two stops come here, before the gate, so no answer is ever given to a run that c
 """
 import datetime
 import os
+import re
 
 from station_core import driver, fsio, records_link
 
@@ -55,12 +66,31 @@ def blocks_edited(ws, commit, doc_rel, current):
     return None
 
 
-def suite_of(path):
+RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")       # build-v2's run id (its input schema): one path segment
+SLICE = re.compile(r"[^\s/~]\S*\Z")                        # one word that starts with neither `/` nor `~`
+
+
+def record_name(real, ws=None):
+    """THE SUITE RECORD'S NAME (module docstring): the resolved record's path relative to the workspace when it lies
+    inside the workspace (the workspace resolved too), else its file name alone; never an absolute path, and a name
+    that would start with `~` behind `./`."""
+    name = os.path.basename(real)
+    if ws is not None:
+        root = os.path.realpath(ws).rstrip(os.sep) + os.sep
+        if real.startswith(root):
+            name = os.path.relpath(real, root)
+    return "./" + name if name.startswith("~") else name
+
+
+def suite_of(path, ws=None):
+    """The last-recorded suite state from the record the executor names, in words that name the record by
+    `record_name`; `path` keeps the record's resolved absolute path, for `photograph.json` only."""
     if path is None:
         return {"state": "none recorded", "provenance": None, "path": None, "sha256": None}
     if not os.path.isfile(path):
         raise driver.Usage("no such suite record: %s" % path)
     real = os.path.realpath(path)
+    named = record_name(real, ws)
     stamp = datetime.datetime.utcfromtimestamp(os.stat(real).st_mtime).replace(microsecond=0).isoformat() + "Z"
     digest = fsio.sha256_file(real)
     try:
@@ -68,17 +98,20 @@ def suite_of(path):
     except (OSError, ValueError, UnicodeDecodeError):
         body = None
     checks = body.get("checks") if isinstance(body, dict) else None
-    if isinstance(checks, list) and isinstance(body.get("run_id"), str) and all(isinstance(c, dict) for c in checks):
+    run_id = body.get("run_id") if isinstance(body, dict) else None
+    if isinstance(checks, list) and isinstance(run_id, str) and RUN_ID.match(run_id) \
+            and all(isinstance(c, dict) for c in checks):
         counts = {"passed": 0, "failing": 0, "not_run": 0}
         for check in checks:
             if check.get("result") in counts:
                 counts[check["result"]] += 1
         state = "%d passed, %d failing, %d not run" % (counts["passed"], counts["failing"], counts["not_run"])
-        provenance = "build-v2 run %s%s, result %s, %s" % (body["run_id"], ", slice %s" % body["slice"]
-                                                          if isinstance(body.get("slice"), str) else "", real, stamp)
+        of_slice = body.get("slice")
+        provenance = "build-v2 run %s%s, result %s, %s" % (
+            run_id, ", slice %s" % of_slice if isinstance(of_slice, str) and SLICE.match(of_slice) else "", named, stamp)
     else:
-        state = "recorded at %s, not read as a suite state (not a build-v2 result)" % real
-        provenance = "%s, %s" % (real, stamp)
+        state = "recorded at %s, not read as a suite state (not a build-v2 result)" % named
+        provenance = "%s, %s" % (named, stamp)
     return {"state": state, "provenance": provenance, "path": real, "sha256": digest}
 
 
@@ -194,7 +227,7 @@ def handler(ctx, args):
                       "the handoff block of %s (line %d at HEAD) is not in the working copy byte for byte: an earlier "
                       "block is never edited, so the owner settles the edit before this run writes; nothing was "
                       "written" % (edited[1], edited[0]))
-    suite = suite_of(args.suite_record)
+    suite = suite_of(args.suite_record, ws)
     client, state = read_records(ctx, run, ws, view["doc"], args.records_root, "reading the cards and the open set")
     try:
         verify = client.verify(ws, view["doc"])

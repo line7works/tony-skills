@@ -13,7 +13,7 @@ counts.
 
 | Suite | Tests (both runtimes) |
 |---|---|
-| `skills/handoff-v2/scripts/tests` | 403 |
+| `skills/handoff-v2/scripts/tests` | 416 (403 on the E15 slice 3 tree, 13 added in the E15 punch list) |
 | `skills/handoff-v2/adapters/claude-code/tests` | 27 |
 | `skills/handoff-v2/adapters/codex/tests` | 23 |
 | `skills/handoff-v2/scripts/validate-examples.py` | 32 accepted, 37 rejected examples; 0 failures |
