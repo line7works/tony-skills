@@ -210,7 +210,8 @@ Measured, not assumed:
   (SR11 before SR15). If it does not, SR11 moves after SR15 by a manifest built that way from the
   start; if a tracked file would have to change after SR15, the run stops for the owner (a broader
   reading of D6, his gate).
-- **M2 (before slice 3's brief).** The marketplace's request window for X9: how long after its
+- **M2 (withdrawn, A6: under the frame the passing of time resolves no lost answer, so no window
+  is measured).** Was, before slice 3's brief: The marketplace's request window for X9: how long after its
   child dies a provision can still land.
 - **M3 (before slice 4's brief).** Each provider's retention limit on an archived, paused or idle
   resource, from the provider's own documents, for the tombstone's clock lines. A limit that cannot
@@ -224,13 +225,27 @@ Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and rul
   they do when he runs them by hand. The frame gives them no secret in an argument or an
   environment, turns off their debug output and reads nothing they print, but it cannot stop a
   tool from writing into its own folders.
-- **RK2, a shared file changed by something else in the same instant.** The swap of X8 checks the
-  file's hash and then replaces it. An editor or another tool that writes the same file (the
-  shortcut file, an index) between those two steps, without taking the advisory lock, loses its
-  write. The window is the time between the hash check and the swap; its length is not measured.
+- **RK2, a file changed by something else in the instant of a swap.** When the tool rewrites a
+  file it checks the file's hash and then replaces it. An editor or another tool that writes the
+  same file between those two steps, without taking the lock, loses its write, and the tool does
+  not notice. By the owner's word (A6) this covers every file the tool rewrites, not only a file
+  that several projects share. The window's length is not measured.
 - **RK3, a provider state changed by someone else in the same instant.** T20, T21, V10 and V11 read
   the state, then ask for the change. If the owner makes the same change by hand between the read
   and the request, the run records it as its own, and a later restore reverses it.
+- **RK4, a folder replaced in the instant of a move** (accepted by the owner, A6). The tool reads
+  which folder is at a path, then renames it. A folder put in its place between the read and the
+  rename is the one moved. The tool sees that straight afterwards and stops with both places
+  named; nothing is deleted. How likely it is was not measured.
+- **RK5, a program of the shortcut's name installed in the instant it is added** (accepted by the
+  owner, A6, and no wider than this). The tool checks that no program has the shortcut's name,
+  then adds the line. A program of that exact name installed between the check and the add is
+  hidden by the shortcut until the line is removed. It shows the first time the name is typed;
+  nothing is lost. Not measured.
+- **The run directory** (accepted by the owner, A6). Every proof the tool makes rests on nothing
+  but the run changing its run directory. The tool checks that the folder is owner-only and that
+  its log is unaltered partway; it cannot detect a clean rewrite from end to end by a program
+  running as the owner.
 - **Q7, a launch agent.** v1 says to "unload" one. An unloaded agent whose file stays in place
   loads again at the next login. T10 moves the file into the sunset folder as well, and V14 moves
   it back. That is a change to what v1 does; the owner ruled it so (A4).
