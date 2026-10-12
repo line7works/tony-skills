@@ -22,7 +22,12 @@ under `uv run` with `jsonschema==4.25.1`; the two runtimes give the same counts.
 | `skills/ship-v2/scripts/validate-examples.py` | 30 accepted, 33 rejected examples; 0 failures |
 | `evals/seeded-cases` | 19 cases: S1 5, S2 3, S3 4, S4 3, T1 4 |
 
-The kill sweep (`test_kill_sweep.py`) is most of the scripts suite's time: about 68 minutes per runtime in all.
+The kill sweep (`test_kill_sweep.py`) is most of the scripts suite's time. It kills at 2177 lines over 13 commands, and
+its kill points run side by side: `SHIP_V2_SWEEP_WORKERS` workers, each with its own case in its own temporary folder
+(unset, a quarter of the machine's processors, at least 1 and at most 8, so both runtimes' sweeps can run at once;
+`SHIP_V2_SWEEP_WORKERS=1` runs the points one after another, in order). With one worker the scripts suite took about 68
+minutes per runtime in all, about 55 of them the sweep. With eight workers on a 36-processor machine, both runtimes
+at once and other suites running beside them, the sweep took 14 to 15 minutes per runtime (measured 2026-10-11).
 
 ## The join's proofs (E15 slice 3)
 

@@ -95,6 +95,59 @@ class TheRoundTrips(unittest.TestCase):
             forms.render_block(block_fields(perishables=["a %s b" % forms.SEP.strip()]))
 
 
+class TheSuiteValue(unittest.TestCase):
+    """The E15 punch list, item 3 (the E15 lane contract A34 (3)): the suite value the block and the report carry
+    names no rooted path, and an earlier block that carries one still parses and is carried as it reads."""
+
+    OLD = "/srv/builds/run-7/result.json"          # a synthetic path, as a block written before the fix holds one
+    STAMP = "2026-10-04T11:58:00Z"
+
+    def test_a_named_record_renders_as_it_is_named(self):
+        suite = {"state": "3 passed, 0 failing, 0 not run", "path": self.OLD, "sha256": "0" * 64,
+                 "provenance": "build-v2 run r-7, slice A, result runs/r-7/result.json, %s" % self.STAMP}
+        self.assertEqual(forms.suite_text(suite), "3 passed, 0 failing, 0 not run \u00b7 build-v2 run r-7, slice A, "
+                                                  "result runs/r-7/result.json, %s" % self.STAMP)
+
+    def test_a_photograph_taken_before_the_fix_renders_without_its_rooted_path(self):
+        # `photograph.json` of a run photographed by the earlier code holds the record's absolute path in the
+        # provenance (and, for a file that is no build-v2 result, in the state): rendered now, the file name alone
+        result = {"state": "3 passed, 0 failing, 0 not run", "path": self.OLD, "sha256": "0" * 64,
+                  "provenance": "build-v2 run r-7, slice A, result %s, %s" % (self.OLD, self.STAMP)}
+        other = {"state": "recorded at %s, not read as a suite state (not a build-v2 result)" % self.OLD,
+                 "path": self.OLD, "sha256": "0" * 64, "provenance": "%s, %s" % (self.OLD, self.STAMP)}
+        self.assertEqual(forms.suite_text(result), "3 passed, 0 failing, 0 not run \u00b7 build-v2 run r-7, slice A, "
+                                                   "result result.json, %s" % self.STAMP)
+        self.assertEqual(forms.suite_text(other), "recorded at result.json, not read as a suite state (not a build-v2 "
+                                                  "result) \u00b7 result.json, %s" % self.STAMP)
+        for suite in (result, other):
+            block = forms.render_block(block_fields(suite=suite))
+            report = forms.render_report({"feature": "turnstile", "after": "A", "doc": DOC, "next": "/ship-v2 B %s" % DOC,
+                                          "repo": "feat \u00b7 clean", "suite": forms.suite_text(suite),
+                                          "questions": "0 asked \u00b7 0 answered \u00b7 none", "perishables": 0,
+                                          "bottom_line": "Captured.", "open": [], "skill_note": None})
+            self.assertNotIn(self.OLD, block)
+            self.assertNotIn("/srv", block + report)
+            self.assertEqual(forms.render_block(forms.parse_block(block)), block)
+            self.assertEqual(forms.render_report(forms.parse_report(report)), report)
+
+    def test_no_record_still_reads_none_recorded(self):
+        for suite in (None, {}, {"state": "none recorded", "provenance": None, "path": None, "sha256": None}):
+            self.assertEqual(forms.suite_text(suite), "none recorded")
+
+    def test_an_earlier_block_with_an_absolute_path_still_parses_and_is_carried_as_it_reads(self):
+        value = "3 passed, 0 failing, 0 not run \u00b7 build-v2 run r-7, slice A, result %s, %s" % (self.OLD, self.STAMP)
+        text = "\n".join([forms.heading("2026-10-01"), "- Next: /ship-v2 B %s" % DOC, "- Cards: A signed off",
+                          "- Open: none", "- Repo: feat \u00b7 2 ahead of main \u00b7 clean", "- Suite: %s" % value]) + "\n"
+        parsed = forms.parse_block(text)
+        self.assertEqual(parsed["suite_line"], value)
+        self.assertEqual(forms.render_block(parsed), text)
+        report = ("HANDOFF: turnstile %s after A\nDoc: %s  \u00b7  Next: /ship-v2 B %s\nRepo: feat \u00b7 clean  \u00b7  "
+                  "Suite: %s\nQuestions: 0 asked \u00b7 0 answered \u00b7 none  \u00b7  Perishables: 0 carried\n\n"
+                  "Bottom line: Captured.\n\nThread is safe to clear.\n" % (D, DOC, DOC, value))
+        self.assertEqual(forms.parse_report(report)["suite"], value)
+        self.assertEqual(forms.render_report(forms.parse_report(report)), report)
+
+
 class NoTypedDash(unittest.TestCase):
     """Standing rule 10: no file this core writes holds a typed em dash; the forms carry it as `forms.D`."""
 
