@@ -2,19 +2,22 @@
 
 Written 2026-10-12 by the control room on the owner's word ("a", to "one table, one source"),
 after the outside reviewer's second design read found the first design's gaps returning. **This
-document is the single source for how the lifecycle code works.** The lane contract
-(`2026-10-11-stations-e16.md`) holds the owner's rulings and points here; it restates no mechanic.
-The three design pages of 2026-10-11 are withdrawn. Where this document and anything else
-disagree about a mechanic, this document is right and the other text is a defect.
+document was written as the single source for how the lifecycle code works, and by the owner's
+second design step (A5) it no longer is.** The frame document is the source for the frame, and each
+lane's own rows, written against the frame and read before the lane is built, are the source for
+the operations. The lane contract (`2026-10-11-stations-e16.md`) holds the owner's rulings.
+The three design pages of 2026-10-11 are withdrawn. Where this document and the frame
+disagree about a mechanic, the frame is right.
 **Status: the frame document (`2026-10-12-stations-e16-frame.md`) is the source for what Parts 1 to 3
 held, and Part 4's rows are a draft the lanes start from, not a source (the contract's section 18,
 A5).**
 
-How to read it. Part 1 is the executor: thirteen rules, each stated once. Part 2 is the evidence a
-run may use to say "I did this". Part 3 is how a secret travels. Part 4 is the catalog: every
-operation of sunrise, sunset and restore as one row with the same columns. Part 5 is the forms.
-Part 6 is what is measured later and what risk is left. A builder builds Parts 1 to 3 as the frame
-(slice 1) and the rows of Part 4 as the lanes (slices 2 to 4).
+How to read it. Parts 1 to 3 (the executor's rules, the evidence a run may use, how a secret
+travels) are withdrawn; the frame document holds them. Part 4 is the catalog: every operation of
+sunrise, sunset and restore as one row with the same columns, a draft. Part 5 is the forms.
+Part 6 is what is measured later and what risk is left. A builder builds the frame (slice 1) from
+the frame document, and a lane (slices 2 to 4) from its own rows once they are written against the
+frame and read; nobody builds from Part 4 as it stands.
 
 ## Parts 1 to 3. Withdrawn: see the frame
 

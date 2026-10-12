@@ -271,12 +271,12 @@ operation the tool performs. The last column is decided by RISK-1 and RISK-2.
 | C4 | compare-and-swap enforced by the store: the request names the value the thing must hold now, which may be "none" (a local branch or tag updated only from its recorded value; a remote branch pushed only if the remote holds the value named), and the store refuses otherwise | the named value | none | yes |
 | C5 | a refusing call: a call that the tool or the provider, by its own document cited in the row, refuses when the before-state does not hold | what the cited refusal covers; the row shows that it covers the whole before-state | none, as far as the cited refusal goes | yes |
 | C6 | read, then ask: the state is read, then a request is sent that would also succeed if the state were already so | the state as of the read | the same change made by another between the read and the request | only for the four rows RK3 names |
-| C7 | exclusive move of an identified thing: its identity is read; it is renamed by a rename that fails if anything is at the target; the identity at the target is read again, and a difference stops the run with both places named and no completion recorded | nothing is at the target | the thing at the source replaced by another between the first read and the rename | no |
+| C7 | exclusive move of an identified thing: its identity is read; it is renamed by a rename that fails if anything is at the target; the identity at the target is read again, and a difference stops the run with both places named and no completion recorded | nothing is at the target | the thing at the source replaced by another between the first read and the rename | yes, under RK4 |
 
 Test on fakes: for each construction a competing change is planted by the fake between the probe and
-the effect call. C1, C2, C4, C5: the call fails and nothing is overwritten or taken over. C3, C6:
-the outcome is the one the named risk states, and the journal marks the operation as carried under
-that risk. C7: the run stops with both places named.
+the effect call. C1, C2, C4, C5: the call fails and nothing is overwritten or taken over. C3, C6,
+C7: the outcome is the one the named risk states (for C7, the run stops with both places named and
+no completion recorded), and the journal marks the operation as carried under that risk.
 
 **OP-4. Staging.** A staged object is built in a private, owner-only folder the run made, inside the
 run directory, on the same volume as the object's place; where the place is on another volume the
@@ -330,8 +330,8 @@ later look for the project key, and is resolved only in one of three ways.
 | Way | It requires | Then |
 |---|---|---|
 | the provider answers for that request | a read that the provider documents as the status of that very request, cited in the row | "made, with this id": the after-check and completion. "made nothing and will make nothing": the create may be planned again, by a re-plan |
-| the provider guarantees a second send cannot make a second thing | a name the provider keeps unique in the account and scope the run is bound to, or the provider's own idempotency key, cited in the row | the create may be planned again, by a re-plan whose preview says an earlier send got no answer. If the name is then found taken, the thing there is not proven the run's: a planning stop |
-| the owner takes it | nothing | by a re-plan he names a thing for adoption, where the row offers that (OP-10), or he drops the layer. The tool never sends that create again |
+| the provider guarantees a second send cannot make a second thing | a name the provider keeps unique in the account and scope the run is bound to, or the provider's own idempotency key, cited in the row | the create may be planned again, by a re-plan whose preview says an earlier send got no answer. If the name is then found taken, the thing there is not proven the run's: a planning stop, which he clears by hand |
+| the owner drops the layer | nothing | by a re-plan the layer is left out. He cannot name an existing thing to stand in its place (OP-10). The tool never sends that create again |
 
 An empty listing, the owner's word that nothing is there, and the passing of time resolve nothing.
 
@@ -370,16 +370,17 @@ Test on fakes: a step in read-back mode completes on the read alone and never on
 step on his word completes on the word and is listed as not checked; "leave it" ends the wait as
 `left`; no fake records a call that performs an owner step.
 
-**OP-10. Adopt.** An adopt is in a manifest only because the owner's own input names the thing by
-its identity (a path he gave, an id he gave), for an output whose row offers adoption. The tool
-never puts one into a plan from what it found. The preview shows the thing's identity and the
-tracked state read. When it runs, the probe requires the thing to be as the manifest recorded; the
-record `adopted` binds the output's fields to it and changes nothing. What an adoption releases is
-in ORD-1 and EV-2.
+**OP-10. Adopt.** Adoption is offered for one output and for no other: the local project folder (the
+owner's ruling, A6). An adopt is in a manifest only because the owner's own input names that folder
+by its path. The tool never puts one into a plan from what it found. The preview shows the thing's
+identity and the tracked state read. When it runs, the probe requires the thing to be as the
+manifest recorded; the record `adopted` binds the output's fields to it and changes nothing. What an
+adoption releases is in ORD-1 and EV-2.
 
 Test on fakes: a thing found at a planned place without the owner's input ends in a planning stop
-and never in an adopt; with his input the manifest holds an adopt and the dependents with state
-needs run.
+and never in an adopt; with his input naming a local folder the manifest holds an adopt and the
+dependents with state needs run; a row that offers adoption for any other output fails the manifest
+build.
 
 **OP-11. Every command that can change a repository is declared.** The manifest lists, under its
 operation, each command the run will execute that can change a repository or a remote, including any
@@ -805,15 +806,15 @@ Test on fakes: a restore run renders each of the four.
 | the thing it acts on: its role, how its identity is read, and its tracked state; or the output field it refers to | RUN-6, EV-3 |
 | its planning test | RUN-6, RUN-7 |
 | its before-test and its after-test | OP-5 |
-| its construction; for C2 and C5 the document cited; for C3 and C6 the accepted risk | OP-3, RISK-1 |
+| its construction; for C2 and C5 the document cited; for C3, C6 and C7, and for a shortcut's add or put-back, each accepted risk it is carried under | OP-3, RISK-1, RISK-2 |
 | its one effect as a declared command: the argument template, the registered environment names, the time limit, the result fields, the definite results, the alternative results | OP-1, SEC-3, SEC-4, ORD-3 |
 | each command that can change a repository | OP-11 |
 | its after-check | OP-6, EV-1 |
 | the output it provides and that output's fields; each need, with its level and its treatment when nothing provides it; its condition | ORD-1, ORD-2, ORD-3 |
-| for a create: how a lost answer can be resolved, with the provider's document, or "by the owner only" | OP-7 |
+| for a create: how a lost answer can be resolved, with the provider's document, or "by dropping the layer only" | OP-7 |
 | its way back, or "none" with the reason; for a span, its placement and whether the file is ordered | EV-4, EV-6 |
 | for an owner kind: its mode, the safe content its step is built from, the answers it allows, any review file | OP-9, SEC-6 |
-| for an output that may be adopted: that it may, and how the owner names the thing | OP-10 |
+| for the local project folder, the one output that may be adopted: how the owner names it | OP-10 |
 | for a keep: its scope, how the inventory and the copy share one state, and its content checks. For a retirement: the keeps it requires | KEEP-1, KEEP-2, KEEP-3 |
 | the class of every content it reads, stores or shows; any validator that makes content safe; each resting place it uses | SEC-1, SEC-7 |
 | its lines in each form | FORM-2 |
@@ -821,28 +822,39 @@ Test on fakes: a restore run renders each of the four.
 Test on fakes: for each kind, a row with each required entry removed in turn fails the manifest
 build and names the entry.
 
+**ROW-2. A step becomes the owner's only by his word.** Where a lane finds a tool that cannot be
+split into single effects (OP-1), whose repository writes cannot be listed (OP-11), or that cannot
+be pointed at staging (SEC-8), the lane reports it before its rows are read, and the step is put to
+the owner before it becomes his (the owner's ruling, A6). A row that stands an owner step in for
+such an effect cites his ruling on it.
+
+Test on fakes: a manifest built from a row that stands an owner step in for an effect the tool will
+not run, with no ruling cited, fails its build and names the row.
+
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** RK1 (the tools' own
-files), RK2 (a file changed by something else in the instant of a swap) and RK3 (a provider state
-changed by someone else in the instant of T20, T21, V10 or V11) were accepted by the owner (the
-contract's section 18, A4). This frame removes none of them and adds none. RK2 is read as covering
-the swap, C3, wherever a row uses it. An operation carried under RK2 or RK3 is marked so in the
-journal.
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted five
+risks and one assumption (the contract's section 18, A4 and A6): RK1; RK2, which by his word covers
+every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a shortcut's name
+being free, in the add and in the put-back; and the run directory's assumption (RUN-4). Their
+wording is in the catalog's Part 6 and is not restated here. This frame removes none of them and
+accepts none itself. An operation carried under RK2, RK3, RK4 or RK5 is marked so in the journal,
+once for each of those risks it is carried under.
 
-Test on fakes: every operation built by C3 or C6 carries the mark, and no other operation does.
+Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
+and its put-back carry RK5's mark beside RK2's; no other operation carries a mark.
 
-**RISK-2. A window nobody accepted is not the tool's to take.** Until the owner rules on it, a row
-whose effect has such a window is written as an owner step (OP-9), and a manifest that holds it as a
-tool's effect fails its build. Known today: C7, which is every move of an identified thing; C6
-outside the four rows RK3 names; a schedule table that can only be read and then replaced through
-its own tool, which no construction of OP-3 covers; and a before-test condition on something the
-effect does not change, which no construction enforces (today: a shortcut's name being free among
-the shell's commands). The frame's one assumption (RUN-4) is likewise the owner's to accept, and is
-put to him with these.
+**RISK-2. A window nobody accepted is not the tool's to take.** A row whose effect has a window that
+no accepted risk names is written as an owner step (OP-9), and a manifest that holds it as a tool's
+effect fails its build. Two such windows were put to the owner and ruled no (A6), and stay his
+steps: C6 outside the four rows RK3 names; and a schedule table that can only be read and then
+replaced through its own tool, which no construction of OP-3 covers. A before-test condition on
+something the effect does not change, which no construction enforces, stays closed in every case but
+the one RK5 names.
 
-Test on fakes: a manifest that holds a move as a tool's effect fails its build while C7 is closed,
-and names the row.
+Test on fakes: a manifest that holds, as a tool's effect, a read-then-ask on a row RK3 does not
+name, an edit of a schedule table, or a row whose before-test names something its effect does not
+change, other than a shortcut's name, fails its build and names the row.
 
 ## Part 5. Worked examples (illustration only; the rules are the source)
 
@@ -905,10 +917,8 @@ of it as protected records, and the after-image.
 
 ### Example 5. move: the repository to the archive folder (draft row T12)
 
-C7 is closed today (RISK-2), so today this row is an owner step in read-back mode: the form shows
-the exact move, the tool's read (the target holds the identity on record and the source is absent)
-completes it as `done by owner, read back`, and a restore offers the reverse as an owner step. The
-table shows the same row as a tool's move, which is what it becomes if the owner opens C7.
+Built by C7 under RK4 (RISK-1). RK4 covers the instant between the read and the rename; it does not
+give a way back to a move whose completion record was lost.
 
 | Kill at | On disk and in the world | Resume | Rules |
 |---|---|---|---|
@@ -917,6 +927,7 @@ table shows the same row as a tool's move, which is what it becomes if the owner
 | after the rename, before the completion record | the source absent; the target holds the identity on record | `landed`: `not proven`; the run goes on, later operations reading the new path from this record; a restore asks before reversing it | OP-6, EV-2, EV-5 |
 | variant: killed before the rename, and the owner then moves the folder by hand | exactly the same as the line above | the same: `not proven`. The run does not claim the move | EV-1 |
 | after the completion record | `done`, with its way back recorded | not probed | EV-3, EV-4 |
+| variant: another folder is put at the source between the identity read and the rename | the target holds a folder with another identity | the read after the rename differs: stop with both places named and no completion recorded; on resume the probe answers `foreign` | OP-3, RISK-1 |
 | variant: both paths hold a folder, or neither does, or the target holds another identity | neither state of the row | `foreign`: stop, naming both places | OP-5 |
 
 ### Example 6. keep: the database dump (draft row T03)
