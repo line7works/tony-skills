@@ -256,8 +256,8 @@ Measured, not assumed:
   resource, from the provider's own documents, for the tombstone's clock lines. A limit that cannot
   be established is printed as unknown, never as none.
 
-Risk the design names and cannot remove. **Each needs the owner's word before it counts as
-accepted; until then it is open.**
+Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and ruled Q7 on
+2026-10-12 (the contract's section 18, A4).** How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
   tools with his own configuration, and they keep their own logs, caches and credential stores as
@@ -267,13 +267,18 @@ accepted; until then it is open.**
 - **RK2, a shared file changed by something else in the same instant.** The swap of X8 checks the
   file's hash and then replaces it. An editor or another tool that writes the same file (the
   shortcut file, an index) between those two steps, without taking the advisory lock, loses its
-  write. The window is a few milliseconds.
+  write. The window is the time between the hash check and the swap; its length is not measured.
 - **RK3, a provider state changed by someone else in the same instant.** T20, T21, V10 and V11 read
   the state, then ask for the change. If the owner makes the same change by hand between the read
   and the request, the run records it as its own, and a later restore reverses it.
 - **Q7, a launch agent.** v1 says to "unload" one. An unloaded agent whose file stays in place
   loads again at the next login. T10 moves the file into the sunset folder as well, and V14 moves
-  it back. That is a change to what v1 does, so it is the owner's call.
+  it back. That is a change to what v1 does; the owner ruled it so (A4).
+
+Three more rows change what v1 does, each ruled by the owner (A4): SR09 makes the hosting project by
+a create call that fails on a taken name, where v1 links under `--yes`; K4 keeps and shows nothing
+a provider's tool prints, where v1's model reads and relays it; T30 writes the tombstone last from
+the journal, where v1 writes it in its first phase.
 
 ## Where each of the second read's findings lands
 
