@@ -993,10 +993,13 @@ run is rendered and holds no canary, and holds each line FORM-2 requires for the
 occurred, with the parts FORM-2 names; a form template that reads a file's text directly fails its
 build test.
 
-**FORM-2. Every status has a line, in every form that lists operations.** A preview, a status form,
-a summary and a last record can each show every line below, and a lane's list of form changes
-includes them. A status that occurs in a run and has no line in a form that lists operations fails
-that form's build.
+**FORM-2. The lines this frame fixes, in every form that lists operations.** A preview, a status
+form, a summary and a last record can each show every line below, and a lane's list of form changes
+includes them. This table does not hold a line for every status, nor every reason, that the rules of
+this frame name. A line it lacks is for the lane's list of form changes to give, and what such a
+line says is not this frame's to say (the owner's ruling, A9; ROW-3). A status that occurs in a run
+and has a line neither in this table nor in the lane's list of form changes fails the build of every
+form that lists operations.
 
 | For | The line says |
 |---|---|
@@ -1007,27 +1010,30 @@ that form's build.
 | `waiting` | the exact step, its mode, and how the tool will know it is done |
 | `done by owner` | done by him, and whether a read checked it |
 | `left` | left, by his word |
-| `held` | not run, and the operation it waited on |
+| `held` | not run, with its reason as ORD-1 records it: the need, and the status of the operation it waited on |
 | `refused`, `not needed` | which branch was taken |
 | `not applicable` | the reason: a flag, the project type, a layer the project lacks, not available on this harness, or cannot be tied to its copy, with the step he can take himself |
 | `unavailable` | the check could not be made on this harness |
 | an outstanding create | a create was sent and no answer came; what he can check; the ways on |
-| a stop | the operation, the kind, the command he can run, the ways on |
+| a stop | the reason kind; the operation, where the stop is in one; the command he can run, where a command failed (SEC-5); for a "need unmet" stop, the need and the provider's status (ORD-1); the ways on (RUN-12) |
 | a protected record | its label and the path of its file |
 
 Test on fakes: a run driven through every status in this table renders every form with the matching
 line, and each line holds the parts its row names (for `waiting` the step and the mode, for
-`done by owner` whether a read checked it, for `held` the operation waited on, for `not applicable`
-the reason, for a protected record the label and the path); a form template that lacks one of these
-lines, or renders one without a part its row names, fails its build test.
+`done by owner` whether a read checked it, for `held` the need and the status waited on, for
+`not applicable` the reason, for a stop the reason kind and the ways on, for a protected record the
+label and the path); a form template that lacks one of these lines, or renders one without a part
+its row names, fails its build test; a run in which a status occurs that this table has no line for
+renders its forms where the lane's list of form changes gives that status a line, and fails each
+such form's build where neither has one.
 
 **FORM-3. A restore has forms of its own.** A restore has a preview, a status form, a summary, and
 its entry in the project's record (KEEP-5). They are forms under FORM-1 and FORM-2, and are not
 changes to a v1 form.
 
 Test on fakes: a restore run renders each of the four; its preview lists exactly the reverses EV-5
-offers and, with its reason, each operation not offered; each of the four holds the FORM-2 line of
-every status that occurred in that restore.
+offers and, with its reason, each operation not offered; each of the four holds, for every status
+that occurred in that restore, the line FORM-2 or the lane's list of form changes gives it.
 
 ### 3.9 What a row states
 
