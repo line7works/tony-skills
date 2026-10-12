@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "note": "Prices are conservative per-image estimates checked against each Fal model /api page on 2026-06-25. The estimator rounds up; true spend shows on the Fal dashboard. Edit/style reuse the model's generation pricing as an estimate. The bg_remove (birefnet) price is an unverified conservative placeholder pending a Fal dashboard check. Update when Fal pricing changes.",
-  "default_model": "nano",
+  "note": "Prices are conservative per-image estimates, rounded up, checked against each Fal model page on 2026-10-12; true spend shows on the Fal dashboard. sunburst is token-billed: the plain keys are Fal's published 1024x1024 rates and the @4k keys its 3840x2160 rates. The estimator gives a size of 1024x1024 or smaller the plain rate, and prices any larger size, or a run with no --size, at the @4k rate. Fal publishes no rate for large squares (2048x2048, 2880x2880), so the @4k rate is an unverified ceiling there. With no --quality forge sends and prices default_quality (medium), except finish, which uses high. auto is priced as max because the model picks the quality. Edit/style reuse the generation price; sunburst reference images bill extra image-input tokens ($8 per 1M) that the estimate does not include. The bg_remove (birefnet) price is an unverified conservative placeholder pending a Fal dashboard check. Update when Fal pricing changes.",
+  "default_model": "sunburst",
   "bg_remove": {
     "id": "fal-ai/birefnet/v2",
     "image_field": "image_url",
@@ -9,20 +9,25 @@
     "extra_input": { "output_format": "png", "refine_foreground": true }
   },
   "models": {
-    "nano": {
-      "id": "fal-ai/nano-banana-2",
-      "edit": "fal-ai/nano-banana-2/edit",
+    "sunburst": {
+      "id": "openai/gpt-image-2.5/sunburst/text-to-image",
+      "edit": "openai/gpt-image-2.5/sunburst/edit",
       "edit_image_field": "image_urls",
-      "style": "fal-ai/nano-banana-2/edit",
+      "style": "openai/gpt-image-2.5/sunburst/edit",
       "style_image_field": "image_urls",
-      "op_size_style": "aspect_resolution",
-      "preset": "rough",
-      "size_style": "aspect_resolution",
+      "op_size_style": "image_size",
+      "preset": "either",
+      "size_style": "image_size",
+      "supports_quality": true,
+      "default_quality": "medium",
       "supports_seed": false,
-      "max_refs": 14,
-      "price_by": "resolution",
-      "price_usd": { "0.5K": 0.05, "1K": 0.08, "2K": 0.12, "4K": 0.16 },
-      "price_default": 0.08
+      "max_refs": 16,
+      "price_by": "quality",
+      "price_usd": {
+        "low": 0.006, "medium": 0.014, "high": 0.053, "xhigh": 0.094, "max": 0.211, "auto": 0.211,
+        "low@4k": 0.012, "medium@4k": 0.026, "high@4k": 0.101, "xhigh@4k": 0.178, "max@4k": 0.401, "auto@4k": 0.401
+      },
+      "price_default": 0.211
     },
     "nano-pro": {
       "id": "fal-ai/nano-banana-pro",
@@ -38,34 +43,6 @@
       "price_by": "resolution",
       "price_usd": { "1K": 0.15, "2K": 0.15, "4K": 0.30 },
       "price_default": 0.15
-    },
-    "gpt": {
-      "id": "openai/gpt-image-2",
-      "edit": "openai/gpt-image-2/edit",
-      "edit_image_field": "image_urls",
-      "style": "openai/gpt-image-2/edit",
-      "style_image_field": "image_urls",
-      "op_size_style": "image_size",
-      "preset": "either",
-      "size_style": "image_size",
-      "supports_quality": true,
-      "supports_seed": false,
-      "max_refs": 16,
-      "price_by": "quality",
-      "price_usd": { "low": 0.02, "medium": 0.07, "high": 0.19, "high@4k": 0.41 },
-      "price_default": 0.19
-    },
-    "flux": {
-      "id": "fal-ai/flux-1/dev",
-      "edit": "fal-ai/flux-kontext/dev",
-      "edit_image_field": "image_url",
-      "op_size_style": "none",
-      "preset": "rough",
-      "size_style": "image_size",
-      "supports_seed": true,
-      "price_by": "flat",
-      "price_usd": 0.03,
-      "price_default": 0.03
     }
   }
 }
