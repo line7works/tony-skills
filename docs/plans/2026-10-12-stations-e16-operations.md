@@ -241,10 +241,11 @@ contract's section 18, A4), and accepted RK4, RK5 and the run directory's assump
   which folder is at a path, then renames it. A folder put in its place between the read and the
   rename is the one moved. The tool sees that straight afterwards and stops with both places
   named; nothing is deleted. How likely it is was not measured.
-- **RK5, a program of the shortcut's name installed in the instant it is added** (accepted by the
-  owner, A6, and no wider than this). The tool checks that no program has the shortcut's name,
-  then adds the line, in sunrise and when a restore puts it back. A program of that exact name
-  installed between the check and the add is
+- **RK5, a command of the shortcut's name appearing in the instant it is added** (accepted by the
+  owner, A6, and by A8 for any command of that name: a program, an alias or a shell function; no
+  wider than this). The tool checks that no command has the shortcut's name,
+  then adds the line, in sunrise and when a restore puts it back. A command of that exact name
+  that appears between the check and the add is
   hidden by the shortcut until the line is removed. It shows the first time the name is typed;
   nothing is lost. Not measured.
 - **The run directory** (accepted by the owner, A6). Every proof the tool makes rests on nothing
