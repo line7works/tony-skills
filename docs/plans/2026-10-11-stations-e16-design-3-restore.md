@@ -3,8 +3,8 @@
 Drafted 2026-10-11 by the control room, beside the E16 lane contract
 (`2026-10-11-stations-e16.md`, rulings E16-10 and E16-11; the owner's rulings A1 P11 and P16).
 **Status: revision 2, after the outside reviewer's first read (findings F5 and F12 to F16 of that
-read are answered here, each named where its rule lands). Four points are the owner's calls and
-are marked PENDING. Not yet read a second time.**
+read are answered here, each named where its rule lands), with the owner's rulings of contract A2
+applied where the first revision said PENDING. Not yet read a second time.**
 
 ## The problem
 
@@ -28,7 +28,7 @@ prose, and the contract kept a third (F12). There is one order now, below.
 - **Undo** is the way back of one operation inside a run that is still going or was interrupted.
 - **Restore** is the way back of a finished sunset, days or years later.
 
-Sunrise gets neither as a command (contract Q5, PENDING, the owner's call): a half-finished sunrise
+Sunrise gets neither as a command (ruled by the owner, contract A2): a half-finished sunrise
 resumes forward (page 1), and a project that is no longer wanted is retired by sunset, which never
 deletes. A sunrise undo would have to delete a database or a repository made minutes ago, and
 "never delete" has no minutes-old exception. Every operation still records its before-state in
@@ -45,16 +45,32 @@ keeps it once the project is retired (F14).
 | work not yet pushed | the local repository only | sunset stops until it is committed and pushed, or the owner says to archive as it is (v1) |
 | the database's contents | the provider only | a verified dump in the archive |
 | the local env file (development values) | the working tree, ignored by git | it travels with the moved repository |
-| the hosting env values for production and preview | the provider only | PENDING, the owner's call: saved to an owner-only file in the archive (recommended), or named in the preview as not saved |
-| files uploaded to the database provider's storage | the provider only | PENDING, same call: named in the preview and the tombstone as not saved (recommended) |
-| GitHub's issues, pull requests and releases | the provider only | PENDING, same call: they stay on the archived repository; named in the tombstone (recommended) |
+| the hosting env values for production and preview | the provider only | saved, every environment, to an owner-only file in the archive, never printed (ruled, contract A2) |
+| files uploaded to the database provider's storage | the provider only | NOT saved (ruled, contract A2): named in the preview before the go, and in the tombstone |
+| GitHub's issues, pull requests and releases | the provider only | NOT saved (ruled, contract A2): they stay on the archived repository; named in the preview and the tombstone |
 | the vault notes | the vault | moved to the vault's archive folder |
 | the home memory note | the memory store | kept, flagged archived |
 | the project's own memory store | a store keyed to the repository's path | copied to the archive |
 | the shortcut lines, the schedules | files on this machine, the harness | recorded whole, as protected way-back records, before they are removed |
 
 A record with no entry in the "kept by" column is a stop: sunset does not retire a layer whose
-record it has not preserved or named to the owner in the preview he answered.
+record it has not preserved or named to the owner in the preview he answered. The two NOT saved
+rows are the owner's accepted risk: they last as long as the provider keeps
+them, and the preview says so every time.
+
+**Where the copies land (ruled, contract A2).** Beside the moved repository, never inside it:
+
+```
+ <archive folder>/
+ ├── <Name>/                      the repository, moved as it was, nothing added inside
+ └── <Name>.sunset-<date>/        owner-only
+     ├── the database dump
+     ├── the saved hosting env values
+     └── the copy of the project's own memory store
+```
+
+v1 wrote the dump and the memory copy inside the moved repository, a git working tree where a
+broad add would stage them. The tombstone names both folders.
 
 ## The drawing: one order, with a barrier
 
@@ -67,7 +83,7 @@ record it has not preserved or named to the owner in the preview he answered.
     record every way-back input in the intents (lines, files, definitions, states)
     push the dated tag ─► verify it on the remote
     dump the database ─► verify it (below)
-    save the hosting env values, if ruled ─► verify key names and hash
+    save the hosting env values ─► verify key names and hash
     copy the project's own memory store to the archive folder ─► verify hashes
 
  ═══════════ BARRIER: every check in B has passed, or the run stops here, project live ═══════════
@@ -96,10 +112,9 @@ Rules that go with the drawing:
   to be where it was.
 - **The memory copy is in B, and v1's rule still holds.** v1 copies the project's memory store
   only after the repository moves, because copying first created the archive path and turned the
-  move into a nest. The rule is kept by where the copy lands (contract Q4, PENDING, the owner's
-  call): beside the repository's archive path, in a folder of its own, never inside it. If the
-  owner keeps v1's location inside the moved repository, the copy moves to C, after the move, and
-  the barrier does not cover it.
+  move into a nest. The rule is kept by where the copy lands (ruled, contract A2): beside the
+  repository's archive path, in the sunset folder of its own, never inside it, so nothing creates
+  the repository's target path before the move and the barrier covers the copy.
 - **D follows the order the records need:** the tag is on the remote before the archive (an
   archived repository rejects pushes); the dump is verified before any pause.
 - **Already retired by hand.** A provider state found already paused or archived in A is recorded
@@ -124,10 +139,10 @@ and a table count; a dump of the wrong database passes all of those (F13). The c
 3. **Intact.** The tool exited 0; the lister reads the archive to its end; size and hash recorded.
 4. **An empty database is said, not assumed.** Zero tables or zero rows is shown in the preview's
    later confirmation as a fact for the owner, and is not a failure.
-5. **It restores.** PENDING, the owner's call: whether "verified" also means loading the dump
-   into a scratch database on this machine and comparing the counts (needs a database server
-   installed here), or stops at checks 1 to 4 (recommended for this step, with the scratch load
-   named in the tombstone as not done).
+5. **No test load in this step** (ruled, contract A2). "Verified" is checks 1 to 4. Loading the
+   dump into a scratch database would need a database server on the machine; the tombstone says
+   in plain words that a test load was not done. The owner carries the risk of a dump that
+   passes all four and still fails to load.
 
 Any miss in 1 to 3 stops the run at the barrier (check family L8). The dump is a permitted secret
 store (page 2): owner-only, outside any working tree, never printed.
@@ -141,9 +156,9 @@ record behind it must then be in the "kept by" column above.
 
 | Provider state sunset enters | Retention limit | Lost when it runs out | Preserved instead |
 |---|---|---|---|
-| GitHub repository archived | to be measured | to be measured | the local repository in the archive; issues and releases only if ruled saved |
-| hosting project paused | to be measured | to be measured | the repository; the env values if ruled saved, else their key names |
-| database paused or idle (Supabase) | to be measured | to be measured | the verified dump; storage files only if ruled saved |
+| GitHub repository archived | to be measured | to be measured | the local repository in the archive; issues, pull requests and releases are not saved |
+| hosting project paused | to be measured | to be measured | the repository; the saved env values |
+| database paused or idle (Supabase) | to be measured | to be measured | the verified dump; storage files are not saved |
 | database idle (a provider with no integration) | to be measured, per provider | to be measured | the verified dump |
 
 ## Restore records, written before the way out is taken
@@ -198,7 +213,7 @@ leaves them and the tombstone where they are and says where.
 | an archive copy or a protected record that is missing or whose hash differs | stops on the operation that needs it; every other layer is still offered |
 | the account can no longer reach a provider resource | `unknown` for that operation; shown as an `owner` step |
 | a provider state that is gone (the paused database was removed after its limit) | says so. Recreating a database from the dump makes a new resource, so it is offered in the preview as an `owner` step with the exact commands, and is never run by the script in this step |
-| a hosting project that is gone | the same: named, with the repository and the saved env values (if ruled) as what the owner has to rebuild it from |
+| a hosting project that is gone | the same: named, with the repository and the saved env values as what the owner has to rebuild it from |
 | a layer sunset skipped (`--keep-local`) or found already retired | has no record for it and does nothing there; the preview says so |
 | a schedule to recreate | a launch agent or crontab line is put back from its protected record; a harness routine is recreated only through the adapter and is named as not recreated on a harness without it |
 
@@ -225,10 +240,10 @@ leaves them and the tombstone where they are and says where.
 
 ## Questions this page leaves
 
-1. What sunset saves from the providers (the three PENDING rows of the first table). The owner's.
-2. Whether "verified" includes a scratch load of the dump (check 5). The owner's.
-3. Where the dump, the saved env values and the memory copy land (contract Q4). The owner's.
-4. No sunrise undo (contract Q5). The owner's, with a recommendation.
+1. What sunset saves from the providers: RULED (contract A2).
+2. A scratch load of the dump: RULED (contract A2), not in this step.
+3. Where the copies land: RULED (contract A2), beside the repository.
+4. No sunrise undo: RULED (contract A2).
 5. The clocks table (contract Q6): filled from the providers' documents before slice 4's brief.
 6. Whether the tombstone's v1 form keeps its bytes with the restore records beside it. Reading:
    v1's form kept, minus its Notion lines and with its new locations (a listed substitution,

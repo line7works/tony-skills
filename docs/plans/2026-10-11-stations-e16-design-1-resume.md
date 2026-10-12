@@ -5,7 +5,7 @@ Drafted 2026-10-11 by the control room, beside the E16 lane contract
 a brief: it says how the hard part is meant to work and what is still open, so the outside
 reviewer can try to break it on paper before a builder writes code. **Status: revision 2, after
 the outside reviewer's first read (findings F1 to F7 of that read are answered here, each named
-where its rule lands). Not yet read a second time.**
+where its rule lands), with the owner's rulings of contract A2 applied. Not yet read a second time.**
 
 ## The problem
 
@@ -121,8 +121,8 @@ The run directory holds the sanitized inputs, the manifest, the journal, the pro
 the kept fields of each command's outcome (design page 2 says what is kept). It cannot live in
 the project: sunrise starts before the repository exists and sunset moves it. It is a per-user
 state folder outside every repository, readable by the owner only, one folder per run, resolved in
-the one machine-facts module (contract Q1: the owner's call on the place and on how long finished
-runs are kept).
+the one machine-facts module. Ruled by the owner (contract A2): a private folder in his home
+directory, and finished runs are kept, because a restore years later reads the sunset's record.
 
 ## Operations that wait for the owner
 
@@ -205,7 +205,7 @@ pushed tree.
 
 ## Questions this page leaves
 
-1. Where the run directory lives and how long finished runs are kept (contract Q1). The owner's.
+1. Where the run directory lives: RULED (contract A2), a private home folder, finished runs kept.
 2. Whether the host links an empty repository (contract Q2). Measured in the live join; the stop
    is drawn above.
 3. Whether the canary line of the kit check (a model quotes the first line of its instructions)

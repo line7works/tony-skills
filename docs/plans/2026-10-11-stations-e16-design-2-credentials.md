@@ -4,7 +4,7 @@ Drafted 2026-10-11 by the control room, beside the E16 lane contract
 (`2026-10-11-stations-e16.md`, ruling E16-7; plan amendment A8: "the script extraction tests the
 tracing and error-output paths for credential exposure"). **Status: revision 2, after the outside
 reviewer's first read (findings F8 to F11 of that read are answered here, each named where its
-rule lands). Not yet read a second time.**
+rule lands), with the owner's rulings of contract A2 applied. Not yet read a second time.**
 
 ## The problem
 
@@ -75,8 +75,8 @@ write some secret-bearing files. These are the only ones, and each has a rule:
 | File | Where | Protection |
 |---|---|---|
 | the pulled env file | the working tree | ignored by git (proven before every commit), owner-only |
-| the database dump | the archive (page 3 says where) | owner-only, outside any working tree, never printed, hash recorded |
-| the saved hosting env values, if the owner rules that sunset saves them | the archive | owner-only, never printed, key names and hash recorded |
+| the database dump | the archive, beside the repo (page 3) | owner-only, outside any working tree, never printed, hash recorded |
+| the saved hosting env values (ruled, contract A2: sunset saves them, every environment) | the archive, beside the repo | owner-only, never printed, key names and hash recorded |
 | protected way-back records | the run directory or the archive | owner-only, referenced by hash |
 | the private password file | a private folder of the run | owner-only, created exclusively, removed when the command ends, and removed by the next run's recovery if a kill left it |
 
@@ -85,7 +85,8 @@ A secret anywhere else is a failure. A permitted store with wider permissions is
 ## The hosting token
 
 The provider module reads the token in-process (from the environment, else from the hosting tool's
-credentials file: contract Q3 asks whether that second read stays), registers it, makes the
+credentials file: ruled by the owner, contract A2, both stay, the environment first; the file is
+opened by one function, read only, and no other file of that tool is touched), registers it, makes the
 request itself to the provider's fixed host, and drops it. No child process, no argument, no
 environment, no file. A missing token, an expired one (401 or 403) or a missing file each end as
 an `owner` operation showing the dashboard step, as v1 does; the module never tries to repair or
@@ -135,9 +136,8 @@ scan run by the script over the run directory and the working tree, so no one re
 
 ## Questions this page leaves
 
-1. Keep the read of the hosting tool's credentials file, or require the environment variable
-   (contract Q3). The owner's. Either way the value takes the channel above; the question is
-   only whether the module may open that one file.
+1. The read of the hosting tool's credentials file: RULED (contract A2), kept, after the
+   environment variable. The value takes the channel above either way.
 2. When the last net (key shapes) fires on a value the run never registered: redact, record a
    `redacted-unknown` event with the sink and no value, finish the run, and say so in the summary.
    Stopping mid-sunset would strand the project. With rule 2 in place this can happen only on text
