@@ -6,7 +6,9 @@ document is the single source for how the lifecycle code works.** The lane contr
 (`2026-10-11-stations-e16.md`) holds the owner's rulings and points here; it restates no mechanic.
 The three design pages of 2026-10-11 are withdrawn. Where this document and anything else
 disagree about a mechanic, this document is right and the other text is a defect.
-**Status: not yet read by the outside reviewer.**
+**Status: the frame document (`2026-10-12-stations-e16-frame.md`) is the source for what Parts 1 to 3
+held, and Part 4's rows are a draft the lanes start from, not a source (the contract's section 18,
+A5).**
 
 How to read it. Part 1 is the executor: thirteen rules, each stated once. Part 2 is the evidence a
 run may use to say "I did this". Part 3 is how a secret travels. Part 4 is the catalog: every
@@ -14,53 +16,11 @@ operation of sunrise, sunset and restore as one row with the same columns. Part 
 Part 6 is what is measured later and what risk is left. A builder builds Parts 1 to 3 as the frame
 (slice 1) and the rows of Part 4 as the lanes (slices 2 to 4).
 
-## Part 1. The executor's rules
+## Parts 1 to 3. Withdrawn: see the frame
 
-| # | Rule |
-|---|---|
-| X1 | **One run at a time per project.** A run holds an exclusive lock on the project's name and on its run directory from before its first probe until it ends. A second run stops at once and names the first. |
-| X2 | **The run directory** is a private folder in the owner's home directory, outside every repository, one folder per run, readable by the owner only; finished runs are kept (ruled, A2). It holds the validated inputs, the manifest, the journal, the protected records (Part 3) and the rendered forms. |
-| X3 | **Look, then manifest, then go.** A run first only reads (the look steps of Part 4). From what it read it builds the manifest: the catalog rows that apply, in order, with their targets filled in, including every conditional row that might apply (a row with a "when" clause). The preview is rendered from the manifest and nothing else. The owner's go is recorded with the manifest's hash. Execution refuses a manifest whose hash differs and any operation the manifest does not hold. |
-| X4 | **A manifest never changes after the go.** Anything that would add, drop or retarget a row ends the run as `stopped`; a new run looks again, previews again and needs a new go. Conditional rows are how a known fork (a terms page, a tool with no rename) is approved in advance. |
-| X5 | **A probe only reads, and has five answers.** For a row whose effect turns state B (the row's "acts on" column) into state A: `before` (the target is in B), `done-ours` (in A, with evidence from Part 2 that this run did it), `done-found` (in A, with no such evidence), `other` (in neither B nor A), `unknown` (the read failed, was partial, was on the wrong account, or timed out). No sixth answer and no inference from time. |
-| X6 | **What the executor does with each answer.** `before`: write the intent, apply the effect, run the check, write the result. `done-ours`: nothing; go on. `done-found`: write a `found` line; go on; **the row gets no way back**, and every form that lists what the run did lists it as found, not done. `other`: stop the run and name what is there. `unknown`: stop the run and name the row and what the owner can check. |
-| X7 | **The intent holds everything the way back and the next probe need, and it is on disk before the effect.** Every span about to change with its before-image AND its after-image (the after-image is computed before the effect, never read back from the result), the position of a line about to be removed, the whole definition of a thing about to be cancelled, the state the provider reported. A line is appended, flushed and synced with its directory before the step it describes. A result line adds only what was observed (an id, a hash, a state). A cut-off last line is discarded on read and its row is then probed like any other. |
-| X8 | **An effect is conditional on its before-state by construction.** A file is created exclusively. A folder is moved by the system's exclusive rename (it fails if the target exists); where the platform has none, the row stops. A provider create is one that fails when the name exists. A shared local file is changed under an advisory lock by writing a new file and swapping it in only if the old file's hash is the one the intent recorded (the remaining race is RK2 in Part 6). An effect that cannot be made conditional is not in this catalog; another effect is used (row SR09 is the example: the hosting project is made by a create call that fails on a taken name, never by a link that adopts). |
-| X9 | **An intent with no result is resolved by the probe, and a create is never sent twice on a guess.** For a row that changes an existing thing: `before` means the effect did not land, apply it; A means `done-found` (X6). For a create whose provider refuses a second thing of the same name ("name-unique" in the catalog): the same. For a create that is not name-unique (the database): the row stops as `unknown` until all three hold: the child that sent it is known dead, the provider's request window has passed (a number per provider, Part 6), and a complete authenticated listing shows nothing made for this project. Then, and only in a new run with a new go, the create is offered again. If the listing shows one, the row stops and the owner answers whether it is this project's (an owner-answer row). |
-| X10 | **Order comes from each row's "after" column,** never from position alone. A row runs when every row it names is `done-ours` or `done-found`. A row whose dependency is waiting on the owner is written as `blocked` and skipped. |
-| X11 | **Two kinds of owner row.** An owner-action row (accept a terms page, rename in a dashboard, pause in a dashboard) is complete when its read-only probe shows state A, and by nothing else: his saying "done" only asks the run to probe again; a probe that shows A without his saying anything completes it. An owner-answer row (confirm a name, give the reason, say whether a found resource is this project's) is complete when his typed answer is recorded. The script never performs either. |
-| X12 | **A probe tests only durable facts.** Each row's "durable facts" are the facts no later row of the same manifest changes. The full check (hashes, counts) runs once, right after the effect, and its values go in the result. On a rerun the probe decides `done` from the durable facts alone, so a later row's approved change is never read as drift. |
-| X13 | **How a run ends.** `complete`: every row is `done-ours` or `done-found` and every check row passed. `waiting`: nothing runnable is left and at least one owner row is incomplete; each is listed with its exact step; the lock is released; a rerun starts from the probes. `stopped`: a row answered `other` or `unknown`, a check failed, or X4 applied; the summary says which rows finished, and for sunset names both ways on (rerun forward, or restore over the finished rows). |
-
-## Part 2. Evidence that the run did it
-
-An intent line plus a matching state proves nothing about who acted: the run can die after the
-intent and before the effect, and the owner can then do the same thing by hand. So:
-
-| Evidence | What it is | Makes a row `done-ours` |
-|---|---|---|
-| E1 | a durable result line of this run for the row, and the row's durable facts still hold | yes |
-| E2 | a marker the effect itself carries: a file naming the run and the row, written inside a folder under the intent and moved with it by the exclusive rename | yes, with the durable facts |
-| E3 | an id the provider assigned in the create call's own answer, recorded in the result (a case of E1), and the provider's read of that id showing the expected account | yes |
-| E4 | the owner's recorded answer that a found resource, shown to him by its id, is this project's (X9, X11) | yes, for that resource; the answer is the evidence |
-| none | an intent with no result and state A | no: `done-found`. For sunset this means restore will not reverse that row and says so |
-
-The cost of the last line is accepted on purpose: a run killed in the instant between an effect
-and its result line loses the right to reverse that one effect, and tells the owner. The other
-choice is a restore that can reverse something the owner did himself.
-
-## Part 3. Secrets
-
-| Rule | |
-|---|---|
-| K1 | A secret is a provider token, a database password, a value of an env file, a key or certificate file, and anything inside a record the run copies for the way back (a schedule's command, a launch agent's file, a memory note). |
-| K2 | **Channels.** The hosting token is read in-process (the environment variable, else the hosting tool's own credentials file, read only, by one function: ruled, A2), used in a request the frame makes itself to the provider's fixed host over TLS with no redirect followed and no request logging, and dropped. The database password goes to `pg_dump` in a private password file: created exclusively, owner-only, in a private folder of the run, named to the tool by a path in its environment, removed when the tool ends and by the next run's start if a kill left it. The host, port, database and user are not secrets and are ordinary arguments. `gh` keeps its own token; the frame never asks for it. |
-| K3 | **Never.** A secret is never an argument of any child, never in any child's environment, never in the journal, the manifest, a form, a trace, standard output, standard error or an error message. Every child starts with a minimal, listed environment that drops the session's debug variables; the runner refuses a known debug or verbose flag and refuses a registered secret, whole or in part, in an argument. |
-| K4 | **Nothing a provider's tool prints is kept or shown.** From each command the frame keeps validated fields only: the exit code, ids, states, counts, key names, and an error kind from a fixed list (`not-found`, `auth`, `conflict`, `terms`, `timeout`, `other`). There is no "filtered tail". An error shown to the owner or the executor is the row, the error kind and the command with its non-secret arguments, so he can run it himself in his own terminal and read the tool's words there. An unexpected exception is reported as its type and the row; its message text is never printed. |
-| K5 | **The permitted secret stores, and no other file may hold a secret:** the pulled env file in the working tree (ignored by git, proven before every commit; owner-only); the database dump, the saved hosting env values and the memory copy in the sunset folder beside the archived repository (owner-only, outside every working tree; ruled, A2); the protected way-back records in the run directory (owner-only; referenced from the journal by hash, never inlined); the private password file while its tool runs. A permitted store with wider permissions is a failure. Each is created exclusively and never through a symbolic link. |
-| K6 | **Inputs are validated before they are stored.** An input that fails the secret check (a pasted address with a password in it) is refused at the start; nothing is stored raw. |
-| K7 | **Before every commit the frame scans what will be committed, by content, and before the push every commit to be pushed.** A hit stops the run before the push, naming the file and showing nothing. |
-| K8 | **In tests,** the fake HTTP host records that an authorization header arrived and whether its hash equals the expected token's hash; it never stores the header. That is the authorized transmission, and it is the only place a test may see the token leave the frame. Every other place is scanned: every file under the fixture home and the fixture working tree, both output streams, every argument and environment every fake recorded for itself and for anything it started, every git object. A canary found outside a permitted store, or in a permitted store with wider permissions, fails. The scan looks for the canary whole, for each component, and for the percent-encoded and base64 forms of both. |
+Parts 1 to 3 (the executor's rules X1 to X13, the evidence classes E1 to E4 and the secret rules
+K1 to K8) are withdrawn. Their single source is now the frame document,
+`2026-10-12-stations-e16-frame.md`. An id of those three Parts cited below names a withdrawn rule.
 
 ## Part 4. The catalog
 
@@ -279,22 +239,3 @@ Three more rows change what v1 does, each ruled by the owner (A4): SR09 makes th
 a create call that fails on a taken name, where v1 links under `--yes`; K4 keeps and shows nothing
 a provider's tool prints, where v1's model reads and relays it; T30 writes the tombstone last from
 the journal, where v1 writes it in its first phase.
-
-## Where each of the second read's findings lands
-
-| Finding | Closed by |
-|---|---|
-| F1, F2 | Part 2 (an intent and a matching state are never evidence); X5, X6 (`done-found` has no way back); 4.3's first paragraph |
-| F3 | X9 |
-| F4 | X8, SR09 |
-| F5, F16 | X7 (the after-image is in the intent); the span rule and the line rows of 4.3 |
-| F7 | X11 |
-| F8, F9, F10, F11 | Part 3 (K2 to K5, K8); RK1 for what cannot be closed |
-| F12, F15 | T05, V09 |
-| F13 | G9 and its table |
-| F18 | Part 5 |
-| N1 | X5 (`before` is the approved state B) |
-| N2 | T30, V04 |
-| N3 | G5, SR13 |
-| N4 | G9's table |
-| N5 | X12 |
