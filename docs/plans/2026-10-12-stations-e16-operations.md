@@ -220,8 +220,9 @@ Measured, not assumed:
   resource, from the provider's own documents, for the tombstone's clock lines. A limit that cannot
   be established is printed as unknown, never as none.
 
-Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and ruled Q7 on
-2026-10-12 (the contract's section 18, A4).** How likely each is was never measured.
+Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and ruled Q7 (the
+contract's section 18, A4), and accepted RK4, RK5 and the run directory's assumption (A6), on
+2026-10-12.** How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
   tools with his own configuration, and they keep their own logs, caches and credential stores as
