@@ -15,6 +15,14 @@ THE STATION NAMES. The kickoff lines name the v2 stations while v1 stays install
 <doc>`, the by-hand alternative `/build-v2 <slice> <doc>` stated once, an open card's `/recheck-v2 <slice> <doc>`,
 and the gate-open closer's `/handoff-v2`. The station name is a value of the form; the form's bytes around it are
 v1's.
+
+THE SUITE VALUE (the E15 lane contract A34 (3)). The block's `- Suite:` line and the report's `Suite:` field carry
+one value, `suite_text`: the photograph's suite state and provenance, which name the suite record by its path
+relative to the workspace, or by its file name alone when it lies outside (`photograph.record_name`). No absolute
+path reaches either: a photograph taken before that rule holds the record's resolved path (`suite.path`) inside its
+state or provenance, and `suite_text` writes the file name alone in its place. The form does not move: the label, its
+place and the separator are as they were, and an earlier block's `- Suite:` line is carried as it reads
+(`suite_line`), whatever it holds.
 """
 import re
 
@@ -129,9 +137,15 @@ def repo_text(repo):
 
 
 def suite_text(suite):
+    """The suite value of the block and of the report (THE SUITE VALUE, module docstring)."""
     if not suite or suite.get("state") in (None, "none recorded"):
         return "none recorded"
-    return "%s%s%s" % (field(suite["state"], "the suite state"), SEP, field(suite["provenance"], "its provenance"))
+    state, provenance = suite["state"], suite["provenance"]
+    rooted = suite.get("path")
+    if isinstance(rooted, str) and rooted and isinstance(state, str) and isinstance(provenance, str):
+        name = rooted.rstrip("/").rsplit("/", 1)[-1] or "the record"
+        state, provenance = state.replace(rooted, name), provenance.replace(rooted, name)
+    return "%s%s%s" % (field(state, "the suite state"), SEP, field(provenance, "its provenance"))
 
 
 def open_text(finding):

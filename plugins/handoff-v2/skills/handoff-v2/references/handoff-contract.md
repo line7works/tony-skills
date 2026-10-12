@@ -98,8 +98,15 @@ imported neighbour; the component's own sentence names the old number). `write` 
 The repo: the branch (`git symbolic-ref`), HEAD, the default branch (the remote's HEAD, else `main`, else `master`)
 and the commits ahead of it (`git rev-list --count`), the tree (`git status --porcelain`: `clean` or `dirty` with the
 paths). The suite: `--suite-record` names the last-recorded suite state, read with its provenance (a build-v2
-`result.json`: its checks counted passed, failing and not run, its run id, slice, path and time, and the file's hash;
-any other file is named, its state not read); without it, "none recorded". No test suite is ever run. The slice just
+`result.json`: its checks counted passed, failing and not run, its run id, slice, name and time, and the file's hash;
+any other file is named, its state not read); without it, "none recorded". The record is named by where it lies (the
+E15 lane contract A34 (3), `photograph.record_name`): by its path relative to the workspace when it lies inside the
+workspace, links followed on both, and by its file name alone when it does not (a name that would start with `~` is
+written behind `./`). The suite's `state` and `provenance`, the words the block and the report carry, hold that name
+and never an absolute or a home-directory path; `suite.path`, in `photograph.json` and in the result's `photograph`,
+keeps the record's resolved absolute path beside its `sha256` and is rendered nowhere. A record is read as a build-v2
+result only when its `run_id` is a build-v2 run id (one path segment), and its `slice` is named only when it is one
+word that starts with neither `/` nor `~`. No test suite is ever run. The slice just
 finished: `station.slice` (a slice the doc does not hold stops, `slice-unknown`), else the last slice in document
 order whose card is not `not started`. Writes `photograph.json`.
 
@@ -332,7 +339,9 @@ directory, and writes nothing else.
 a card this run's grants moved reads as the new card, naming the one it moved from; otherwise the card, and the card
 after this run's grants where the records derive another), `- Open:` (one line per finding open after the grants, or
 `none`), `- Repo:` (branch, commits ahead of the default branch, `clean`, `checkpointed <commit>` or `dirty (N paths)`,
-read at `write`), `- Suite:`, then `- Question:` (question, answer, where it landed) per answer that lands in the block,
+read at `write`), `- Suite:` (the suite's state and provenance, the record named as section 3.2 says, never by an
+absolute path; the same value as the report's `Suite:` field; a suite photographed before that rule is written with
+its record's file name alone), then `- Question:` (question, answer, where it landed) per answer that lands in the block,
 and `- Perishable:` per perishable. No line comes from the answer but the questions, the answers and the perishables.
 
 ## 7. The next move

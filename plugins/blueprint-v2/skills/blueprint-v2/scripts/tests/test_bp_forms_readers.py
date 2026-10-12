@@ -77,8 +77,8 @@ class BuildV2Reads(_Rendered):
         self.assertEqual(entry["title"], "Count turns")
         self.assertEqual(reader.requirements(entry), ["R1 %s `spin(n)` returns `n + 1`" % bplib.D,
                                                       "R2 %s the count lives in memory only" % bplib.D])
-        # the inline `Footprint:` form of the template gives this reader no named paths (see the report)
-        self.assertEqual(reader.named_paths(entry), [])
+        # the one-line `Footprint:` form of the template names the slice's paths (the E15 lane contract A34 (2))
+        self.assertEqual(reader.named_paths(entry), ["src/turnstile.py", "tests/test_turnstile.py"])
 
     def test_every_slice_of_an_extended_doc_with_its_status(self):
         ws, path = self.extended_doc()

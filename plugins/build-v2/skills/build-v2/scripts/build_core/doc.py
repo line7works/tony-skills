@@ -10,6 +10,17 @@ phase writes comes from the document and nothing from a conversation. What this 
     Checks:                       `<name>: <command>`, the checks the slice names
     Not in this slice:            the boundaries the slice states
 
+THE FOOTPRINT'S TWO FORMS (the E15 lane contract A27 (3) and A34 (2); build-contract section 6). A slice names its
+paths in one of two forms. The one-line form, which the build-doc form and every real plan write: a line at column 0
+that reads `Footprint:` (the label as the bare form spells it) with a value after the colon, `Footprint: <path>,
+<path>`. The value is split as ship-v2 splits it (`footprint_entries`): commas outside backtick spans separate the
+entries; an entry holding backtick spans names the spans' contents; any other entry names its text, trimmed; an
+empty entry names nothing and a path is named once. The bulleted form, as this core always read it: a bare
+`Footprint:` label, then `- ` or `* ` lines. A slice that holds both is read by its one-line form, wherever the two
+stand, and its bulleted list is then no part of its footprint; a slice's first one-line `Footprint:` is its
+footprint and a later one is not read; the lines under a one-line `Footprint:` are not its entries. Only
+`Footprint:` has a one-line form: every other label is read under its bare form alone.
+
 Records are NOT read here. A finding, a recheck line, a waiver and a reopening are the records
 component's, read through `records.py state`, and the punch list in the document is a rendering
 of them. This module never parses one, which is why a document whose records the importer
@@ -28,6 +39,8 @@ STATUS = re.compile(r"^(\s*Status:\s*)(.*?)(\s*)$")
 LABEL = re.compile(r"^([A-Z][A-Za-z ]*):\s*$")
 BULLET = re.compile(r"^[-*]\s+(.*?)\s*$")
 CHECK = re.compile(r"^([^:]+?)\s*:\s*(.+?)\s*$")
+VALUED = re.compile(r"^([A-Z][A-Za-z ]*):[ \t]*(\S.*?)\s*$")     # a label with its value on the same line
+SPAN = re.compile(r"`([^`]*)`")
 
 LABELS = {
     "footprint": "footprint",
@@ -58,8 +71,10 @@ def read(workspace, document):
 def parse(text):
     """Every slice of the document, in file order.
 
-    Each slice: `{name, title, line, status_line, status, sections}` where `sections` holds the
-    labelled lists this module knows, each a list of the bullet lines under it.
+    Each slice: `{name, title, line, status_line, status, sections, footprint, footprint_line}` where
+    `sections` holds the labelled lists this module knows, each a list of the bullet lines under it,
+    and `footprint` the paths of the slice's one-line `Footprint:` (None when it has none) with
+    `footprint_line` its line number (THE FOOTPRINT'S TWO FORMS, module docstring).
     """
     lines = text.split("\n")
     slices = []
@@ -70,7 +85,7 @@ def parse(text):
         if heading:
             current = {"name": heading.group(1), "title": (heading.group(2) or "").strip(),
                        "line": index + 1, "status_line": None, "status": None,
-                       "sections": {}}
+                       "sections": {}, "footprint": None, "footprint_line": None}
             slices.append(current)
             label = None
             continue
@@ -92,6 +107,13 @@ def parse(text):
             if label:
                 current["sections"].setdefault(label, [])
             continue
+        valued = VALUED.match(line)
+        if valued and LABELS.get(valued.group(1).strip().lower()) == "footprint":
+            if current["footprint_line"] is None:
+                current["footprint_line"] = index + 1
+                current["footprint"] = footprint_entries(valued.group(2))
+            label = None
+            continue
         bullet = BULLET.match(line)
         if bullet and label:
             current["sections"][label].append(bullet.group(1))
@@ -110,8 +132,35 @@ def find_slice(text, name):
     raise DocumentError("the build doc carries no slice %r (it carries: %s)" % (name, known))
 
 
+def footprint_entries(value):
+    """The paths a one-line `Footprint:` value names, split as ship-v2 splits it (THE FOOTPRINT'S TWO
+    FORMS; ship-v2's `ship_core/doc.py`, `footprint_entries`, restated here because a core never
+    imports another's code)."""
+    entries, current, inside = [], "", False
+    for char in value:
+        if char == "`":
+            inside = not inside
+        if char == "," and not inside:
+            entries.append(current)
+            current = ""
+        else:
+            current += char
+    entries.append(current)
+    out = []
+    for entry in entries:
+        spans = SPAN.findall(entry)
+        names = [span.strip() for span in spans] if spans else [entry.strip()]
+        for name in names:
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
 def named_paths(entry):
-    """The slice's `Footprint:` entries: the paths the slice names. The scope of the build."""
+    """The slice's `Footprint:` entries: the paths the slice names. The scope of the build. The
+    one-line form's paths when the slice has a one-line `Footprint:`, else the bulleted list's."""
+    if entry.get("footprint") is not None:
+        return list(entry["footprint"])
     return list(entry["sections"].get("footprint") or [])
 
 

@@ -21,6 +21,37 @@ once per distinct state a kill leaves (every byte of the workspace and the run d
 points that leave the same bytes start the same deterministic commands (the clock is fixed, `SHIP_V2_TEST_NOW`), so
 the replay of the first stands for both, and `ran` says how many replays ran. `ran` counts the kill points per
 command for the report.
+
+THE WORKERS (the E15 punch list, item 4; the E15 lane contract A34 (4)). A `Fleet` runs one flow's sweep side by
+side: `worker_count()` workers (the environment name `SHIP_V2_SWEEP_WORKERS`, a positive whole number; unset or
+empty, `default_workers`: a quarter of the machine's processors, at least 1 and at most 8, so the two runtimes' sweeps
+running at once take half of it), each a `Sweep` of its own in a temporary folder of its own: its own copy of the
+plugins, its own case, its own reference run, its own copies before every swept command. A case's files name their
+own folder (the input's workspace, the run directory, a visit's run directory) and carry hashes of such files, so a
+copy of a case runs only where it was built and two cases never hold the same bytes: a worker builds its case by
+running the flow, never by copying another's, and bytes are only ever compared inside one case. Nothing is shared
+between workers but the list of lines and the results.
+
+With ONE worker no thread is started and `Sweep.kill_at` runs the window's lines one after another, in order, the
+replay right after the first kill point of each state: the sweep as it always ran. With more, a swept command runs
+in two passes, and the checks at a kill point are the same ones:
+
+1. The first worker's `record` run gives the window; every other worker records the command in its own case and
+   must find the same window (a line number is the same point of the program in every case). The window's lines are
+   dealt out in whole (`shares`: in order, each worker a run of neighbouring lines), and each worker, at each of its
+   lines, restores its case, kills, runs the command again and compares the bytes with its own reference
+   (`Sweep.check_at`): every kill point, the rerun and the byte comparison.
+2. The states. A worker tells its own kill points' states apart by their bytes, as one worker does. Across two
+   workers no bytes compare, so each worker but the first also kills at the last line of the share before its own,
+   in its own case: when that line leaves the bytes its own first line leaves, the two shares' neighbouring lines
+   are one state, and only then. A state that comes back later in the command, in another worker's share, counts
+   again: the replays are never fewer than one worker runs.
+3. Each state's first line is then replayed (`Sweep.replay_at`: a fresh restore, the kill, the rerun, the byte
+   comparison, then the rest of the flow to its terminal status), the lines taken from one queue by every worker,
+   because a replay is long and the states are not spread evenly over the window.
+
+`count_problem` names a sweep whose kill points are not exactly the tracer's window of the same run, or whose
+replays are not exactly its states' first lines.
 """
 import copy
 import hashlib
@@ -30,6 +61,8 @@ import shutil
 import signal
 import subprocess
 import sys
+import queue
+import threading
 import time
 
 import cr25lib
@@ -40,6 +73,62 @@ KILLPOINT = os.path.join(testlib.TESTS, "killpoint.py")
 BOTTOM = "The slice went through the loop. Read the block."
 # the receipt key the settle adds when the next command finishes a cut-off grant (grant.settle)
 SETTLE_WORDS = ("settled",)
+WORKERS = "SHIP_V2_SWEEP_WORKERS"
+MOST_WORKERS = 8
+
+
+# ---- the workers --------------------------------------------------------------------------------------------------
+
+def default_workers(cpus):
+    """A quarter of the processors, at least 1 and at most 8 (THE WORKERS): both runtimes' sweeps at once take half
+    the machine, and a machine of fewer than eight processors runs the sweep as it always ran."""
+    return max(1, min(MOST_WORKERS, (cpus or 1) // 4))
+
+
+def worker_count(environ=None, cpus=None):
+    """How many workers a sweep runs: `SHIP_V2_SWEEP_WORKERS` when it is set (a positive whole number, or the run
+    stops with words), else the default for this machine."""
+    environ = os.environ if environ is None else environ
+    raw = (environ.get(WORKERS) or "").strip()
+    if not raw:
+        return default_workers(os.cpu_count() if cpus is None else cpus)
+    if not (raw.isascii() and raw.isdigit()) or int(raw) < 1:
+        raise ValueError("%s is a positive whole number of workers (1 runs the kill points one after another, in "
+                         "order), not %r" % (WORKERS, raw))
+    return int(raw)
+
+
+def shares(points, count):
+    """The kill points dealt to at most `count` workers: every point once, in order, each share a run of neighbouring
+    points, sizes differing by at most one, no share empty."""
+    points = list(points)
+    count = min(count, len(points))
+    if count < 1:
+        return []
+    size, extra = divmod(len(points), count)
+    out, at = [], 0
+    for index in range(count):
+        end = at + size + (1 if index < extra else 0)
+        out.append(points[at:end])
+        at = end
+    return out
+
+
+def count_problem(points, done):
+    """None when the workers killed at exactly the points the tracer recorded, each once (in any order); else the
+    words: how many of how many, the lines never killed at, the lines killed at twice, the lines never recorded."""
+    if sorted(done) == sorted(points):
+        return None
+    want, got = set(points), set(done)
+    twice = sorted(set(line for line in done if done.count(line) > 1))
+    parts = ["the sweep killed at %d of %d recorded kill points" % (len(got & want), len(want))]
+    if want - got:
+        parts.append("never at line(s) %s" % ", ".join(str(n) for n in sorted(want - got)[:20]))
+    if twice:
+        parts.append("twice at line(s) %s" % ", ".join(str(n) for n in twice[:20]))
+    if got - want:
+        parts.append("at line(s) the tracer did not record: %s" % ", ".join(str(n) for n in sorted(got - want)[:20]))
+    return "; ".join(parts)
 
 
 class Ship(object):
@@ -322,25 +411,65 @@ class Sweep(object):
         last = max(w["return"] if w["return"] is not None else seen["lines"] for w in writes)
         return first, min(last, seen["lines"] - 1), seen["lines"]
 
-    def kill_everywhere(self, index, lines=None, stride=1):
-        """Kill the command at every line of its window (or at `lines`), each time on a restored copy; returns the
-        failures as words (empty when every kill point holds)."""
-        step = self.steps[index]
-        first, last, total = self.window(index)
-        points = list(lines) if lines is not None else list(range(first, last + 1, stride))
-        failures, replayed = [], {}
+    def left_by_kill(self, index, line):
+        """This case restored and the command killed at `line`: the key of every byte the kill leaves (the workspace
+        and the run directory), or None when the command ended before the line."""
+        self._restore(index)
+        if not killed_at(self.case, self.steps[index].args, line, os.path.join(self.tmp, "stop.json")):
+            return None
+        return sha_bytes(json.dumps(facts(self.case, raw=True), sort_keys=True).encode("utf-8"))
+
+    def kill_at(self, index, points):
+        """The sweep on one worker: kill the command at each of `points`, in order, each time on a restored copy of
+        this case; the rest of the flow is replayed at the first kill point of each state. Returns (the lines it
+        killed at or tried to, the failures as words, the distinct states it replayed)."""
+        done, failures, replayed = [], [], {}
         for line in points:
-            self._restore(index)
-            if not killed_at(self.case, step.args, line, os.path.join(self.tmp, "stop.json")):
+            left = self.left_by_kill(index, line)
+            done.append(line)
+            if left is None:
                 failures.append("line %d: the command ended before it" % line)
                 continue
-            left = sha_bytes(json.dumps(facts(self.case, raw=True), sort_keys=True).encode("utf-8"))
             problem = self._after_kill(index, line, replay=left not in replayed)
             replayed.setdefault(left, line)
             if problem:
                 failures.append(problem)
-        self.ran[step.name] = {"window": [first, last], "lines": total, "kill_points": len(points),
-                               "states": len(replayed), "failed": len(failures)}
+        return done, failures, len(replayed)
+
+    def check_at(self, index, points, before=None):
+        """One worker's share, the first pass (THE WORKERS, 1 and 2): at each of `points`, in order, the kill, the
+        rerun and the byte comparison, no replay. Returns ([(line, the key of the bytes the kill left, or None)],
+        the failures as words, the key the kill at `before` leaves in this case, the last line of the share before
+        this one, or None)."""
+        rows, failures = [], []
+        for line in points:
+            left = self.left_by_kill(index, line)
+            rows.append((line, left))
+            if left is None:
+                failures.append("line %d: the command ended before it" % line)
+                continue
+            problem = self._after_kill(index, line, replay=False)
+            if problem:
+                failures.append(problem)
+        return rows, failures, (self.left_by_kill(index, before) if before is not None else None)
+
+    def replay_at(self, index, line):
+        """A state's first line, the second pass (THE WORKERS, 3): on a fresh restore the kill, the rerun, the byte
+        comparison and the rest of the flow to its terminal status. Returns the failure as words, or None."""
+        if self.left_by_kill(index, line) is None:
+            return "line %d: the command ended before it" % line
+        return self._after_kill(index, line, replay=True)
+
+    def kill_everywhere(self, index, lines=None, stride=1):
+        """Kill the command at every line of its window (or at `lines`), each time on a restored copy; returns the
+        failures as words (empty when every kill point holds). One case, one line after another."""
+        step = self.steps[index]
+        first, last, total = self.window(index)
+        points = list(lines) if lines is not None else list(range(first, last + 1, stride))
+        done, failures, states = self.kill_at(index, points)
+        self.ran[step.name] = {"window": [first, last], "lines": total, "kill_points": len(done), "states": states,
+                               "failed": len(failures), "workers": 1,
+                               "recorded": len(points) if lines is not None else last - first + 1}
         return failures
 
     def _after_kill(self, index, line, replay=True):
@@ -370,6 +499,134 @@ class Sweep(object):
             return "line %d: the finished run differs from the reference: %s" % (
                 line, "; ".join(diff(self.final_facts, got))[:600])
         return None
+
+
+class Fleet(object):
+    """One flow's sweep on `count` workers, each a `Sweep` in a temporary folder of its own (module docstring, THE
+    WORKERS). `close` removes every folder it made."""
+
+    def __init__(self, test, flow, count=None, majors=1):
+        self.test, self.flow = test, flow
+        self.count = worker_count() if count is None else count
+        self.tmps, self.runs, self.ran = [], [], {}
+        try:
+            jobs = [lambda: self._build(majors) for _ in range(self.count)]
+            if self.count == 1:
+                jobs[0]()
+            else:
+                self._side_by_side(jobs)
+            first = self.runs[0]
+            self.steps = first.steps
+            for run in self.runs[1:]:
+                test.assertEqual(run.codes, first.codes, "every worker's reference run exits as the first worker's")
+                test.assertEqual([s.name for s in run.steps], [s.name for s in first.steps])
+                test.assertEqual((run.final.get("status"), run.final.get("stop_tag")),
+                                 (first.final.get("status"), first.final.get("stop_tag")))
+        except BaseException:
+            self.close()
+            raise
+
+    def _build(self, majors):
+        tmp = testlib.make_scratch("ship-sweep-")
+        self.tmps.append(tmp)
+        self.runs.append(Sweep(self.test, tmp, self.flow, majors=majors))
+
+    def close(self):
+        while self.tmps:
+            testlib.rmtree(self.tmps.pop())
+
+    @staticmethod
+    def _side_by_side(jobs):
+        """Run the jobs, each in a thread of its own (none started for no job), and raise the first one's error."""
+        errors = []
+
+        def guarded(job):
+            try:
+                job()
+            except BaseException as exc:      # an assertion in a worker is the test's failure, raised below
+                errors.append(exc)
+        threads = [threading.Thread(target=guarded, args=(job,)) for job in jobs]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        if errors:
+            raise errors[0]
+
+    def swept(self):
+        return self.runs[0].swept()
+
+    def kill_everywhere(self, index, lines=None, stride=1):
+        """Kill the command at every line of its window (or at `lines`), the points dealt to the workers; returns
+        the failures as words (empty when every kill point holds)."""
+        step = self.steps[index]
+        first, last, total = self.runs[0].window(index)
+        points = list(lines) if lines is not None else list(range(first, last + 1, stride))
+        dealt = shares(points, len(self.runs))
+        if len(dealt) <= 1:
+            done, failures, states = self.runs[0].kill_at(index, points)
+            replays = None
+        else:
+            done, failures, firsts = self._first_pass(index, dealt, (first, last, total))
+            replays, later = self._second_pass(index, firsts)
+            failures += [words for words in later if words not in failures]
+            states = len(firsts)
+        problem = count_problem(points, done)
+        if problem:
+            failures.append(problem)
+        if replays is not None and count_problem(firsts, replays):
+            failures.append("the replays are not the states' first lines: %s" % count_problem(firsts, replays))
+        self.ran[step.name] = {"window": [first, last], "lines": total, "kill_points": len(set(done)),
+                               "states": states, "failed": len(failures), "workers": max(1, len(dealt)),
+                               "recorded": len(points) if lines is not None else last - first + 1}
+        return failures
+
+    def _first_pass(self, index, dealt, window):
+        """Every kill point, its rerun and its byte comparison, each worker on its own share; then the states: (the
+        lines killed at, the failures, the first line of every state in line order)."""
+        name = self.steps[index].name
+        results = [None] * len(dealt)
+
+        def work(number):
+            run = self.runs[number]
+            if number:
+                self.test.assertEqual(run.window(index), window,
+                                      "%s: worker %d records another window than the first" % (name, number))
+            results[number] = run.check_at(index, dealt[number], before=dealt[number - 1][-1] if number else None)
+        self._side_by_side([lambda number=number: work(number) for number in range(len(dealt))])
+        firsts, held = [], None                # `held`: the state (its index in `firsts`) of the share's last line
+        for rows, _, before in results:
+            seen = {}
+            if before is not None and held is not None:
+                seen[before] = held            # the line before this share, killed at in this share's own case
+            for line, left in rows:
+                if left is not None and left not in seen:
+                    seen[left] = len(firsts)
+                    firsts.append(line)
+            held = seen.get(rows[-1][1]) if rows[-1][1] is not None else None
+        return ([line for rows, _, _ in results for line, _ in rows],
+                [words for _, failures, _ in results for words in failures], firsts)
+
+    def _second_pass(self, index, firsts):
+        """The replay at every state's first line, the lines taken from one queue by every worker: (the lines
+        replayed at, the failures)."""
+        waiting = queue.Queue()
+        for line in firsts:
+            waiting.put(line)
+        replays, failures = [], []
+
+        def work(run):
+            while True:
+                try:
+                    line = waiting.get_nowait()
+                except queue.Empty:
+                    return
+                problem = run.replay_at(index, line)
+                replays.append(line)
+                if problem:
+                    failures.append(problem)
+        self._side_by_side([lambda run=run: work(run) for run in self.runs[:max(1, len(firsts))]])
+        return replays, sorted(failures)
 
 
 def copy_of(doc):

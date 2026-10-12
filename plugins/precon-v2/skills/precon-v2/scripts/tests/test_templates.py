@@ -3,6 +3,9 @@
 On each form as shipped under `references/templates/` and on a filled example of each document
 (LF, CRLF, and no final newline); a changed label is detected; the renderers given the form's own
 placeholders produce the form byte for byte; the reading beside a form is never rendered.
+
+The fence rule (the E15 punch list, item 1; the E15 lane contract A34 (1)): one test per fence shape, each on
+`parse` and on `check`, each with its round trip (`TheFenceRule`).
 """
 import os
 import unittest
@@ -310,6 +313,195 @@ class RenderFromValues(unittest.TestCase):
         parsed = templates.parse_line(templates.render_stamp("2026-09-23", "m", blocker=1, question=2))
         self.assertEqual((parsed["kind"], parsed["date"], parsed["model"], parsed["counts"], parsed["question"]),
                          ("stamp", "2026-09-23", "m", {"BLOCKER": 1, "MAJOR": 0, "MINOR": 0}, 2))
+
+
+class TheFenceRule(unittest.TestCase):
+    """The E15 punch list, item 1 (the E15 lane contract A5 (2), A6 and A34 (1)): `parse` and `check` read a fence by
+    one rule. A fence opens on a line that starts at column 0 with three or more backticks or three or more tildes,
+    whatever follows the run on that line; it closes only on a line of the same character, at least as long, with
+    nothing after it but spaces or tabs; a line of the other character, or a shorter run, inside an open fence is
+    text. A fence still open at the document's end is a finding of `check` naming its opening
+    line and a row of role `unclosed-fence` in the outline. Every shape round-trips byte for byte.
+
+    Each shape is placed in slice A of the filled build doc, after its requirement line, and holds a `Status:` line
+    (and, where it says so, a slice heading): read as structure they are findings, read as a fence's content they are
+    text and the doc holds its form."""
+
+    AFTER = "- R1 %s `spin()` returns an int\n" % D
+    HELD = "Status: signed off"
+    HEADING = "## Slice Z %s never a slice" % D
+
+    def placed(self, lines, doc=BUILD, after=None):
+        after = self.AFTER if after is None else after
+        self.assertEqual(doc.count(after), 1)
+        text = doc.replace(after, after + "".join(line + "\n" for line in lines))
+        return text, doc[:doc.index(after) + len(after)].count("\n") + 1
+
+    def roles(self, name, text, first, count):
+        outline = templates.parse(name, text)["outline"]
+        self.assertEqual([row["line"] for row in outline], list(range(1, len(outline) + 1)))
+        return [row["role"] for row in outline[first - 1:first - 1 + count]]
+
+    def assertRoundTrips(self, name, text):
+        for shape in (text, text.replace("\n", "\r\n"), text.rstrip("\n")):
+            self.assertEqual(templates.render(templates.parse(name, shape)), shape)
+
+    def assertHeld(self, lines, roles, name="build-doc", doc=BUILD):
+        """The lines, placed, are one closed fence: these roles, no finding, the doc's own labels still read."""
+        text, first = self.placed(lines, doc=doc)
+        self.assertEqual(self.roles(name, text, first, len(lines)), roles, lines)
+        self.assertEqual(templates.check(name, text), [], lines)
+        self.assertEqual(templates.check(name, text.replace("\n", "\r\n")), [], lines)
+        plain = templates.parse(name, doc)["outline"]
+        fenced = templates.parse(name, text)["outline"]
+        self.assertEqual([(row["role"], row.get("key")) for row in fenced[:first - 1] + fenced[first - 1 + len(lines):]],
+                         [(row["role"], row.get("key")) for row in plain], "the lines around the fence read as before")
+        self.assertNotIn("unclosed-fence", [row["role"] for row in fenced])
+        self.assertRoundTrips(name, text)
+
+    def test_a_longer_fence_holds_a_three_backtick_line(self):
+        # C1A3-1's shape: four backticks around three; the inner line neither closes the fence nor opens one
+        self.assertHeld(["````", "```", "````"], ["fence", "text", "fence"])
+        self.assertHeld(["````", "```", self.HELD, self.HEADING, "```", "````"],
+                        ["fence", "text", "text", "text", "text", "fence"])
+        self.assertHeld(["~~~~~", "~~~", self.HELD, "~~~", "~~~~~"], ["fence", "text", "text", "text", "fence"])
+
+    def test_an_unclosed_fence_after_the_slices_is_named(self):
+        said = "the fence opened at line %d is never closed"
+        for opener in ("```", "~~~", "````text"):
+            # at the document's end, where nothing it hides is missed: the one finding is the fence itself
+            text = BUILD + opener + "\nan example left open\n"
+            line = BUILD.count("\n") + 1
+            for shape in (text, text.replace("\n", "\r\n"), text.rstrip("\n")):
+                self.assertEqual(templates.check("build-doc", shape), [{"line": line, "message": said % line}], opener)
+            self.assertEqual(self.roles("build-doc", text, line, 2), ["unclosed-fence", "text"], opener)
+            self.assertRoundTrips("build-doc", text)
+            # right after the slices: the fence is named, and the sections it holds read as text, so they are missing
+            text, line = self.placed([opener], after="Status: not started\n")
+            found = templates.check("build-doc", text)
+            self.assertIn({"line": line, "message": said % line}, found, opener)
+            self.assertIn("missing the section '## Punch list'", [f["message"] for f in found], opener)
+            rows = templates.parse("build-doc", text)["outline"]
+            self.assertEqual([row["role"] for row in rows[line - 1:]], ["unclosed-fence"] + ["text"] * (len(rows) - line))
+            self.assertRoundTrips("build-doc", text)
+        for name, doc in DOCS.items():
+            line = doc.count("\n") + 1
+            self.assertEqual(templates.check(name, doc + "```\n"), [{"line": line, "message": said % line}], name)
+            self.assertEqual(templates.parse(name, doc + "```\n")["outline"][-1], {"line": line, "role": "unclosed-fence"})
+            self.assertRoundTrips(name, doc + "```\n")
+
+    def test_a_tilde_fence_is_a_fence(self):
+        self.assertHeld(["~~~", self.HELD, self.HEADING, "~~~"], ["fence", "text", "text", "fence"])
+        text, first = self.placed(["~~~", "Open: a line a fence holds", "~~~"], doc=SCOPE,
+                                  after="- The storage format %s parked: needs research\n" % D)
+        self.assertEqual(templates.check("scope-doc", text), [])
+        self.assertEqual(self.roles("scope-doc", text, first, 3), ["fence", "text", "fence"])
+        self.assertRoundTrips("scope-doc", text)
+
+    def test_a_line_of_the_other_character_inside_a_fence_is_text(self):
+        # a tilde line inside a backtick fence
+        self.assertHeld(["```", "~~~", self.HELD, "~~~", "```"], ["fence", "text", "text", "text", "fence"])
+        self.assertHeld(["```", "~~~~~~", self.HELD, "```"], ["fence", "text", "text", "fence"])
+        # and a backtick line inside a tilde fence
+        self.assertHeld(["~~~", "```", self.HELD, "~~~"], ["fence", "text", "text", "fence"])
+        self.assertHeld(["~~~", "```", self.HELD, "```", self.HEADING, "~~~"],
+                        ["fence", "text", "text", "text", "text", "fence"])
+
+    def test_a_shorter_closing_run_does_not_close(self):
+        self.assertHeld(["`````", "````", self.HELD, "`````"], ["fence", "text", "text", "fence"])
+        self.assertHeld(["~~~~", "~~~", self.HELD, "~~~~"], ["fence", "text", "text", "fence"])
+        # a longer run of the same character closes
+        self.assertHeld(["```", self.HELD, "`````"], ["fence", "text", "fence"])
+        self.assertHeld(["~~~", self.HELD, "~~~~~~"], ["fence", "text", "fence"])
+
+    def test_an_opener_with_trailing_info(self):
+        self.assertHeld(["```python", self.HELD, "```"], ["fence", "text", "fence"])
+        self.assertHeld(["~~~ text", self.HELD, "~~~"], ["fence", "text", "fence"])
+        self.assertHeld(["~~~ a `tick` and a ~ in the info", self.HELD, "~~~"], ["fence", "text", "fence"])
+        # a line that carries info opens a fence and never closes one
+        self.assertHeld(["```", "```python", self.HELD, "```"], ["fence", "text", "text", "fence"])
+        self.assertHeld(["~~~", "~~~ text", self.HELD, "~~~"], ["fence", "text", "text", "fence"])
+
+    BACKTICKED = ("```example `status`", "``` `inline` code", "````text with a ` in it")
+
+    def test_a_backtick_opener_whose_info_holds_a_backtick_never_closed_is_an_unclosed_fence(self):
+        # fix round 1 (the outside reviewer's PL-1; the E15 lane contract A34 (1) has no exception): every run of
+        # three or more backticks at column 0 opens a fence, whatever follows the run, so what it hid stays hidden
+        said = "the fence opened at line %d is never closed"
+        for opener in self.BACKTICKED:
+            text, first = self.placed([opener, self.HELD])
+            rows = templates.parse("build-doc", text)["outline"]
+            self.assertEqual([row["role"] for row in rows[first - 1:]],
+                             ["unclosed-fence"] + ["text"] * (len(rows) - first), opener)
+            for shape in (text, text.replace("\n", "\r\n"), text.rstrip("\n")):
+                found = templates.check("build-doc", shape)
+                self.assertIn({"line": first, "message": said % first}, found, opener)
+                self.assertEqual([f for f in found if "fence" in f["message"]],
+                                 [{"line": first, "message": said % first}], opener)
+                self.assertNotIn("slice A: the label 'Status:' appears twice", [f["message"] for f in found], opener)
+                self.assertIn("missing the section '## Punch list'", [f["message"] for f in found], opener)
+            self.assertRoundTrips("build-doc", text)
+            # at the document's end the one finding is the fence itself
+            text = BUILD + opener + "\n" + self.HELD + "\n" + self.HEADING + "\n"
+            line = BUILD.count("\n") + 1
+            self.assertEqual(templates.check("build-doc", text), [{"line": line, "message": said % line}], opener)
+            self.assertEqual(self.roles("build-doc", text, line, 3), ["unclosed-fence", "text", "text"], opener)
+            self.assertRoundTrips("build-doc", text)
+
+    def test_a_backtick_opener_whose_info_holds_a_backtick_closes_on_a_run_at_least_as_long(self):
+        for opener in self.BACKTICKED:
+            close = "`" * (len(opener) - len(opener.lstrip("`")))
+            self.assertHeld([opener, self.HELD, self.HEADING, close], ["fence", "text", "text", "fence"])
+            self.assertHeld([opener, self.HELD, self.HEADING, close + "``  "], ["fence", "text", "text", "fence"])
+            # the structure after the closing line is read: slice A's own labels, slice headings, the ledger
+            text, first = self.placed([opener, self.HELD, self.HEADING, close])
+            after = templates.parse("build-doc", text)["outline"][first + 3:]
+            self.assertEqual([row["key"] for row in after if row["role"] == "label"],
+                             ["Acceptance criteria:", "Footprint:", "Not in this slice:", "Depends on:", "Status:"], opener)
+            self.assertEqual([row["key"] for row in after if row["role"] == "heading"], list(templates.LEDGER_SECTIONS))
+
+    def test_parse_and_check_agree_on_a_backtick_opener_whose_info_holds_a_backtick(self):
+        # what `parse` reads as fenced, `check` reads no label and no heading from: never closed, and closed
+        for opener in self.BACKTICKED:
+            close = "`" * (len(opener) - len(opener.lstrip("`")))
+            for lines, closed in (([opener, self.HELD, self.HEADING], False), ([opener, self.HELD, self.HEADING, close], True)):
+                text, first = self.placed(lines)
+                rows = templates.parse("build-doc", text)["outline"]
+                self.assertEqual([row["role"] for row in rows[first:first + 2]], ["text", "text"], (opener, closed))
+                self.assertEqual(rows[first - 1]["role"], "fence" if closed else "unclosed-fence", (opener, closed))
+                found = [f["message"] for f in templates.check("build-doc", text)]
+                self.assertNotIn("slice A: the label 'Status:' appears twice", found, (opener, closed))
+                self.assertNotIn("the form has no section '%s'" % self.HEADING, found, (opener, closed))
+                self.assertEqual("the fence opened at line %d is never closed" % first in found, not closed, (opener, closed))
+                self.assertEqual(found == [], closed, (opener, closed))
+                self.assertRoundTrips("build-doc", text)
+
+    def test_a_closing_line_with_trailing_spaces_closes(self):
+        self.assertHeld(["```", self.HELD, "```  \t"], ["fence", "text", "fence"])
+        self.assertHeld(["~~~", self.HELD, "~~~ \t "], ["fence", "text", "fence"])
+        self.assertHeld(["````", self.HELD, "`````   "], ["fence", "text", "fence"])
+        # anything else after the run and the line is the fence's text, not its close
+        self.assertHeld(["```", "``` not a close", self.HELD, "```"], ["fence", "text", "text", "fence"])
+        self.assertHeld(["~~~", "~~~ ~", self.HELD, "~~~"], ["fence", "text", "text", "fence"])
+
+    def test_parse_and_check_read_the_same_lines_as_fenced(self):
+        # one rule, called twice: a doc whose first line is a fence line, which `check` used to pass over
+        text = "```\n" + BUILD + "```\n"
+        self.assertEqual(self.roles("build-doc", text, 1, 2), ["fence", "text"])
+        self.assertEqual(templates.parse("build-doc", text)["outline"][-1]["role"], "fence")
+        found = [f["message"] for f in templates.check("build-doc", text)]
+        self.assertIn("no '## Slice <name> %s <short name>' section" % D, found)
+        self.assertNotIn("the fence opened at line 1 is never closed", found)
+        self.assertRoundTrips("build-doc", text)
+
+    def test_a_closed_fence_adds_no_role_and_no_key(self):
+        text, first = self.placed(["```", self.HELD, "```"])
+        rows = templates.parse("build-doc", text)["outline"][first - 1:first + 2]
+        self.assertEqual(rows, [{"line": first, "role": "fence"}, {"line": first + 1, "role": "text"},
+                                {"line": first + 2, "role": "fence"}])
+        self.assertEqual(templates.UNCLOSED, "unclosed-fence")
+        lines = templates.parse("inspect-lines", "~~~\n" + templates.render_clean("m") + "\n~~~\n")["outline"]
+        self.assertEqual([row["role"] for row in lines], ["fence", "text", "fence"])
 
 
 class NoV1Forms(unittest.TestCase):
