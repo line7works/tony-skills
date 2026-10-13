@@ -87,8 +87,18 @@ lock's file or the record of open runs exists. The refusal then says, in the too
 with nothing else but run ids: which of the two it found; where the file is kept; and the id of each
 run that a lock's record or the record of open runs holds. It prints all of this as SEC-12's
 withheld read lets it. A run whose id may not be printed is still listed: by the fixed words of
-withholding and the name of the file whose record holds its id, which he opens himself to read it.
-So he knows every run on record, as before. The ways on are steps of his, and the
+withholding and the name of a file whose record holds its id, the record of open runs or its lock's
+file, whichever may be printed, which he opens himself to read it. Where neither file's name may be
+printed, because each holds a value a run on record has caught, the refusal says in fixed words, in
+a line that holds no path and no name, that a run is on record which it cannot name; and in a line
+apart from that one it says where the lock files and the record of open runs are kept, so that he
+finds that run there by hand (the owner's ruling, A35). Both lines are printed under the withheld
+read like every other line. Where the place holds a caught value, the second line gives way to the
+fixed words of withholding and the first still stands. Where a caught value is part of the first
+line's own words, that line gives way too; and where the fixed words of withholding hold one,
+nothing is written in that place (SEC-12). So he is told of every run on record, by its id, by a
+file's name or by that line, but for a run whose line cannot be written at all. The ways on are
+steps of his, and the
 tool takes none of them for him. Where the file is not owner-only, he makes it owner-only and
 summons again. Where it is missing, he puts it back from a copy of his own and summons again. Where
 he has no copy, the one way left is a decision that is his alone: he ends by hand each run the
@@ -154,7 +164,16 @@ The keying value's file is then removed, and in a second pass given wider permis
 of the first run is summoned. In both passes the gate's output lists the second run by its id and
 the first by the fixed words of withholding and the name of the file whose record holds its id; the
 first run's id is in no output; nothing in either run directory has changed; and the file the output
-names does hold that id, so the fixture's owner can end both runs by hand as before.
+names does hold that id, so the fixture's owner can end both runs by hand as before. A caught file
+name: in a third pass the first run's lock is held by another invocation, and that run has also
+caught the fingerprint that names its lock's file, which its journal's record of its opening holds,
+and a word that is part of the name of the record of open runs, planted in its journal for the
+fixture. The gate's output then holds, for that run, the fixed line that a run is on record which
+the tool cannot name, with no path and no name in it, and in a line apart the place where the lock
+files and the record of open runs are kept; that run's id and the names of both files are in no
+output; and the second run is still listed by its id. With one more caught value planted that is
+part of that place's path, the second line gives way to the fixed words of withholding and the first
+line still stands.
 
 **RUN-3. One open run per project key.** A run is open from its first go (RUN-9) until it ends
 `complete`, `ended with exceptions` or `closed` (RUN-12). At the go the run is recorded as open
@@ -1085,16 +1104,29 @@ whatever becomes of the rest of the result, and whether it passed its own valida
 (the owner's ruling, A34): it is in the register; it is written to its protected record; the search
 for it is made; the disproof record is written where the search finds it; and the receipt is given,
 all as SEC-12 orders. One such value is not kept: one that fails its own validator and is under the
-least length. The least length is eight bytes, counted on the value's text in UTF-8 as the tool read
-it at the field's place, with white space at either end left out of the count; a place that holds no
-text holds no bytes. A failing value under it is dropped with the rest of the result: it does not
-enter the register, no search is made for it, no protected record is written, and the receipt says
-so (SEC-12). This least length is for that one case. It does not bear on a secret that passed its
-validator, on a channel secret, on a value read back from a disproof record, or on what counts as a
-line that holds a value. Custody changes nothing in the result itself: a result that another field
-made `malformed` stays `malformed`, and a secret field's value that fails its own validator makes
-the result `malformed` whether that value is kept or dropped. A kept value is kept as it was read. A
-value received in a secret field and kept is searched for in the run's records at once (SEC-12).
+least length. The least length is eight bytes. It is counted on what the tool read at the field's
+place in the tool's structured answer, in UTF-8, with white space at either end left out of the
+count. For a text that is the text itself, without the marks that enclose it in the answer. For a
+value that is not a text, which is a number, a truth value, a list or an object, it is the whole of
+that value as the answer writes it. Where nothing stands at the place, or what stands there is the
+answer's own word for no value, there is no value to count: nothing is kept, and the receipt says
+that the result held no such value (SEC-12). A failing value under the least length is dropped with
+the rest of the result: it does not enter the register, no search is made for it, no protected
+record is written, and the receipt says so (SEC-12). A failing value at the least length or over is
+kept whole, as it was read, in its protected record. For it the register holds these, as the value
+and the components SEC-12 speaks of: the value as it was read; the value without the white space at
+its ends, where that differs; and, where the value is a list or an object, each text and each number
+that stands in it, at any depth, that is itself at the least length or over by the same count. The
+names of an object's fields are no entries. The search is made for each of these; a disproof record
+owed for any of them refers to that one protected record; and the register holds the same for that
+value whenever it is read back from that record. This least length is for that one case: a value at
+a secret field's place that fails its validator, and what the register holds of it. It does not bear
+on a secret that passed its validator, on a channel secret, on any other value read back from a
+disproof record, or on what counts as a line that holds a value. Custody changes nothing in the
+result itself: a result that another field made `malformed` stays `malformed`, and a secret field's
+value that fails its own validator makes the result `malformed` whether that value is kept or
+dropped. A value received in a secret field and kept is searched for in the run's records at once
+(SEC-12).
 Where they hold it, a safe ground is disproved: the run stops, and SEC-12 says what is written first
 and what holds in every later invocation. An account or a team that equals no name in his settings
 ends the look (RUN-7), and the name the provider reported is shown nowhere. A field that the row
@@ -1153,14 +1185,25 @@ receipt, which names the protected record; that record holds the value as it was
 in the register and in no output; and the result is `malformed`. In a third pass the fixture's saved
 inputs hold the first pass's value: the journal holds the receipt-due record, the disproof record
 and the receipt, in that order, and the run is `stopped` on the disproof. Under the least length, in
-five passes: the failing value is one byte under it; one byte long; empty; over it where its white
-space is counted and one byte long once the white space at its ends is left out; and not text at
-all. In each the result is `malformed`; no protected record is written;
-the receipt says, in fixed words, that what stood at the secret field's place was under the least
-length and was dropped; and no disproof record is written. In the first two of the five the
-fixture's saved inputs hold that same text: the run is not stopped on a disproof, and the next
-status form shows that saved input as text, so the register holds no entry for it and nothing is
-withheld.
+five passes: the failing value is a text one byte under it; a text one byte long; an empty text; a
+text over it where its white space is counted and one byte long once the white space at its ends is
+left out; and a truth value. In each the result is `malformed`; no protected record is written; the
+receipt says, in fixed words, that what stood at the secret field's place was under the least length
+and was dropped; and no disproof record is written. In the first two of the five the fixture's saved
+inputs hold that same text: the run is not stopped on a disproof, and the next status form shows
+that saved input as text, so the register holds no entry for it and nothing is withheld. Nothing at
+the place, and in a second pass the answer's word for no value: no protected record is written and
+the receipt says that the result held no such value. White space at its ends: a failing text that is
+exactly at the least length once the white space at its ends is left out is returned with a space at
+each end, and is kept as it was read. In one pass the fixture's saved inputs hold that text with its
+two spaces, in another the text without them: in both the disproof record is written and the run is
+`stopped`. A value that is not a text: a failing number of twice the least length in digits is kept
+whole; with those digits in the fixture's saved inputs the disproof record is written and the run is
+`stopped`. A failing object that holds one text at the least length or over, one text under it and
+one number under it is kept whole. With the longer text in the saved inputs the disproof record is
+written and the run is `stopped`. With the shorter text, the number and the name of one of the
+object's fields in the saved inputs, and not the longer text, no disproof record is written, and the
+next status form shows all three as text.
 
 **SEC-5. Nothing a tool prints is kept or shown** (the owner's ruling, A4). What the owner or the
 executor sees of a failure is the operation, the kind, and the command with its declared arguments,
