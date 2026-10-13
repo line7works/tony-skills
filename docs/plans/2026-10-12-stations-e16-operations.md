@@ -271,6 +271,11 @@ How likely each is was never measured.
   already sent to a provider are not taken back. This names a value he typed, and no other. He was
   told that accepting it is a step toward the option he passed over when the reviewer marked the
   leak returned a fourth time (A24). Not measured.
+  What the frame leaves of it (the contract's A27; no new acceptance, and narrower than the words
+  above): where the run that caught the value wrote a record of the catch, a later run that reads
+  that record hides the value too, also where it meets it in an older run's records. The risk
+  stands where no journal holds such a record. The outside reviewer has not yet read the rules
+  this rests on.
 - **RK8, a death in the instant a secret arrives** (accepted by the owner, A26). If the tool dies
   in the moment a provider hands it a secret, before its first record of it, every later status of
   that run says that a secret may have been received and lost, and the run goes on. The tool never
