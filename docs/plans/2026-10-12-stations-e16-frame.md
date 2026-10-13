@@ -108,9 +108,9 @@ names the private file that holds it (SEC-6), and the owner summons again and gi
 (the owner's ruling, A21). A lock is of the kind the system releases when its holder dies, and is
 never broken by age. An invocation never waits for a lock: one that meets a held lock ends at once,
 names the run that holds it by the id in the lock's record, and reads nothing more. At a first lock
-it has read nothing of the project; at a later lock it has read the record of open runs and made the
-alias reads, and nothing else. A file that the runs of other projects also change has a lock of its
-own, held only around the one change (OP-3, C3).
+it has read nothing of the project; at a later lock it has read the record of open runs and, of the
+project, what the alias reads read and nothing else. A file that the runs of other projects also
+change has a lock of its own, held only around the one change (OP-3, C3).
 
 Test on fakes: of two invocations summoned with two spellings of one name (a different case, a
 hyphen against an underscore), the second ends on the lock with no probe call recorded; of two
@@ -120,19 +120,20 @@ sorted order and no wait, and every lock taken before a run directory is opened 
 held lock on a later key ends the invocation with nothing created; a refusal at a first lock
 records no read of the record of open runs and none of the project, and a refusal at a later lock
 records the read of the record of open runs, the alias reads the fixture's rows declare and no other
-read; of two summonses under names that fold to different keys, where only a fake provider's answer
-shows them to be one project, the second's first look ends `refused` with the other name in a
-private file and in no output, and with no lock taken under it; summoned again with both names, it
-meets the first's lock or its open run and is refused naming that run; the same answer met in the
-look of a re-plan of a run that has its go ends that invocation `stopped`, with the manifest in
-force byte-equal and the same form line; after the first is killed a third takes the locks and goes
-on; two runs of different projects that change one shared file both land their change. The names:
-a summons whose name is a canary equal to the fixture's hosting token, and one that carries that
-canary as a further name, each end refused with fixed text, and the fixture home then holds no lock
-file, no lock record and no new file; a summons whose name is a canary that equals no secret the
-tool can read before the project takes its locks and, after its go, is recorded as open, and the
-canary and its folded form, whole and in each form SEC-11 names, are in no lock's file name, no
-lock's record and not in the record of open runs, which hold fingerprints and run ids only; two
+read of the project; of two summonses under names that fold to different keys, where only a fake
+provider's answer shows them to be one project, the second's first look ends `refused` with the
+other name in a private file and in no output, and with no lock taken under it; summoned again with
+both names, it meets the first's lock or its open run and is refused naming that run; the same
+answer met in the look of a re-plan of a run that has its go ends that invocation `stopped`, with
+the manifest in force byte-equal and the same form line; after the first is killed a third takes the
+locks and goes on; two runs of different projects that change one shared file both land their
+change. The names: a summons whose name is a canary equal to the fixture's hosting token, and one
+that carries that canary as a further name, each end refused with fixed text, and the fixture home
+then holds no lock file, no lock record and no new file; a summons whose name is a canary that
+equals no secret the tool can read before the project takes its locks and, after its go, is recorded
+as open, and the canary and its folded form, whole and in each form SEC-11 names, are in no lock's
+file name, no lock's record and not in the record of open runs, which hold fingerprints and run ids
+only; two
 fixture machines give two different fingerprints for one name; with the keying value's file removed
 while a lock file exists, the gate fails, its output being fixed text that names what it found, the
 file's place and the ids of the runs on record, and no new value is made; with the file put back the
@@ -1239,9 +1240,9 @@ what follows a find there is said below. Where the records hold a value that arr
 ground is disproved (SEC-1), and the invocation does two things before anything else. First, in a
 run that has its go, it appends a disproof record to the journal (LOG-1). The record says where the
 value rests in the run directory and holds nothing of the value: for a value from a secret field,
-the protected record that holds it;
-for a channel secret, of which the tool keeps no copy (the owner's ruling, A2), the recorded content
-that holds it, by its place and the span within it. Then the invocation ends: `stopped` in a run
+the protected record that holds it; for a channel secret, of which the tool keeps no copy (the
+owner's ruling, A2), the recorded content that holds it, by its place and the span within it. Then
+the invocation ends: `stopped` in a run
 that has its go; `refused` before a first go, where there is no journal to hold a disproof record.
 That is so for a look, and for the invocation that was to record his go on a manifest an earlier
 invocation made: it records no go, writes no journal record and opens no run. In both a refusal form
@@ -1265,8 +1266,8 @@ it finds stays in the register. In a run that has its go, the disproof record ow
 that receipt, are the invocation's first journal records once the startup checks have passed, and
 the invocation goes on as its kind of summons has it, under the register. Before a first go it ends
 `refused`, as the paragraph above says. A disproof record whose value cannot be read where the
-record says is a failure of RUN-4's checks. From the
-disproof read on, the register does for each such value all that its paragraph says. A status
+record says is a failure of RUN-4's checks. From the disproof read on, the register does for each
+such value all that its paragraph says. A status
 summons, a close and a resume each render their form with the fixed words in the value's place. No
 ground proves a value equal to it. An operation whose command, record or form line would carry it is
 not started, and the run ends `stopped`; the ways on are a re-plan in which the owner changes the
@@ -1295,10 +1296,13 @@ record: the third run does not know, takes the name from the first run's journal
 and may render it and copy it into its own manifest. In both, what the owner types in the third run
 is his own word in that run (SEC-1) and is shown, and it is searched for again whenever a secret
 reaches that run's register. For a value he typed, this is RK7, which the owner accepted (A26;
-RISK-1). The same happens to what a run holds as safe that he did not type: what the tool built
-from his words, what it counted or measured, what his settings file holds, and what a validated
-file on this machine holds. RK7 does not name those. For them this limit is the frame's own, stated
-here, and it is an accepted risk only where the catalog's Part 6 names it.
+RISK-1). The same happens to four kinds of content that a run holds as safe and he did not type:
+what the tool built from his words, where the secret equals the built form; what the tool counted
+or measured; what his settings file holds; and the content of a file on this machine that a
+validator passed. For those four it is RK9, which the owner accepted (A28; RISK-1). RK7 names a
+value he typed and no other, and RK9 those four kinds and no other. What a run holds as safe besides
+them is the tool's own: its fixed text, the fixed words of a declaration, an id it made itself, and
+what it built from these alone (SEC-1). The same happens there, and neither risk names it.
 
 Before the startup checks pass. The startup checks are RUN-1's first two steps (the gate; the name
 check, the locks and the looks for an open run), RUN-4's checks on the run directory the invocation
@@ -1391,8 +1395,8 @@ each that the line can meet: a failed gate, a name that fails its check, a held 
 later lock, an open run found at the early look and one found at the second, a run directory with
 wider permissions, a journal with a broken chain, a disproof record whose value cannot be read. The
 fixture's journal and manifest hold a name recorded as safe, and a later disproof record of it. Each
-ends with output that is the tool's fixed text and at most a run's id, with that name in no output,
-and with no status form rendered from the records. The table's reads. For each of the twelve lines
+ends with output that is the tool's fixed text and at most run ids, with that name in no output, and
+with no status form rendered from the records. The table's reads. For each of the twelve lines
 the fakes record exactly the provider calls and the runner uses its third cell names and no other,
 and the fixture file system records, of this machine, the common startup reads that line reaches,
 the reads its third cell names, and no other. So there is no provider call and no runner use for a
@@ -1414,9 +1418,10 @@ the protected record and holds nothing of the name, and the receipt; and the run
 of these then passes its startup checks: a status summons; a resume on his current word; a re-plan;
 a close; once the run is closed, the first look of a later run under the same key; and, in a second
 fixture that is a sunset, the first look of a restore over it. In every one the name is in no
-output, form, error, new record or argument, alone or inside the path, but where the owner types it
-anew in the later run, which shows it as his own word and withholds what it takes from the first
-run's records. Each form is rendered, with the fixed words and the record's reference in the name's
+output, form, error, new record or argument, alone or inside the path, with one exception: the later
+run and the restore, where the owner types the name anew, each show that word and what they build
+from it as their own safe content, and withhold only what they take from the other run's records.
+Each form is rendered, with the fixed words and the record's reference in the name's
 place and with every other line FORM-2 requires. A fake that returns the name in an equal field
 named for it finds it held. The resume starts no command whose argument holds the name and ends
 `stopped`. The re-plan ends `stopped` with the manifest in force byte-equal. The restore plans the
@@ -1581,23 +1586,25 @@ unanswered or names a row that does not exist.
 
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted eight
-risks and one assumption (the contract's section 18, A4, A6, A18 and A26): RK1; RK2, which by his
-word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted nine
+risks and one assumption (the contract's section 18, A4, A6, A18, A26 and A28): RK1; RK2, which by
+his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
 before an invocation read its channel (SEC-12); RK7, for a live secret he typed, across runs
-(SEC-12); RK8, for a death in the instant a provider hands the tool a secret (SEC-12); and the run
+(SEC-12); RK8, for a death in the instant a provider hands the tool a secret (SEC-12); RK9, for a
+live secret he did not type, of the four kinds it names, across runs (SEC-12); and the run
 directory's assumption (RUN-4). Their wording is in the catalog's Part 6 and is not restated here.
 This frame removes none of them and accepts none itself. An operation carried under RK2, RK3, RK4 or
-RK5 is marked so in the journal, once for each of those risks it is carried under. RK1, RK6, RK7 and
-RK8 belong to no one operation, and no mark is recorded for any of them. Where RK8's instant has
-passed, the journal already shows a receipt due and not given (SEC-12); that is the record of what
-happened, and no mark of a risk.
+RK5 is marked so in the journal, once for each of those risks it is carried under. RK1, RK6, RK7,
+RK8 and RK9 belong to no one operation, and no mark is recorded for any of them. Where RK8's instant
+has passed, the journal already shows a receipt due and not given (SEC-12); that is the record of
+what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark beside RK2's; each mark is recorded exactly once for its operation
 and its risk, also after a kill and a resume; no other operation carries a mark, and no record
-carries a mark for RK1, RK6, RK7 or RK8, an operation with a receipt due and not given among them.
+carries a mark for RK1, RK6, RK7, RK8 or RK9, an operation with a receipt due and not given and a
+run that holds a disproof record among them.
 
 **RISK-2. A window nobody accepted is not the tool's to take.** A row whose effect has a window that
 no accepted risk names is written as an owner step (OP-9), and a manifest that holds it as a tool's
