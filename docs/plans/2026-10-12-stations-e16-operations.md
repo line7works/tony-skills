@@ -222,7 +222,8 @@ Measured, not assumed:
 
 Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and ruled Q7 (the
 contract's section 18, A4), and accepted RK4, RK5 and the run directory's assumption (A6), on
-2026-10-12, and RK6 the same day (A18).** How likely each is was never measured.
+2026-10-12, and RK6 the same day (A18). The same day his word on a lost sealed secret was
+withdrawn and RK6 came to cover less (A21, A22).** How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
   tools with his own configuration, and they keep their own logs, caches and credential stores as
@@ -253,11 +254,21 @@ contract's section 18, A4), and accepted RK4, RK5 and the run directory's assump
   replaced is in no record the tool holds. If a provider repeats the old token in an answer, the
   tool does not recognise it and may write it where it can be read. The tool keeps no private
   copy of a token to close this, by his word. How likely it is was not measured.
-- **His word on a lost sealed secret** (ruled by the owner, A18). Where a record that held a sealed
-  secret is lost, the tool withholds values from providers until he says that the lost value is
-  dead, replaced at the provider. From his word on it withholds no longer for that record. This
-  rests on his word: if the value is not dead and a provider repeats it, the tool does not
-  recognise it and may write it where it can be read.
+- **RK6, what it covers from A21 on** (the contract's A22; no new acceptance). The entry above is
+  the wording he accepted. Under the turned default (A20, A21) the frame holds every value a
+  provider returns unless a ground proves it safe, so by the frame's SEC-12 an old token that a
+  provider repeats in an answer is held like any other value, and that path is no longer part of
+  this risk as the frame words it. What RK6 still covers: the tool keeps no copy of a replaced
+  token, so it does not recognise the old token where the owner types it or where it sits in a
+  file on this machine. The outside reviewer has not yet read the rules this rests on. Not
+  measured.
+- **His word on a lost sealed secret: WITHDRAWN** (ruled by the owner, A18; retired by his ruling
+  of A21, question PS5). The frame no longer takes that word, so nothing rests on it and nothing
+  is accepted with it. The words as they stood, kept for the record: Where a record that held a
+  sealed secret is lost, the tool withholds values from providers until he says that the lost
+  value is dead, replaced at the provider. From his word on it withholds no longer for that
+  record. This rests on his word: if the value is not dead and a provider repeats it, the tool
+  does not recognise it and may write it where it can be read.
 - **The run directory** (accepted by the owner, A6). Every proof the tool makes rests on nothing
   but the run changing its run directory. The tool checks that the folder is owner-only and that
   its log is unaltered partway; it cannot detect a clean rewrite from end to end by a program
