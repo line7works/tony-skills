@@ -222,7 +222,7 @@ Measured, not assumed:
 
 Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and ruled Q7 (the
 contract's section 18, A4), and accepted RK4, RK5 and the run directory's assumption (A6), on
-2026-10-12.** How likely each is was never measured.
+2026-10-12, and RK6 the same day (A18).** How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
   tools with his own configuration, and they keep their own logs, caches and credential stores as
@@ -248,6 +248,11 @@ contract's section 18, A4), and accepted RK4, RK5 and the run directory's assump
   that appears between the check and the add is
   hidden by the shortcut until the line is removed. It shows the first time the name is typed;
   nothing is lost. Not measured.
+- **RK6, a token that was replaced** (accepted by the owner, A18). The tool reads a channel secret
+  such as the hosting token, uses it, and keeps no copy (A2). So a token that the owner has since
+  replaced is in no record the tool holds. If a provider repeats the old token in an answer, the
+  tool does not recognise it and may write it where it can be read. The tool keeps no private
+  copy of a token to close this, by his word. How likely it is was not measured.
 - **The run directory** (accepted by the owner, A6). Every proof the tool makes rests on nothing
   but the run changing its run directory. The tool checks that the folder is owner-only and that
   its log is unaltered partway; it cannot detect a clean rewrite from end to end by a program
