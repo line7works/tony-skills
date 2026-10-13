@@ -56,9 +56,10 @@ These name things. They carry no rule; every rule is in Part 3.
 ### 3.1 Runs, the look, the plan and the owner's word
 
 **RUN-1. Every invocation starts the same way.** In this order: the gate (the vault and machine
-checks); the locks (RUN-2); the run directory opened, or made for a new run (RUN-4); the rest of the
-look (RUN-5). Nothing comes before the gate, the cue included. A failed gate ends the invocation
-with nothing created and no lock taken.
+checks); the locks (RUN-2); the run directory opened, or made for a new run (RUN-4), and with it
+every run directory SEC-12 has the invocation open; the rest of the look (RUN-5). Nothing comes
+before the gate, the cue included. A failed gate ends the invocation with nothing created and no
+lock taken.
 
 Test on fakes: with no vault, with a stub vault, and with a vault inside a synced folder, the
 invocation ends refused, the fixture home is byte-equal to before, no lock file exists and the cue
@@ -69,17 +70,21 @@ gate, then the lock, then the run directory, then the look's reads, in that orde
 every character that is not a letter or a digit removed. An invocation takes the lock of the key of
 the name it was summoned with before it reads any thing of the project, and the lock of the key of
 every other name form the look resolves for the project on any layer before the manifest is built,
-in sorted order. A lock is of the kind the system releases when its holder dies, and is never broken
-by age. An invocation never waits for a lock: one that meets a held lock ends at once, names the
-run that holds it, and reads nothing more. A file that the runs of other projects also change has a
-lock of its own, held only around the one change (OP-3, C3).
+in sorted order. Name forms are resolved from the summons, from the run being continued and from
+this machine's own files, never from a provider's answer, so every lock is taken before the
+invocation's first runner use. A lock is of the kind the system releases when its holder dies, and
+is never broken by age. An invocation never waits for a lock: one that meets a held lock ends at
+once, names the run that holds it, and reads nothing more. A file that the runs of other projects
+also change has a lock of its own, held only around the one change (OP-3, C3).
 
 Test on fakes: of two invocations summoned with two spellings of one name (a different case, a
 hyphen against an underscore), the second ends on the lock with no probe call recorded; of two
 summoned with names that fold to different keys, where the first's look resolved the second's key,
 the second ends on the lock the same way; the lock fake's record shows the added keys taken in
-sorted order and no wait; after the first is killed a third takes the locks and goes on; two runs of
-different projects that change one shared file both land their change.
+sorted order and no wait, and every lock taken before the first runner call; a different name for
+the project that appears only in a fake provider's answer takes no lock; after the first is killed a
+third takes the locks and goes on; two runs of different projects that change one shared file both
+land their change.
 
 **RUN-3. One open run per project key.** A run is open from its first go (RUN-9) until it ends
 `complete`, `ended with exceptions` or `closed` (RUN-12). At the go the run is recorded as open
@@ -207,13 +212,17 @@ and each ending renders a status form from the manifest and the journal. Before 
 there is no open run, nothing to resume, and none of the five. An invocation that ends then ends in
 one of two ways: with its preview rendered, awaiting his go; or `refused`, where the gate fails
 (RUN-1), a lock is held or a run is open (RUN-2, RUN-3), a planning stop is met (RUN-7), an input is
-refused (SEC-9) or an answer is lacking (RUN-5). A refusal renders a refusal form from the summons's
-validated inputs and from what the look had read by then, naming each cause; it writes no manifest
-and no journal, and the next summons starts a new look. A summons turned away at the gate, at a held
-lock or by RUN-3 is `refused` in the same way whether or not the run it names has a go, and changes
-nothing in that run. A planning stop, a refused input or a lacking answer met in the look of a
-re-plan, in a run that already has a go, ends that invocation `stopped`, with the manifest in force
-unchanged.
+refused (SEC-9) or an answer is lacking (RUN-5). A refusal is always given in the CLI's output. At
+the gate and at a held lock that is all of it: nothing is created, no file and no folder, and the
+output is the tool's own fixed text naming the failed check or the run that holds the lock (SEC-12's
+guard). A refusal after RUN-1's third step is also rendered as a refusal form, a file in the run
+directory that step made or opened, from the summons's validated inputs and from what the look had
+read by then, naming each cause. A refusal writes no manifest and no journal, and the next summons
+starts a new look. A summons turned away at the gate, at a held lock or by RUN-3 is `refused` in the
+same way whether or not the run it names has a go, and changes nothing in that run, but for the one
+closing record EV-7 has it write. A planning stop, a refused input or a lacking answer met in the
+look of a re-plan, in a run that already has a go, ends that invocation `stopped`, with the manifest
+in force unchanged.
 
 | Ending | When | The run is then |
 |---|---|---|
@@ -226,9 +235,12 @@ unchanged.
 Test on fakes: the kill sweep's reference run ends `complete`; a fixture with an owner step ends
 `waiting` with the step listed and no lock held; a planted stop inside an operation ends `stopped`
 with that operation named; a stop that belongs to no operation in a run that has its go (a RUN-4
-failure) ends `stopped` with the cause named; a planning stop in a first look ends `refused`, with a
-refusal form naming each cause, no manifest and no journal written, no run open under the key, and a
-later resume summons finding nothing to resume; the same planning stop in a re-plan's look ends
+failure) ends `stopped` with the cause named; a failed gate ends `refused` with the fixture home
+byte-equal, so no refusal form, no run directory and no lock file, and with the CLI's output holding
+only fixed text that names the failed check; a held lock ends `refused` the same way, the output
+naming the holding run; a planning stop in a first look ends `refused`, with a refusal form in its
+run directory naming each cause, no manifest and no journal written, no run open under the key, and
+a later resume summons finding nothing to resume; the same planning stop in a re-plan's look ends
 `stopped` with the manifest in force unchanged; a fixture with a `left` step ends
 `ended with exceptions` with it listed; a closed run ends `closed`; for a run with a go on record no
 ending other than these five is ever recorded.
@@ -621,17 +633,23 @@ opening under its keys (RUN-3), which names the retiring run it closes. Until th
 nothing has changed: the retirement is open and the restore has no go. From the moment it is durable
 the retirement is closed for every purpose of RUN-3, whether or not its own journal yet says so, and
 a summons to resume it is refused. The retirement's own `closed` record, naming the restore, is
-written next; any invocation of either run that finds it missing writes it before it does anything
-else. Where a protected record or a keep that the restore needs is missing or fails its fingerprint,
-the operations that need it are planned `not applicable` with that reason, and the rest are still
-offered.
+written next. An invocation of either run that finds it missing writes it, and may: it does so after
+its gate, its locks and RUN-1's third step with RUN-4's checks, and before it refuses the summons,
+runs an operation or writes any other record. Where a protected record or a keep that the restore
+needs is missing or fails its fingerprint, the operations that need it are planned `not applicable`
+with that reason, and the rest are still offered; for a record that held a value sealed as a secret,
+SEC-12 says what else then holds.
 
 Test on fakes: a restore over a sunset that stopped after its barrier reverses exactly the
 operations that are `done` with a way back, and that sunset run is `closed` once the restore has its
 go; a kill before the restore's go is durable leaves the sunset open and resumable and the restore
 with no go; a kill after it and before the sunset's `closed` record leaves the restore open, a
-resume of the sunset refused, and the next invocation writing that `closed` record before any other
-record or call; at no write boundary can both runs apply an effect, and at none is the key left with
+resume of the sunset refused, and the next invocation of either run writing that `closed` record
+after its gate, its locks and RUN-4's checks and before it refuses, runs an operation or writes any
+other record; where that next invocation is a summons to resume the sunset, it writes the record,
+is then refused, and no fake records an effect call from the sunset; a failed gate or a held lock in
+that invocation leaves the record unwritten and nothing changed; at no write boundary can both runs
+apply an effect, and at none is the key left with
 no run that can go on; with two retiring runs on record for the key, the later one is the one read;
 a missing protected record, and a keep whose fingerprint no longer matches, each take only their
 dependents out of the offer, with the reason in the preview.
@@ -886,7 +904,7 @@ from its declared place, never by searching the tool's text, and keeps nothing t
 | count | a non-negative integer | yes |
 | flag | true or false | yes |
 | time | a timestamp in one registered form | yes |
-| id | the provider's identifier: an alphabet and a length limit the module registers | only with a declared meaning from the list below, or where the value equals safe content the run already holds |
+| id | the provider's identifier: an alphabet and a length limit the module registers | only with a declared meaning from the list below, or where the value equals safe content the run already holds; SEC-12 says when the second way alone is left |
 | name | a key name or a resource name: letters, digits and the punctuation the module registers, with a length limit | the same |
 | hash | a fingerprint in a registered form | the same |
 | address | a link whose host and path match a pattern the module registers for that command, with no user part, no fragment, and no query parameter but those the declaration lists, each with its own type and disposition | only if its path and every parameter in it may be promoted; otherwise the whole address is sealed |
@@ -1011,35 +1029,92 @@ found, including in the recorded arguments of a fake's own child; a canary at a 
 wider permissions is reported; an issued value planted in a form is found.
 
 **SEC-12. The secret register.** There is one register for an invocation, held in memory and written
-nowhere. A value enters it at one of five moments and at no other: when the frame reads a secret
-from a channel of SEC-2, at the read and before any runner or parser use; when a result field sealed
-as a secret is received (SEC-4), before any other field of that result is read; when an input is
-checked (SEC-9); when the run's fingerprint key is made or read (SEC-6); and when a later invocation
-rebuilds the register, as this rule says below. An entry holds the
-value whole, each component its source declares (for a connection address: the password, and the
-user and password pair), and the percent-encoded and base64 forms of each. The runner (SEC-3), the
-result parser (SEC-4), the input check (SEC-9) and every write to the journal, a manifest, a form,
-the CLI's output or an error consult it. A protected record that holds a value sealed as a secret
-keeps with it the components its declaration names. Every later invocation rebuilds the register
-before its first runner use, its first parse of a result and its first write to the journal, a
-manifest, a form, the CLI's output or an error: from the channels of SEC-2, and from every protected
-record of the run that holds a value sealed as a secret, with its components, and for a restore from
-those of the retiring run it reads (EV-7). The rebuilding reads those records into memory and
-nowhere else; it promotes nothing and shows nothing. Where such a record cannot be read or fails its
-fingerprint, the invocation stops before any of those uses. A secret the frame never reads into
-memory (a value inside a file a tool wrote into staging) is not in the register; SEC-11's scan is
-what checks that it reached no output.
+nowhere. This rule is the one statement of what keeps a secret out of a child, out of a result that
+is kept, and out of every written word. It is stated by what an invocation has opened and read,
+never by what kind of invocation it is or by which came before it.
 
-Test on fakes: a value a fake issues in a field sealed as a secret, and then asks for back in an
-argument of a later command or returns in a promoted field of a later result, is refused by the
-runner or turns that result `malformed`; the same holds when the value was issued and sealed in one
-invocation, the run then waited, and the fake returns it, whole or by a declared component, in a
-promotable name field or asks for it in an argument in the next invocation: that result is
-`malformed`, that argument is refused, and the value is in no journal record, form or output; the
-register's content is in no file of the fixture home outside the places of SEC-7; a resumed
-invocation refuses a planted channel secret in an argument before its first child starts; and with
-the sealed record removed or altered between the two invocations, the second stops before its first
-child starts.
+What the register holds. At every moment it holds: each secret the invocation has read from a
+channel of SEC-2; each value the invocation has received in a field sealed as a secret (SEC-4),
+entered before any other field of that result is read; the fingerprint key (SEC-6) of each run
+directory the invocation has opened; and each value sealed as a secret that the protected folder of
+each of those run directories holds, whichever run sealed it and however that run ended. An entry
+holds the value whole, each component its source declares (for a connection address: the password,
+and the user and password pair), and the percent-encoded and base64 forms of each. A protected
+record that holds a value sealed as a secret keeps with it the components its declaration names.
+Reading a record into the register promotes nothing and shows nothing.
+
+What an invocation opens, and when. An invocation that has passed the gate and taken a key's lock
+opens, before anything else under that key, every run directory ever made under it: the run it
+continues, and every other, whatever that run's kind, state or ending. So a first look opens each
+earlier run of its keys, and a restore opens the retirement it is to reverse, open or closed. It
+does this in RUN-1's third step for the key it was summoned with, and as it takes each further lock
+(RUN-2), all of it before its first runner use; and it reads then each channel of SEC-2 it will use.
+
+The guard. Until that opening is done an invocation uses no runner, parses no result, checks no
+input (SEC-9), and writes nothing but the tool's own fixed text, ids the tool itself made, and safe
+content already on record. After it, every runner use (SEC-3), every parse of a result (SEC-4),
+every check of an input and every write to the journal, a manifest, a form, the CLI's output or an
+error consults the register as it then stands. A value that holds an entry goes no further: the
+runner refuses the command; the parser makes the result `malformed`; the input is refused; and a
+write that would carry it is not made, the invocation stopping with the words that a value was
+withheld and with nothing of the value.
+
+A value received and not yet on record. A command whose declaration seals a field as a secret is run
+only inside an operation, after that operation's start record. Where an invocation finds such an
+operation started and not final, and the protected folder without that command's sealed record, the
+value may have been received and lost, and the record counts as one that cannot be read.
+
+A sealed record that cannot be read. Where a record that holds a value sealed as a secret is
+missing, fails its fingerprint, or counts as unreadable as just said, the register cannot hold that
+value, and there is one outcome, the same in every invocation. The invocation goes on with the
+register it could build. For as long as it runs it promotes no id, name, hash or part of an address
+by its declared meaning, only by equality with safe content already on record, and seals every other
+such value (SEC-4). Every form it renders, and the CLI's output, say that a sealed record is
+unavailable, name it by its id and its label, and say that values from providers are being withheld.
+What a restore offers is still EV-7's to decide, and the form RUN-12 owes is still rendered.
+
+Every way an invocation can begin, against every place a value can go. "After" means: only after the
+opening this rule orders, so the register then holds everything this rule says it holds. Any other
+cell says why nothing that was parsed can reach that place.
+
+| How the invocation begins | Allowed by | A runner's use | The parse of a result | The journal | A manifest | A form | The CLI's output | An error |
+|---|---|---|---|---|---|---|---|---|
+| a first look of a sunrise or a sunset, with or without earlier runs under its keys | RUN-1, RUN-5 | after | after | none: no journal is written before a go (RUN-12) | after | after | after | after |
+| a first look of a restore, over a retirement that is closed or one that is open | RUN-1, EV-7 | after: the retirement's run directory is one of those opened | after | none before its go | after | after | after | after |
+| the invocation that records a go and runs operations, a restore's go that closes an open retirement included | RUN-9, EV-7 | after | after | after | after, where this invocation also made the look; otherwise none: a manifest that has its go is not written again (RUN-8) | after | after | after |
+| a resume on his word | RUN-10 | after | after | after | none is written | after | after | after |
+| a summons with no word or a stale one, the first after a kill included, which renders the status form and ends | RUN-10 | after: only the reads OP-9 orders for waiting steps | after | after | none is written | after | after | after |
+| a re-plan | RUN-11 | after | after | after | after | after | after | after |
+| a close | RUN-13 | none: a close uses no runner | none | after | none is written | after | after | after |
+| a summons refused at the gate | RUN-1, RUN-12 | none: the gate uses no runner | none | none: nothing may be created (RUN-1) | none | none | the tool's fixed text only, by the guard | the same |
+| a summons refused at a held lock | RUN-2, RUN-12 | none | none | none: no run directory is opened or made | none | none | the tool's fixed text and the holding run's id, which the tool made, by the guard | the same |
+| a summons refused after its locks: by RUN-3, on a planning stop, on a refused input or on a lacking answer; a summons to resume a retirement that a restore's go names is one of these | RUN-3, RUN-5, RUN-7, RUN-12, SEC-9, EV-7 | after | after | after: only the closing record EV-7 allows | none is written | after | after | after |
+| an invocation that RUN-4's checks stop while the opening is being done | RUN-4, RUN-12 | none: it stops before any | none | only what the guard allows before the opening is done | none | only what the guard allows | only what the guard allows | only what the guard allows |
+
+The rules that let an invocation begin or end are RUN-1 to RUN-13, OP-9's reads at the start of an
+invocation, and EV-7; these eleven lines are every beginning they allow. Two things this rule does
+not reach, and says so: a secret the frame never reads into memory (a value inside a file a tool
+wrote into staging), which SEC-11's scan is what checks; and a secret that had left its channel
+before this invocation read that channel (a token since replaced), which the tool does not hold and
+no run's record holds.
+
+Test on fakes: for each line of this rule's table and each of its places not marked "none", a fake
+returns in a promotable name field, and asks for back in an argument, a value that an earlier run
+under the same key sealed as a secret: the argument is refused, the result is `malformed`, and the
+value is in no journal record, manifest, form, CLI output or error of that invocation; this is run,
+among the others, for a restore's first look over a closed retirement and over an open one, for a
+first sunrise look after an earlier run of the key, for a summons that only renders status, and for
+a re-plan. The fakes' sequence shows every run directory under the invocation's keys opened before
+its first runner call. A value put directly on its way to each of the journal, a manifest, a form,
+the CLI's output and an error is not written, and the invocation stops with no part of it in any
+output. For the places marked "none" the fixture shows no runner call, no parse and no file made.
+The same holds within one invocation for a value a fake issues in a field sealed as a secret and
+then echoes. A sealed record removed, a sealed record altered, and a kill after a command with a
+sealed field was started and before its record was written, each lead to the one outcome: the next
+invocation goes on; an id in a later result that is not already on record is sealed and not shown,
+and one equal to an id on record is still used; every form and the output name the unavailable
+record; a restore offers what EV-7 says; the status form is rendered. The register's content is in
+no file of the fixture home outside the places of SEC-7.
 
 ### 3.8 Forms
 
@@ -1101,13 +1176,18 @@ that occurred in that restore, the line FORM-2 or the lane's list of form change
 carries every entry of this table. For its kind each entry is one of three things. R: required, and
 the row states it. F: forbidden, and the row writes the word `none`. O: it applies to some rows of
 the kind, by the condition the entry gives; the row states it where it applies and writes `none`
-where it does not. An entry is never left out and never left empty.
+where it does not. An entry is never left out and never left empty. Two things are not a row's to
+state, and are F in this table for that reason alone. The mode of an owner answer is `answer`, by
+its kind; the manifest fixes it from the kind, as OP-9 requires, and the row's mode entry is `none`.
+The planning test of a check, an owner step or an owner answer is the generic one of RUN-7, that its
+needs can be met (ORD-2); it is the one planning test RUN-6 has the look make for such a candidate,
+it is the frame's and the same for every such row, and the row's planning-test entry is `none`.
 
 | Entry | check | build | keep | create | change | move | owner step | owner answer | adopt | Used by |
 |---|---|---|---|---|---|---|---|---|---|---|
 | id, kind and phase | R | R | R | R | R | R | R | R | R | OP-2, ORD-4 |
 | the thing it acts on or reads: its role, how its identity is read, and its tracked state; or the output field it refers to | R | R | R | R | R | R | R | F | R | RUN-6, OP-5, OP-8, EV-3 |
-| planning test | F | R | R | R | R | R | F | F | R | RUN-6, RUN-7 |
+| its own planning test: what the look reads of its place or its thing | F: the generic test of RUN-7 | R | R | R | R | R | F: the generic test | F: the generic test | R | RUN-6, RUN-7 |
 | before-test | F | R | R | R | R | R | F | F | F | OP-5 |
 | after-test | F | R | R | R | R | R | O: in read-back mode | F | F | OP-5, OP-9 |
 | construction; for C2 and C5 the document cited, and for C5 each condition the refusal covers; for C3, C6 and C7, and for a shortcut's add or put-back, each accepted risk it is carried under | F | R | R | R | R | R | F | F | F | OP-3, RISK-1, RISK-2 |
@@ -1121,7 +1201,7 @@ where it does not. An entry is never left out and never left empty.
 | way back: the reverse, written as a row of its own kind that this frame allows, or `none` with the reason | F | F | F | F | R | R | R | F | F | EV-4 |
 | the inputs its reverse needs, and how each is read and saved | F | F | F | F | O: where a way back is declared | O: the same | O: the same | F | F | LOG-2, OP-9 |
 | for a span, its placement and whether the file is ordered | F | F | F | F | O: where the thing is a span and a way back is declared | F | F | F | F | EV-6 |
-| mode | F | F | F | F | F | F | R | F | F | OP-9 |
+| mode: read back, or on his word | F | F | F | F | F | F | R | F: `answer`, by its kind | F | OP-9 |
 | the safe content its step or its question is built from | F | F | F | F | F | F | R | R | F | OP-9 |
 | the answers it allows | F | F | F | F | F | F | F | R | F | OP-9 |
 | review file | F | F | F | F | F | F | O: where he must read content first | O: the same | F | SEC-6 |
@@ -1137,7 +1217,10 @@ fails the manifest build, naming the entry, with an R entry written `none`, with
 with an O entry written `none` where its condition holds or stated where it does not, and with any
 entry left out or left empty; and a row whose entry is stated but not allowed (a construction OP-2
 does not give its kind, an accepted risk that does not cover its construction, a level ORD-1 does
-not have, a meaning SEC-4 does not list, a reverse EV-4 does not allow) fails the same way.
+not have, a meaning SEC-4 does not list, a reverse EV-4 does not allow) fails the same way; an
+owner-answer row builds with its mode entry `none`, and its entry in the manifest holds the mode
+`answer`; a check row and each owner row build with the planning-test entry `none`, and the look
+plans each by RUN-7's generic test, `in` where its needs can be met.
 
 **ROW-2. A step becomes the owner's only by his word.** Where a lane finds a tool that cannot be
 split into single effects (OP-1), whose repository writes cannot be listed (OP-11), or that cannot
