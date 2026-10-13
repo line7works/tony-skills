@@ -1295,14 +1295,11 @@ name wherever it takes it from either run's records. Where they did not, no jour
 record: the third run does not know, takes the name from the first run's journal as safe content,
 and may render it and copy it into its own manifest. In both, what the owner types in the third run
 is his own word in that run (SEC-1) and is shown, and it is searched for again whenever a secret
-reaches that run's register. For a value he typed, this is RK7, which the owner accepted (A26;
-RISK-1). The same happens to four kinds of content that a run holds as safe and he did not type:
-what the tool built from his words, where the secret equals the built form; what the tool counted
-or measured; what his settings file holds; and the content of a file on this machine that a
-validator passed. For those four it is RK9, which the owner accepted (A28; RISK-1). RK7 names a
-value he typed and no other, and RK9 those four kinds and no other. What a run holds as safe besides
-them is the tool's own: its fixed text, the fixed words of a declaration, an id it made itself, and
-what it built from these alone (SEC-1). The same happens there, and neither risk names it.
+reaches that run's register. The same holds for anything else that the first run's records hold as
+safe by SEC-1, whatever it came from. This is RK7, which the owner accepted for the whole of what a
+run holds as safe (A30; RISK-1). RK7 reaches no further than that: a value a run does not hold as
+safe is held back by SEC-4; a secret lost in the instant a provider hands it over is RK8; and a
+channel secret replaced before its channel was read is RK6.
 
 Before the startup checks pass. The startup checks are RUN-1's first two steps (the gate; the name
 check, the locks and the looks for an open run), RUN-4's checks on the run directory the invocation
@@ -1586,25 +1583,24 @@ unanswered or names a row that does not exist.
 
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted nine
-risks and one assumption (the contract's section 18, A4, A6, A18, A26 and A28): RK1; RK2, which by
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted eight
+risks and one assumption (the contract's section 18, A4, A6, A18, A26 and A30): RK1; RK2, which by
 his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
-before an invocation read its channel (SEC-12); RK7, for a live secret he typed, across runs
-(SEC-12); RK8, for a death in the instant a provider hands the tool a secret (SEC-12); RK9, for a
-live secret he did not type, of the four kinds it names, across runs (SEC-12); and the run
-directory's assumption (RUN-4). Their wording is in the catalog's Part 6 and is not restated here.
-This frame removes none of them and accepts none itself. An operation carried under RK2, RK3, RK4 or
-RK5 is marked so in the journal, once for each of those risks it is carried under. RK1, RK6, RK7,
-RK8 and RK9 belong to no one operation, and no mark is recorded for any of them. Where RK8's instant
-has passed, the journal already shows a receipt due and not given (SEC-12); that is the record of
-what happened, and no mark of a risk.
+before an invocation read its channel (SEC-12); RK7, for a live secret among whatever a run holds as
+safe, across runs (SEC-12); RK8, for a death in the instant a provider hands the tool a secret
+(SEC-12); and the run directory's assumption (RUN-4). Their wording is in the catalog's Part 6 and
+is not restated here. This frame removes none of them and accepts none itself. An operation carried
+under RK2, RK3, RK4 or RK5 is marked so in the journal, once for each of those risks it is carried
+under. RK1, RK6, RK7 and RK8 belong to no one operation, and no mark is recorded for any of them.
+Where RK8's instant has passed, the journal already shows a receipt due and not given (SEC-12); that
+is the record of what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark beside RK2's; each mark is recorded exactly once for its operation
 and its risk, also after a kill and a resume; no other operation carries a mark, and no record
-carries a mark for RK1, RK6, RK7, RK8 or RK9, an operation with a receipt due and not given and a
-run that holds a disproof record among them.
+carries a mark for RK1, RK6, RK7 or RK8, an operation with a receipt due and not given and a run
+that holds a disproof record among them.
 
 **RISK-2. A window nobody accepted is not the tool's to take.** A row whose effect has a window that
 no accepted risk names is written as an owner step (OP-9), and a manifest that holds it as a tool's
