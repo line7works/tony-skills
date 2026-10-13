@@ -1073,6 +1073,20 @@ such value (SEC-4). Every form it renders, and the CLI's output, say that a seal
 unavailable, name it by its id and its label, and say that values from providers are being withheld.
 What a restore offers is still EV-7's to decide, and the form RUN-12 owes is still rendered.
 
+His word ends it, for one record (the owner's ruling, A18). Of a record that cannot be read the
+owner may say that its value is dead, replaced at the provider, naming the record as the forms name
+it. His word is taken with a go, a resume, a re-plan, a close or a summons that only renders status,
+and with no other summons. The invocation records it after the opening and RUN-4's checks and before
+it uses a runner, runs an operation or renders a form, as a word record (LOG-1) in the journal of
+the run whose directory held the record. A word that names a record this invocation can read, or
+names none it found unreadable, is not taken: nothing is recorded, and the invocation says so and
+goes on as it was. From that word on, in that invocation and in every later one that opens that run
+directory, that record no longer brings the outcome above; another record that cannot be read still
+does, until it has a word of its own; and without his word the outcome lasts. The status form goes
+on naming the record, as lost and as ended by his word. The register is no different after his word:
+the value was not in it and is not in it, so if the value is not dead and a provider repeats it, the
+tool does not recognise it and may write it where it can be read. That rests on his word.
+
 Every way an invocation can begin, against every place a value can go. "After" means: only after the
 opening this rule orders, so the register then holds everything this rule says it holds. Any other
 cell says why nothing that was parsed can reach that place.
@@ -1092,11 +1106,14 @@ cell says why nothing that was parsed can reach that place.
 | an invocation that RUN-4's checks stop while the opening is being done | RUN-4, RUN-12 | none: it stops before any | none | only what the guard allows before the opening is done | none | only what the guard allows | only what the guard allows | only what the guard allows |
 
 The rules that let an invocation begin or end are RUN-1 to RUN-13, OP-9's reads at the start of an
-invocation, and EV-7; these eleven lines are every beginning they allow. Two things this rule does
-not reach, and says so: a secret the frame never reads into memory (a value inside a file a tool
-wrote into staging), which SEC-11's scan is what checks; and a secret that had left its channel
-before this invocation read that channel (a token since replaced), which the tool does not hold and
-no run's record holds.
+invocation, and EV-7; these eleven lines are every beginning they allow. His word on a lost record
+adds no line and changes no cell: it comes with a summons of five of these lines, and is one more
+record in a journal those lines already write, after the opening. Two things this rule does not
+reach, and says so: a secret the frame never reads into memory (a value inside a file a tool wrote
+into staging), which SEC-11's scan is what checks; and a secret that had left its channel before
+this invocation read that channel (a token since replaced), which the tool does not hold and no
+run's record holds. The owner accepted the second as a risk, RK6 (A18; RISK-1), and by his word the
+tool keeps no copy of a channel secret to close it.
 
 Test on fakes: for each line of this rule's table and each of its places not marked "none", a fake
 returns in a promotable name field, and asks for back in an argument, a value that an earlier run
@@ -1113,8 +1130,18 @@ then echoes. A sealed record removed, a sealed record altered, and a kill after 
 sealed field was started and before its record was written, each lead to the one outcome: the next
 invocation goes on; an id in a later result that is not already on record is sealed and not shown,
 and one equal to an id on record is still used; every form and the output name the unavailable
-record; a restore offers what EV-7 says; the status form is rendered. The register's content is in
-no file of the fixture home outside the places of SEC-7.
+record; a restore offers what EV-7 says; the status form is rendered. With no word from the owner
+that outcome is the same in the invocation after, and in the one after that. A resume that carries
+his word naming the removed record writes one word record, in the journal of the run that held it,
+after the opening and before the first runner call; from then on, in that invocation, in the next,
+and in a later run under the same key, an id that is not already on record is promoted by its
+declared meaning again, and the status form names the record as lost and ended by his word. With two
+records removed and a word for one, the outcome lasts until the other has its own. A word that names
+a record that can be read, and a word that names no record, write nothing and change nothing. A
+first look that carries such a word, and a summons turned away at the gate, at a held lock or by
+RUN-3, record none. After his word, the fake's repeat of the lost value in a promotable field is not
+caught: the test asserts that, as the limit this rule states. The register's content is in no file
+of the fixture home outside the places of SEC-7.
 
 ### 3.8 Forms
 
@@ -1243,17 +1270,20 @@ unanswered or names a row that does not exist.
 
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted five
-risks and one assumption (the contract's section 18, A4 and A6): RK1; RK2, which by his word covers
-every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a shortcut's name
-being free, in the add and in the put-back; and the run directory's assumption (RUN-4). Their
-wording is in the catalog's Part 6 and is not restated here. This frame removes none of them and
-accepts none itself. An operation carried under RK2, RK3, RK4 or RK5 is marked so in the journal,
-once for each of those risks it is carried under.
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted six
+risks and one assumption (the contract's section 18, A4, A6 and A18): RK1; RK2, which by his word
+covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a shortcut's
+name being free, in the add and in the put-back; RK6, for a channel secret replaced before an
+invocation read its channel (SEC-12); and the run directory's assumption (RUN-4). Their wording is
+in the catalog's Part 6 and is not restated here. This frame removes none of them and accepts none
+itself. An operation carried under RK2, RK3, RK4 or RK5 is marked so in the journal, once for each
+of those risks it is carried under. RK1 and RK6 belong to no one operation, and no mark is recorded
+for either.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark beside RK2's; each mark is recorded exactly once for its operation
-and its risk, also after a kill and a resume; no other operation carries a mark.
+and its risk, also after a kill and a resume; no other operation carries a mark, and no record
+carries a mark for RK1 or for RK6.
 
 **RISK-2. A window nobody accepted is not the tool's to take.** A row whose effect has a window that
 no accepted risk names is written as an owner step (OP-9), and a manifest that holds it as a tool's
