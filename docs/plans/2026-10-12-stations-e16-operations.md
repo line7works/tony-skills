@@ -224,7 +224,8 @@ Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and rul
 contract's section 18, A4), and accepted RK4, RK5 and the run directory's assumption (A6), on
 2026-10-12, and RK6 the same day (A18). The same day his word on a lost sealed secret was
 withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026-10-13 (A26),
-and RK9 the same day (A28).**
+and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
+merged into it (A30).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -264,38 +265,54 @@ How likely each is was never measured.
   token, so it does not recognise the old token where the owner types it or where it sits in a
   file on this machine. The outside reviewer has not yet read the rules this rests on. Not
   measured.
-- **RK7, a live secret he typed, across runs** (accepted by the owner, A26). Where a value he
-  typed into the tool turns out to be a live secret, the run that finds it, when a provider
-  returns the same value, stops and hides the value from then on. Other runs under the same
-  project name do not know. A run that ended before the catch, and a new run, can still show the
-  value, until a provider returns the secret to that run too. Files already written and names
-  already sent to a provider are not taken back. This names a value he typed, and no other. He was
-  told that accepting it is a step toward the option he passed over when the reviewer marked the
-  leak returned a fourth time (A24). Not measured.
-  What the frame leaves of it (the contract's A27; no new acceptance, and narrower than the words
-  above): where the run that caught the value wrote a record of the catch, a later run that reads
-  that record hides the value too, also where it meets it in an older run's records. The risk
-  stands where no journal holds such a record. The outside reviewer has not yet read the rules
-  this rests on.
+- **RK7, a live secret among what a run holds as safe, across runs** (accepted by the owner for
+  the whole class, A30; it takes the place of RK7 as first accepted and of RK9, whose words are
+  kept below as merged). Where anything a run holds as safe turns out to be a live secret, the run
+  that finds it, when a provider returns the same value, stops and hides the value from then on,
+  and a later run that reads that run's record of the catch hides it too. Where no journal holds
+  such a record, other runs under the same project name do not know: a run that ended before the
+  catch, and a new run, can still show the value, until a provider returns the secret to that run
+  too. Files already written and names already sent to a provider are not taken back. What a run
+  holds as safe is whatever the frame's SEC-1 calls safe by where it came from: what he typed;
+  what the tool built, counted, measured or made itself; what his settings file holds; the content
+  of a file on this machine that passed its check; and the tool's own fixed words. This risk does
+  not cover a value a run does not hold as safe, which the frame holds back (SEC-4); a secret the
+  tool is handed and loses in that instant, which is RK8; or a channel secret that was replaced,
+  which is RK6. He was told that this is his fourth acceptance on this one case since the reviewer
+  marked the leak returned a fourth time, and that it is the option he passed over then (A24). The
+  outside reviewer has not yet read the rules this rests on. Not measured.
 - **RK8, a death in the instant a secret arrives** (accepted by the owner, A26). If the tool dies
   in the moment a provider hands it a secret, before its first record of it, every later status of
   that run says that a secret may have been received and lost, and the run goes on. The tool never
   recorded the value, so it cannot tell whether it equals something he typed; if it does, the run
   can still show it. It takes both a live secret typed by mistake and a death in that instant. Not
   measured.
-- **RK9, a live secret he did not type, across runs** (accepted by the owner, A28). The same limit
-  as RK7, for four kinds of value a run holds as safe that he did not type: what the tool built
-  from his words, where the secret equals the built form (a folded project name, a path, an
-  address); what the tool counted or measured; what his settings file holds; and the content of a
-  file on this machine that passed its check, which is the realistic case, a secret sitting in a
-  local file. Where one of these turns out to be a live secret, the run that finds it, when a
-  provider returns the same value, stops and hides it from then on, and a later run that reads
-  that run's record of the catch hides it too. Where no journal holds such a record, an older
-  run's records or a new run can still show the value, until a provider returns the secret to that
-  run too. He was told that this is the third named risk he accepted on this one case since the
-  reviewer marked the leak returned a fourth time, and that the three together are the option he
-  passed over then (A24). The outside reviewer has not yet read the rules this rests on. Not
-  measured.
+- **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
+  ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
+  tool turns out to be a live secret, the run that finds it, when a provider returns the same
+  value, stops and hides the value from then on. Other runs under the same project name do not
+  know. A run that ended before the catch, and a new run, can still show the value, until a
+  provider returns the secret to that run too. Files already written and names already sent to a
+  provider are not taken back. This names a value he typed, and no other. He was told that
+  accepting it is a step toward the option he passed over when the reviewer marked the leak
+  returned a fourth time (A24). Not measured. What the frame leaves of it (the contract's A27; no
+  new acceptance, and narrower than the words above): where the run that caught the value wrote a
+  record of the catch, a later run that reads that record hides the value too, also where it meets
+  it in an older run's records. The risk stands where no journal holds such a record. The outside
+  reviewer has not yet read the rules this rests on.
+- **RK9: MERGED into RK7 above** (accepted by the owner, A28; merged by his ruling of A30). The
+  words as they stood, kept for the record: The same limit as RK7, for four kinds of value a run
+  holds as safe that he did not type: what the tool built from his words, where the secret equals
+  the built form (a folded project name, a path, an address); what the tool counted or measured;
+  what his settings file holds; and the content of a file on this machine that passed its check,
+  which is the realistic case, a secret sitting in a local file. Where one of these turns out to
+  be a live secret, the run that finds it, when a provider returns the same value, stops and hides
+  it from then on, and a later run that reads that run's record of the catch hides it too. Where
+  no journal holds such a record, an older run's records or a new run can still show the value,
+  until a provider returns the secret to that run too. He was told that this is the third named
+  risk he accepted on this one case since the reviewer marked the leak returned a fourth time, and
+  that the three together are the option he passed over then (A24). The outside reviewer has not
+  yet read the rules this rests on. Not measured.
 - **His word on a lost sealed secret: WITHDRAWN** (ruled by the owner, A18; retired by his ruling
   of A21, question PS5). The frame no longer takes that word, so nothing rests on it and nothing
   is accepted with it. The words as they stood, kept for the record: Where a record that held a
