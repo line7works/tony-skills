@@ -226,7 +226,7 @@ contract's section 18, A4), and accepted RK4, RK5 and the run directory's assump
 withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026-10-13 (A26),
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
-(A32) and covers any run that shows the value (A33).**
+(A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -310,6 +310,19 @@ How likely each is was never measured.
   instant to this one; the frame's author and a second reader found that another run showing the
   value was in the words of neither entry. She has read the rule this rests on; her check of it as
   code is still to come. Not measured.
+- **RK10, a record of the tool's own that cannot be read** (accepted by the owner, A40; the number
+  nine is not used again, RK9 being merged into RK7). At its start the tool reads three record
+  files it keeps in its own folder, outside any run: each lock's record, the folder of locks, and
+  the list of open runs. Where it cannot read one of them, it does not know which run that file
+  names, and so cannot read what that run caught as a secret. By his ruling every command then
+  stops and prints one fixed sentence that holds no file name and no path, help included, until
+  the file is mended; he finds the file himself in the tool's folder. That one sentence is printed
+  without the tool knowing what that run had caught: if a caught word is in it, it is printed. The
+  assumption above covers a run's own folder and not the tool's folder. He was told that every
+  option left something printed in that way, that the only way without it is a tool that prints
+  nothing at all there, and that this was his seventh acceptance on the one case of a live secret
+  among what a run holds as safe. The frame's sentences for this ruling are not yet written. Not
+  measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
