@@ -253,6 +253,11 @@ contract's section 18, A4), and accepted RK4, RK5 and the run directory's assump
   replaced is in no record the tool holds. If a provider repeats the old token in an answer, the
   tool does not recognise it and may write it where it can be read. The tool keeps no private
   copy of a token to close this, by his word. How likely it is was not measured.
+- **His word on a lost sealed secret** (ruled by the owner, A18). Where a record that held a sealed
+  secret is lost, the tool withholds values from providers until he says that the lost value is
+  dead, replaced at the provider. From his word on it withholds no longer for that record. This
+  rests on his word: if the value is not dead and a provider repeats it, the tool does not
+  recognise it and may write it where it can be read.
 - **The run directory** (accepted by the owner, A6). Every proof the tool makes rests on nothing
   but the run changing its run directory. The tool checks that the folder is owner-only and that
   its log is unaltered partway; it cannot detect a clean rewrite from end to end by a program
