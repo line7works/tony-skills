@@ -223,7 +223,8 @@ Measured, not assumed:
 Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and ruled Q7 (the
 contract's section 18, A4), and accepted RK4, RK5 and the run directory's assumption (A6), on
 2026-10-12, and RK6 the same day (A18). The same day his word on a lost sealed secret was
-withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026-10-13 (A26).**
+withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026-10-13 (A26),
+and RK9 the same day (A28).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -281,6 +282,19 @@ How likely each is was never measured.
   that run says that a secret may have been received and lost, and the run goes on. The tool never
   recorded the value, so it cannot tell whether it equals something he typed; if it does, the run
   can still show it. It takes both a live secret typed by mistake and a death in that instant. Not
+  measured.
+- **RK9, a live secret he did not type, across runs** (accepted by the owner, A28). The same limit
+  as RK7, for four kinds of value a run holds as safe that he did not type: what the tool built
+  from his words, where the secret equals the built form (a folded project name, a path, an
+  address); what the tool counted or measured; what his settings file holds; and the content of a
+  file on this machine that passed its check, which is the realistic case, a secret sitting in a
+  local file. Where one of these turns out to be a live secret, the run that finds it, when a
+  provider returns the same value, stops and hides it from then on, and a later run that reads
+  that run's record of the catch hides it too. Where no journal holds such a record, an older
+  run's records or a new run can still show the value, until a provider returns the secret to that
+  run too. He was told that this is the third named risk he accepted on this one case since the
+  reviewer marked the leak returned a fourth time, and that the three together are the option he
+  passed over then (A24). The outside reviewer has not yet read the rules this rests on. Not
   measured.
 - **His word on a lost sealed secret: WITHDRAWN** (ruled by the owner, A18; retired by his ruling
   of A21, question PS5). The frame no longer takes that word, so nothing rests on it and nothing
