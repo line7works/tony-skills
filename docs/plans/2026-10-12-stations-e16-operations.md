@@ -268,19 +268,24 @@ How likely each is was never measured.
 - **RK7, a live secret among what a run holds as safe, across runs** (accepted by the owner for
   the whole class, A30; it takes the place of RK7 as first accepted and of RK9, whose words are
   kept below as merged). Where anything a run holds as safe turns out to be a live secret, the run
-  that finds it, when a provider returns the same value, stops and hides the value from then on,
-  and a later run that reads that run's record of the catch hides it too. Where no journal holds
-  such a record, other runs under the same project name do not know: a run that ended before the
-  catch, and a new run, can still show the value, until a provider returns the secret to that run
-  too. Files already written and names already sent to a provider are not taken back. What a run
-  holds as safe is whatever the frame's SEC-1 calls safe by where it came from: what he typed;
-  what the tool built, counted, measured or made itself; what his settings file holds; the content
-  of a file on this machine that passed its check; and the tool's own fixed words. This risk does
-  not cover a value a run does not hold as safe, which the frame holds back (SEC-4); a secret the
-  tool is handed and loses in that instant, which is RK8; or a channel secret that was replaced,
-  which is RK6. He was told that this is his fourth acceptance on this one case since the reviewer
-  marked the leak returned a fourth time, and that it is the option he passed over then (A24). The
-  outside reviewer has not yet read the rules this rests on. Not measured.
+  that finds it stops and hides the value from then on, and a later run that reads that run's
+  record of the catch hides it too. A run finds it when the secret itself reaches that run: a
+  provider returns it, or the tool reads it from a place on this machine where a secret is kept,
+  such as the file that holds the database's connection. Where no journal holds such a record,
+  other runs under the same project name do not know: a run that ended before the catch, and a new
+  run, can still show the value, until the secret reaches that run too. Files already written and
+  names already sent to a provider are not taken back. What a run holds as safe is whatever the
+  frame's SEC-1 calls safe by where it came from: what he typed; what the tool built, counted,
+  measured or made itself; what his settings file holds; the content of a file on this machine
+  that passed its check; and the tool's own fixed words. This risk does not cover a value a run
+  does not hold as safe, which the frame holds back (SEC-4); a secret the tool is handed and loses
+  in that instant, which is RK8; or a channel secret that was replaced, which is RK6. He was told
+  that this is his fourth acceptance on this one case since the reviewer marked the leak returned
+  a fourth time, and that it is the option he passed over then (A24). From A30 to A31 this entry
+  said that a run finds the secret "when a provider returns the same value"; those words were the
+  control room's drafting, narrower than the class as it was put to him, and are set right by A31
+  at the control room's recommendation, his to change. The outside reviewer has not yet read the
+  rules this rests on. Not measured.
 - **RK8, a death in the instant a secret arrives** (accepted by the owner, A26). If the tool dies
   in the moment a provider hands it a secret, before its first record of it, every later status of
   that run says that a secret may have been received and lost, and the run goes on. The tool never
