@@ -79,7 +79,16 @@ the journal's record of a run's opening (RUN-3), is its fingerprint, keyed with 
 tool makes once on this machine and keeps in an owner-only file of its own beside the run
 directories (SEC-7). Neither a name nor a key is written in a lock's file name, a lock's record or
 the record of open runs. The gate fails where that file is not owner-only, or is missing while a
-lock's file or the record of open runs exists.
+lock's file or the record of open runs exists. The refusal then says, in the tool's fixed text and
+with nothing else but run ids: which of the two it found; where the file is kept; and the id of each
+run that a lock's record or the record of open runs holds. The ways on are steps of his, and the
+tool takes none of them for him. Where the file is not owner-only, he makes it owner-only and
+summons again. Where it is missing, he puts it back from a copy of his own and summons again. Where
+he has no copy, the one way left is a decision that is his alone: he ends by hand each run the
+refusal listed, removes the lock files and the record of open runs himself, and summons again, and
+the tool then makes a new value. From then on the tool sees none of those runs: it can neither
+resume nor close them, and it does not refuse a new run on a project that one of them had open. The
+tool never makes a new value while a lock's file or the record of open runs exists.
 
 RUN-1's second step runs in this order, all of it before a run directory is opened or made.
 
@@ -125,7 +134,11 @@ tool can read before the project takes its locks and, after its go, is recorded 
 canary and its folded form, whole and in each form SEC-11 names, are in no lock's file name, no
 lock's record and not in the record of open runs, which hold fingerprints and run ids only; two
 fixture machines give two different fingerprints for one name; with the keying value's file removed
-while a lock file exists, the gate fails.
+while a lock file exists, the gate fails, its output being fixed text that names what it found, the
+file's place and the ids of the runs on record, and no new value is made; with the file put back the
+next summons passes the gate; with the lock files and the record of open runs removed by the
+fixture's owner the next summons makes a new value; with the file given wider permissions the gate
+fails, and it passes once the file is owner-only again.
 
 **RUN-3. One open run per project key.** A run is open from its first go (RUN-9) until it ends
 `complete`, `ended with exceptions` or `closed` (RUN-12). At the go the run is recorded as open
@@ -1220,29 +1233,39 @@ look and the database's connection address (A23); the words of that stop are the
 
 A safe ground disproved. Each time a value enters the register, the invocation searches for it in
 what its run has on record as safe: the saved inputs, every manifest and the journal. It does so at
-once, before it uses the value for anything else; for the hosting token, which the name check reads
-before a run directory is open, it does so in the disproof read below. Where they hold it, a safe
+once, before it uses the value for anything else. For a value it reads at its start, as the name
+check reads the hosting token before a run directory is open, it does so in the disproof read, and
+what follows a find there is said below. Where the records hold a value that arrives later, a safe
 ground is disproved (SEC-1), and the invocation does two things before anything else. First, in a
 run that has its go, it appends a disproof record to the journal (LOG-1). The record says where the
 value rests in the run directory and holds nothing of the value: for a value from a secret field,
 the protected record that holds it;
 for a channel secret, of which the tool keeps no copy (the owner's ruling, A2), the recorded content
 that holds it, by its place and the span within it. Then the invocation ends: `stopped` in a run
-that has its go; `refused` in a look before a first go, where there is no journal and no later
-invocation reads what that look saved (RUN-12). The reason kind is a safe ground disproved, and its
-line is the lane's to give (FORM-2). For a command with a secret field, the receipt is given only
-after the search and, where the search found the value, after the disproof record.
+that has its go; `refused` before a first go, where there is no journal to hold a disproof record.
+That is so for a look, and for the invocation that was to record his go on a manifest an earlier
+invocation made: it records no go, writes no journal record and opens no run. In both a refusal form
+is rendered, with the fixed words in the value's place, and the next summons starts a new look
+(RUN-12). That look reads the same channel and meets the same secret; where the channel no longer
+holds it, that is RK6. The reason kind is a safe ground disproved, and its line is the lane's to
+give (FORM-2). For a command with a secret field, the receipt is given only after the search and,
+where the search found the value, after the disproof record.
 
 What holds from then on. No disproof record is removed or ended, by the tool or by a word. Every
-invocation that continues the run makes the disproof read. It is the last of the startup checks, in
+invocation that continues the run makes the disproof read, and so does the invocation that is to
+record a go on a manifest an earlier invocation made. It is the last of the startup checks, in
 RUN-1's third step, after RUN-4's checks, and it writes nothing. It reads each disproof record of
 the run's journal, reads the value from where the record says it rests, and enters it in the
-register. It then makes the search of the paragraph above for two more kinds of value: each one the
-register already holds, which is the hosting token read for the name check; and, for a receipt that
-is due and not given, the value in the protected record its due record names, where that record is
-present. What it finds stays in the register, and the disproof record owed for it, and then that
-receipt, are the invocation's first journal records once the startup checks have passed. A disproof
-record whose value cannot be read where the record says is a failure of RUN-4's checks. From the
+register. It then makes the search of the paragraph above for three more kinds of value: each one
+the register already holds, which is the hosting token read for the name check; each secret that
+the manifest shows the run reads from a file on this machine, which is the connection address, read
+again there in-process, where the file still holds one; and, for a receipt that is due and not
+given, the value in the protected record its due record names, where that record is present. What
+it finds stays in the register. In a run that has its go, the disproof record owed for it, and then
+that receipt, are the invocation's first journal records once the startup checks have passed, and
+the invocation goes on as its kind of summons has it, under the register. Before a first go it ends
+`refused`, as the paragraph above says. A disproof record whose value cannot be read where the
+record says is a failure of RUN-4's checks. From the
 disproof read on, the register does for each such value all that its paragraph says. A status
 summons, a close and a resume each render their form with the fixed words in the value's place. No
 ground proves a value equal to it. An operation whose command, record or form line would carry it is
@@ -1254,23 +1277,37 @@ for those operations say where the run wrote.
 
 Another run's journal. An invocation that reads the journal or the records of a run other than its
 own (RUN-5, EV-7) first makes RUN-4's checks on that run directory and then that run's disproof
-read; a failure of either is a failed read (RUN-7). Until both are done it uses, renders and copies
-nothing of that run. From then on, whatever it takes from that run's records that holds one of those
-values is held (SEC-4): it is no ground, it is rendered only as the fixed words, and it enters no
-new record and no command. A restore plans an operation that would need such content
-`not applicable`, with that reason, and still offers the rest (EV-7). Those values are used for
-nothing else and do not enter the reading run's register. What the owner types in the new run is
-his own word in that run (SEC-1), and is searched for again whenever a secret reaches that run's
-register.
+read; a failure of either is a failed read (RUN-7). Where it reads several such runs, it does this
+for every one of them before it uses, renders or copies anything of any of them. From then on,
+whatever it takes from the records of any of those runs that holds a value any of those disproof
+reads gave is held (SEC-4): it is no ground, it is rendered only as the fixed words, and it enters
+no new record and no command. A restore plans an operation that would need such content
+`not applicable`, with that reason, and still offers the rest (the owner's ruling, A26; EV-7). Those
+values are used for nothing else and do not enter the reading run's register.
+
+What another run does not know. A disproof is known only where a journal holds its record; the tool
+keeps no memory of one across runs (the owner's ruling, A26). Take a run that closed before the
+catch and holds in its journal a name the owner typed; a later run under the same key that received
+that value in a secret field; and a third run whose first look reads both journals. Where the later
+run's own records held the name, its journal holds a disproof record, and the third run holds the
+name wherever it takes it from either run's records. Where they did not, no journal holds a disproof
+record: the third run does not know, takes the name from the first run's journal as safe content,
+and may render it and copy it into its own manifest. In both, what the owner types in the third run
+is his own word in that run (SEC-1) and is shown, and it is searched for again whenever a secret
+reaches that run's register. For a value he typed, this is RK7, which the owner accepted (A26;
+RISK-1). The same happens to what a run holds as safe that he did not type: what the tool built
+from his words, what it counted or measured, what his settings file holds, and what a validated
+file on this machine holds. RK7 does not name those. For them this limit is the frame's own, stated
+here, and it is an accepted risk only where the catalog's Part 6 names it.
 
 Before the startup checks pass. The startup checks are RUN-1's first two steps (the gate; the name
 check, the locks and the looks for an open run), RUN-4's checks on the run directory the invocation
-continues, and that run's disproof read. Until they have passed, an invocation uses no runner,
-parses no result, checks no input but the names, by RUN-2's name check, and writes nothing but
-these: the tool's own fixed text; the id of a run, which the tool itself made; in a lock's record
-and file name, the fingerprint of a key (RUN-2); and, once on a machine, the keying value (SEC-7).
-It writes nothing that it read from a journal, a manifest or any other record, whatever that content
-was when it was recorded.
+continues or is to record a go for, and that run's disproof read. Until they have passed, an
+invocation uses no runner, parses no result, checks no input but the names, by RUN-2's name check,
+and writes nothing but these: the tool's own fixed text; the id of a run, which the tool itself
+made; in a lock's record and file name, the fingerprint of a key (RUN-2); and, once on a machine,
+the keying value (SEC-7). It writes nothing that it read from a journal, a manifest or any other
+record, whatever that content was when it was recorded.
 
 The places a value can go. Thirteen are this rule's and SEC-4's to name; four stay with the rule
 that already holds them. A place that is not in this table is not a place the tool may write a
@@ -1296,11 +1333,17 @@ value.
 | a review file | the same | SEC-6, SEC-7 |
 | staging | an object while it is built | OP-4, SEC-7, SEC-8 |
 
-The ways an invocation can begin. There are twelve. For each: what it reads at its start, of a
-provider and, where a refusal path turns on it, of this machine; and what it may write. "Fixed text"
-is all that the paragraph on the startup checks allows: the fixed text, a run's id, a key's
-fingerprint in a lock, and once the keying value. Every line that continues a run makes that run's
-disproof read before its startup checks have passed.
+The ways an invocation can begin. There are twelve. Every one of them makes the common startup
+reads, as far as it gets. All of them are of this machine, none is of a provider, and none uses a
+runner. They are: what the gate's checks read, the keying value's file among it; the hosting token's
+channel, for the name check; the record of each lock it takes or meets; the record of open runs; for
+a new summons and a re-plan, the alias reads; and, for a line that continues a run or is to record a
+go, its run directory for RUN-4's checks and, in the disproof read, the journal's disproof records,
+the record or the content each points to, and each file the manifest shows the run reads a secret
+from. The third cell of each line says what that line reads beyond these: of a provider, through a
+runner, of the project, or of another run. For the two refusal lines it says instead how far into
+the common reads each path gets. "Fixed text" is all that the paragraph on the startup checks
+allows: the fixed text, a run's id, a key's fingerprint in a lock, and once the keying value.
 
 | How the invocation begins | Allowed by | What it reads at its start | Before the startup checks pass it writes | Once they have passed it may write |
 |---|---|---|---|---|
@@ -1311,11 +1354,11 @@ disproof read before its startup checks have passed.
 | a summons with no word or a stale one, the first after a kill included: it renders status and ends | RUN-10 | for each provider that has a waiting read-back step, its identity read and that step's read (OP-9); no planning read | fixed text | the journal, the status form and the CLI's output |
 | a resume that finds its context changed | RUN-10 (b) | what RUN-10 (b) compares, and then nothing: it ends asking for a re-plan | fixed text | the status form and the CLI's output |
 | a re-plan | RUN-11 | the whole look | fixed text | the journal, its forms, the CLI's output and the new manifest |
-| a close; a summons to resume a run that is closed | RUN-13 | nothing: a close uses no runner, and the resume is refused before any | fixed text | for a close, one journal record, the form and the CLI's output; for the refused resume, a refusal (RUN-12) |
+| a close; a summons to resume a run that is closed | RUN-13 | nothing beyond the common startup reads: a close makes no provider read and uses no runner, and the resume is refused before any | fixed text | for a close, one journal record, the form and the CLI's output; for the refused resume, a refusal (RUN-12) |
 | a start whose first act is a read or an answer for one of his steps | OP-9, RUN-10 | as the resume or the status-only line it is: the provider's identity read, then that step's read | fixed text | as that line |
 | a summons refused at the gate, at the name check, or at a held lock, the first key's or a later key's | RUN-1, RUN-2, RUN-12 | nothing of a provider. Of this machine: at the gate, what its checks read; at the name check, the token's channel; at a first lock, that lock's record; at a later lock, also the record of open runs and the alias reads, and no other thing of the project | fixed text and, at a lock, the holding run's id; nothing is created | nothing: it does not pass them |
 | a new summons refused because a run is open | RUN-3, RUN-12 | nothing of a provider. Of this machine: at the early look, the record of open runs and nothing of the project; at the second look, also the alias reads, and no other thing of the project | fixed text and the open run's id; nothing is created | nothing: it does not pass them |
-| an invocation that finds a restore's go and no closing record on the retirement (the handover's repair) | EV-7 | nothing before the repair | fixed text | first the one closing record, in the retirement's journal; then it is refused or goes on as its own line says |
+| an invocation that finds a restore's go and no closing record on the retirement (the handover's repair) | EV-7 | before the repair, nothing beyond the common startup reads and, to find the closing record missing, the journal of the other run of the pair, after RUN-4's checks on that run directory | fixed text | first the one closing record, in the retirement's journal; then it is refused or goes on as its own line says |
 
 In any line that continues a run, a failure of RUN-4's checks stops the invocation with the fixed
 text and nothing else written. The rules that let an invocation begin or end are RUN-1 to RUN-13,
@@ -1323,14 +1366,15 @@ OP-9 and EV-7; these twelve lines are every beginning they allow. Three things t
 reach, and says so: a secret the frame never reads into memory (a value inside a file a tool wrote
 into staging), which SEC-11's scan is what checks; a secret that had left its channel before this
 invocation read that channel (a token since replaced); and the death of an invocation in the
-instant between a secret's arrival in its memory and its first record of it. The second is RK6,
-which the owner accepted (A18; RISK-1), and by his word the tool keeps no copy of a channel secret
-to close it. Such a value repeated in a provider's answer is held by SEC-4 like any other; RK6 now
-covers only the same value typed by the owner or found in a file on this machine, which the register
-does not know. The third no ruling covers. For a value from a secret field the receipt stays due,
-every status form says so, and the tool cannot tell whether that lost value is one its records hold
-as safe. For a channel secret the search is made again by the next invocation that reads that
-channel. A provider that repeats either value finds it held by SEC-4 like any other.
+instant between a provider's handing it a secret and its first record of that secret. The second is
+RK6, which the owner accepted (A18; RISK-1), and by his word the tool keeps no copy of a channel
+secret to close it. Such a value repeated in a provider's answer is held by SEC-4 like any other;
+RK6 now covers only the same value typed by the owner or found in a file on this machine, which the
+register does not know. The third is RK8, which the owner accepted (A26; RISK-1). The receipt stays
+due, every status form says so, the run goes on, and the tool cannot tell whether that lost value is
+one its records hold as safe. A provider that repeats it finds it held by SEC-4 like any other. A
+channel secret has no such instant left open: the disproof read of every later invocation reads its
+channel again and makes the search, and a channel that by then holds another secret is RK6.
 
 Test on fakes: the receipt. A command with a secret field is killed after its receipt-due record and
 before its receipt, once on its first execution, and once on a second execution of the same command
@@ -1348,12 +1392,21 @@ later lock, an open run found at the early look and one found at the second, a r
 wider permissions, a journal with a broken chain, a disproof record whose value cannot be read. The
 fixture's journal and manifest hold a name recorded as safe, and a later disproof record of it. Each
 ends with output that is the tool's fixed text and at most a run's id, with that name in no output,
-and with no status form rendered from the records. The table's reads. For each line the fakes and
-the fixture file system record exactly the reads its third cell names and no other: no provider call
-for a close, for a refusal at the gate, at the name check or at a lock, and for a new summons met by
-an open run; no read of the project for a refusal at a first lock or at the early look; the alias
-reads and no other read of the project for a refusal at a later lock or at the second look; for a
-status-only summons the identity read and the waiting step's read, and no planning read.
+and with no status form rendered from the records. The table's reads. For each of the twelve lines
+the fakes record exactly the provider calls and the runner uses its third cell names and no other,
+and the fixture file system records, of this machine, the common startup reads that line reaches,
+the reads its third cell names, and no other. So there is no provider call and no runner use for a
+close, for a refusal at the gate, at the name check or at a lock, and for a new summons met by an
+open run. A close of a sunset records these reads and no other: the gate's, the token's channel, its
+locks' records, the record of open runs, its run directory, its disproof records with what each
+points to, and the env file its manifest shows the connection is read from. A refusal at a first
+lock or at the early look records no read of the project; one at a later lock or at the second look
+records the alias reads and no other read of the project; a status-only summons records, beyond the
+common reads, the identity read and the waiting step's read, and no planning read. The go: a look
+saves a description, and the fixture's hosting token is then set to that same text. The invocation
+given his go finds it in its disproof read, records no go, writes no journal record, opens no run
+and ends `refused`, with the fixed words in its refusal form and the text in no output; the next
+summons starts a new look.
 The disproof. A fixture run has its go; its saved inputs, its manifest and its journal hold a name
 the owner typed and a path the tool built from it. A fake then returns that name in a secret field.
 The journal then holds, in this order, the receipt-due record, the disproof record, which refers to
@@ -1377,7 +1430,15 @@ the password of the connection address in the fixture's env file; when an operat
 connection, the disproof record names the description and the span, no file of the fixture home
 holds a new copy of the password, and the same six withhold it. The hosting token: a fixture run
 whose saved description holds the fixture's current token renders its next status form with the
-fixed words in the token's place and then holds a disproof record.
+fixed words in the token's place and then holds a disproof record. A kill between the read of the
+connection address and its disproof record: the next status summons and the next close each read
+the env file again in the disproof read, withhold the password, and write the disproof record.
+Three runs under one key: the first, closed, holds in its journal a name the owner typed; the
+second receives that name in a secret field. Where the second's records hold the name, its journal
+holds a disproof record, and the third run's first look holds the name wherever the first's or the
+second's records give it. Where they do not, no journal holds one, and the third run's look takes
+the name from the first's journal as safe content. In both the third run shows the name where the
+owner types it anew.
 The register. A channel secret planted in an argument, in an input and in a name, and directly on
 its way to each of the journal, a manifest, a form, the CLI's output and an error, is refused, not
 written, or replaced by the fixed words, with no part of it in any output; the same for a value a
@@ -1520,20 +1581,23 @@ unanswered or names a row that does not exist.
 
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted six
-risks and one assumption (the contract's section 18, A4, A6 and A18): RK1; RK2, which by his word
-covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a shortcut's
-name being free, in the add and in the put-back; RK6, for a channel secret replaced before an
-invocation read its channel (SEC-12); and the run directory's assumption (RUN-4). Their wording is
-in the catalog's Part 6 and is not restated here. This frame removes none of them and accepts none
-itself. An operation carried under RK2, RK3, RK4 or RK5 is marked so in the journal, once for each
-of those risks it is carried under. RK1 and RK6 belong to no one operation, and no mark is recorded
-for either.
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted eight
+risks and one assumption (the contract's section 18, A4, A6, A18 and A26): RK1; RK2, which by his
+word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a
+shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
+before an invocation read its channel (SEC-12); RK7, for a live secret he typed, across runs
+(SEC-12); RK8, for a death in the instant a provider hands the tool a secret (SEC-12); and the run
+directory's assumption (RUN-4). Their wording is in the catalog's Part 6 and is not restated here.
+This frame removes none of them and accepts none itself. An operation carried under RK2, RK3, RK4 or
+RK5 is marked so in the journal, once for each of those risks it is carried under. RK1, RK6, RK7 and
+RK8 belong to no one operation, and no mark is recorded for any of them. Where RK8's instant has
+passed, the journal already shows a receipt due and not given (SEC-12); that is the record of what
+happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark beside RK2's; each mark is recorded exactly once for its operation
 and its risk, also after a kill and a resume; no other operation carries a mark, and no record
-carries a mark for RK1 or for RK6.
+carries a mark for RK1, RK6, RK7 or RK8, an operation with a receipt due and not given among them.
 
 **RISK-2. A window nobody accepted is not the tool's to take.** A row whose effect has a window that
 no accepted risk names is written as an owner step (OP-9), and a manifest that holds it as a tool's
