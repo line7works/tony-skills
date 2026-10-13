@@ -518,8 +518,11 @@ What "the same thing" means is decided by the construction, and by nothing else:
 | C5, C6 | it has the provider id that the start record refers to (LOG-2), the two compared in memory, or is the named thing of this machine that the start record holds |
 | C7 | the object has the identity read at the source into the start record. The before-state is that object at the source with nothing at the target; the after-state is nothing at the source with that object at the target; any other pairing of the two places is `foreign` |
 
-Test on fakes: for each kind that has an effect, fixtures for the six answers each yield that answer
-and no state-changing call; a fixture with no record in which both tests hold yields `already so`,
+Test on fakes: for each kind that has an effect, a fixture for each answer that kind can give yields
+that answer and no state-changing call: all six for a build, a keep, a change and a move, and five
+for a create, which never answers `not landed` (OP-6, OP-7), its fixture with a start record and no
+answer record being outstanding whatever the world shows; a fixture with no record in which both
+tests hold yields `already so`,
 and one with a start record in which both states hold yields `landed`; for a swap, a file replaced
 by another actor with the after-content yields `landed`, and one with any other content `foreign`;
 for a build, an object with another identity at the place yields `foreign`; for a move with a start
@@ -804,7 +807,7 @@ of the plan that was not taken).
 | The provider's final status | state | made | passed | answered |
 |---|---|---|---|---|
 | `done` | meets | meets | stop | stop |
-| `already so`, at planning or in the run | meets | stop | stop | stop |
+| `already so`, found in the run | meets | stop | stop | stop |
 | `not proven` | meets | stop | stop | stop |
 | `adopted` | meets | stop | stop | stop |
 | `passed` | stop | stop | meets, as OP-8 limits it | stop |
@@ -816,6 +819,13 @@ of the plan that was not taken).
 | `left` | his | his | his | his |
 | `not needed` | branch | branch | branch | branch |
 | `held` | his | his | his | his |
+
+The table is of operations that ended in a run. Two things are settled before a run and never reach
+it. A thing the look found `already so` has no operation (RUN-7) and is no provider here: ORD-2
+settles each need on its output when the manifest is built, and meets a need at the state level
+outright. And a need at the made level on an output that only an adopt provides is settled there
+too (ORD-2), so the cell of `adopted` at the made level is reached only where another operation
+provides that output as well.
 
 A need can no longer be met when every operation that provides its output is final and none of them
 meets it. What follows is then decided by those providers' cells, in this order. If any of them is
@@ -833,9 +843,17 @@ provider, asserts its cell: for `meets`, the operation runs; for `stop` and for 
 ends `stopped` with the reason kind "need unmet" and the operation, the need and the status named,
 no `held` record is written, the run is open, and no last record is published; for `his`, the
 operation is `held` with its reason, the rest of the run goes on, and the run ends
-`ended with exceptions`. With two providers: `not proven` beside `left` stops; `refused` beside
-`left` is `held`; `refused` beside `not needed` stops. After such a stop, a re-plan that settles the
-need as ORD-2 says, and has its own go, lets the run go on.
+`ended with exceptions`. Two of the fifty-two are asserted as this rule says they are settled: the
+`already so` row's fixture is a thing the probe finds `already so` in the run, and a thing the look
+found `already so` is asserted under ORD-2, its state-level need met outright and its need at
+another level settled by the row's treatment when the manifest is built; and the pair of `adopted`
+with the made level, which no manifest with one provider reaches, is asserted as ORD-2's settlement
+at build. With two providers, each run end to end: `not proven` beside `not needed` stops; `refused`
+beside `left` is `held`; `refused` beside `not needed` stops. A `stop` cell beside
+a `his` cell cannot be built, since ORD-3 has one alternative run only once the other is final as
+`refused` or `not needed`; the order of those two cells is asserted on journal records written by
+hand, where `not proven` beside `left` reads as a stop. After such a stop, a re-plan that settles
+the need as ORD-2 says, and has its own go, lets the run go on.
 
 **ORD-2. A need on an output that nothing provides.** When a manifest is built, a need that names an
 output no operation in it provides is settled then, by the treatment the row declares for that need:
@@ -912,12 +930,15 @@ the completion record holds the inventory, the copy's size and fingerprint, and 
 source as read inside that same state. What of these a provider returned (the inventory, the
 source's identity) is held (SEC-4): it rests in a protected record and the completion record refers
 to it; the size and the fingerprint are the tool's own measure. Where the whole scope cannot be read
-or established, the keep
-fails and the run stops; where the look can already see that, it is a planning stop. No partial copy
-is offered as a keep, by a flag or by a go.
+or established, the keep fails and the run stops; where the look can already see that, it is a
+planning stop. The form of either tells what cannot be read as SEC-6 has held names told: the kind
+of thing, how many by the tool's own count, and the private file that lists them; a name a provider
+gave is in no form and no output. No partial copy is offered as a keep, by a flag or by a go.
 
 Test on fakes: a schema that appears between the look and the copy is in the copy, or the keep
-fails; a table that cannot be read ends the look with its name; no input yields a manifest that
+fails; a table that cannot be read ends the look as a planning stop whose form says that one table
+cannot be read and names a private file, with that table's name in the file and in no form or
+output; no input yields a manifest that
 holds a partial keep; and with a fake source that changes right after the snapshot, the completion
 record's inventory, source identity, size and fingerprint each equal what the fake held at the
 snapshot, and the copy at its place matches them.
@@ -1008,8 +1029,9 @@ secret field (SEC-4). No part of it is safe for being that part. Its host, its p
 name, its user name and each of its parameters is held unless a ground of SEC-4 proves that part,
 and its password is a secret. The whole address, every part of it, travels to the dump tool in the
 private password file: built in the run directory, owner-only from its first byte, named to the tool
-by a path in its environment (SEC-3), and removed when the tool ends and at the start of the next
-invocation if a kill left it. No part of the address is an argument or an environment value. The git
+by a path in its environment (SEC-3), and removed when the tool ends. Where a kill left it, the next
+invocation that continues the run removes it, at the one place SEC-12's order of first records
+gives. No part of the address is an argument or an environment value. The git
 host's tool keeps its own token; the frame never reads it. A protected record that a tool or the
 harness adapter needs (a routine's definition to recreate) is
 handed over only through a protected input (SEC-3). A held value (SEC-4) goes back to the provider
@@ -1023,7 +1045,12 @@ a fixture credentials file present, the same header arrives, and the fixture fil
 file opened read-only and left byte-equal; the fake dump tool records the password file's path in
 its environment and finds the file owner-only and holding the whole address, with no part of the
 address, its host, port, database name, user name or password, in any argument or environment value
-it recorded, and the file is gone after the call and after a kill and resume. A lost secret (one
+it recorded, and the file is gone after the call. A kill after the file is written and before the
+dump tool starts leaves it; in three passes the next summons is a resume, a status summons and a
+close, and in each the file is gone once that invocation's startup checks have passed and before its
+first journal record, the keep not having run again in the second and third; with that run
+directory given wider permissions first, the invocation stops on RUN-4's checks and the file is
+still there. A lost secret (one
 whose record an earlier invocation lost) is then planted as the host and, in a second run, as the
 database name of the connection address, once in the fixture's env file and once in a fake's secret
 field: in each of the four the part is in no journal record, manifest, form, output or error, and
@@ -1039,7 +1066,7 @@ parsed by SEC-4.
 | command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line. A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2) |
 | environment | built from nothing. It holds the base names `HOME`, `PATH`, `USER`, `LOGNAME`, `LANG` and `LC_ALL` (the last two set to one fixed locale) and `TMPDIR` (set to a private folder in the run directory), and the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
 | protected input | a slot the declaration names, with the type of protected record it accepts (SEC-6). The frame fills it only with the path of an owner-only file it made from that record, passed in the environment name or the argument position the slot declares. The content is never an argument, never an environment value and never in the CLI's output |
-| refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names |
+| refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it; the operation is not started and the run ends `stopped` on that refusal; and no rule lets a child be started with that check left out |
 | files it makes | a file-creation mask that gives every new file to the owner only; the working directory the row declares |
 | input and output | standard input empty; both output streams captured in memory up to a fixed size and handed only to the parser of SEC-4; output over that size is discarded and the result is `malformed` |
 | lifetime | its own process group; a time limit from the declaration; at the limit, or when the invocation is ending, the runner ends the group it started, every descendant in it included, and nothing else |
@@ -1047,7 +1074,10 @@ parsed by SEC-4.
 Test on fakes: the fake records its arguments and the names of its environment, and the names equal
 the base list plus the registered names; a session debug variable and a session token variable are
 absent; a command with no declaration, a trace flag, and a register entry planted in an argument
-whole, by component, percent-encoded and in base64 are each refused before the start; four rows,
+whole, by component, percent-encoded and in base64 are each refused before the start; a register
+entry equal to the value of a base name, the fixture's user name, and in a second pass one that is
+a part of the temporary folder's path, each refuse the command before any child is created, the
+fake recording no start, and the run ends `stopped`; four rows,
 whose templates put a held field (a provider's own id) into an argument and into a registered
 environment value, and a secret field into an argument and into a registered environment value,
 each fail the manifest build with the row named and no child started; the same held field declared
@@ -1079,10 +1109,10 @@ not declared.
 
 | Disposition | What the frame does with the value |
 |---|---|
-| fixed | ground A. A value on the field's list is kept as the tool's own word; a value off the list makes the result `malformed` |
+| fixed | ground A. A value on the field's list is kept as the tool's own word; a value off the list makes the result `malformed`, and so does a value on the list that holds an entry of the register, since no ground proves it |
 | equal | ground B or C, against the safe value the declaration names. Where it is equal, the tool keeps its own copy. Where it is not, the tool keeps the fixed fact that it differs, and the value itself is held |
 | held | never shown and never written where it can be read. It is kept as a protected record (SEC-6) where a later step needs it, and is otherwise dropped |
-| secret | held, and entered in the register (SEC-12) on receipt, before any other field of that result is read, whether it passes its own validator or fails it; the one value not entered is a failing one under the least length this rule gives below, which is dropped. It is the disposition of a credential, a code, a signed or one-time link, and a connection address |
+| secret | held, and entered in the register (SEC-12) on receipt, before any field of another disposition of that result is read, whether it passes its own validator or fails it; the one value not entered is a failing one under the least length this rule gives below, which is dropped. A declaration may give this disposition to more than one field of a command; each is then taken in the declaration's order, and what this rule and SEC-12 say of a secret field holds for each. It is the disposition of a credential, a code, a signed or one-time link, and a connection address |
 
 | Type | Its validator, which can refuse a value and never proves one | Dispositions it may have | A value of this type is safe when |
 |---|---|---|---|
@@ -1098,12 +1128,14 @@ not declared.
 | address | a link with no user part and no fragment | fixed, equal, held, secret | its whole text is fixed in the declaration, or it equals an address the tool built from safe content. Any other goes to a private file (the owner's ruling, A11) |
 
 An undeclared field is dropped. A declared field that fails its validator, a required field that is
-missing, or a fixed field off its list, turns the whole result into kind `malformed` with nothing
-kept, but for one thing: a secret. A value at a secret field's place stays in the tool's custody
-whatever becomes of the rest of the result, and whether it passed its own validator or failed it
-(the owner's ruling, A34): it is in the register; it is written to its protected record; the search
-for it is made; the disproof record is written where the search finds it; and the receipt is given,
-all as SEC-12 orders. One such value is not kept: one that fails its own validator and is under the
+missing, a fixed field off its list, or a fixed field on its list that holds an entry of the
+register, turns the whole result into kind `malformed` with nothing kept, but for one thing: a
+secret. A value at a secret field's place stays in the tool's custody whatever becomes of the rest
+of the result, and whether it passed its own validator or failed it (the owner's ruling, A34): it is
+in the register; it is written to its protected record; the search for it is made; the disproof
+record is written where the search finds it; and the receipt is given, all as SEC-12 orders. Where a
+result has more than one secret field, that holds for each of them, and what becomes of one changes
+nothing for another. One such value is not kept: one that fails its own validator and is under the
 least length. The least length is eight bytes. It is counted on what the tool read at the field's
 place in the tool's structured answer, in UTF-8, with white space at either end left out of the
 count. For a text that is the text itself, without the marks that enclose it in the answer. For a
@@ -1203,7 +1235,17 @@ whole; with those digits in the fixture's saved inputs the disproof record is wr
 one number under it is kept whole. With the longer text in the saved inputs the disproof record is
 written and the run is `stopped`. With the shorter text, the number and the name of one of the
 object's fields in the saved inputs, and not the longer text, no disproof record is written, and the
-next status form shows all three as text.
+next status form shows all three as text. A fixed field on its list that holds an entry of the
+register: a fake returns, in a fixed field, a word that is on that field's list and that the
+register holds. The result is `malformed`; that word is kept nowhere as the tool's own; and a secret
+field of the same result keeps its protected record and its receipt. Two secret fields: a
+declaration that gives two fields of one command the secret disposition builds. A fake returns in
+the first a value that equals nothing on record, and in the second a value equal to a description
+in the fixture's saved inputs. The journal then holds the receipt-due record, which names two ids;
+the disproof record, which refers to the second field's protected record; and two receipts, one for
+each field, in that order. Both values are in their protected records and in the register; the run
+is `stopped` on the disproof; and the next status form holds the fixed words in the description's
+place.
 
 **SEC-5. Nothing a tool prints is kept or shown** (the owner's ruling, A4). What the owner or the
 executor sees of a failure is the operation, the kind, and the command with its declared arguments,
@@ -1340,20 +1382,25 @@ to learn a secret it has not itself read, and nothing in this frame needs it to,
 register does not know is held by SEC-4 all the same. What an invocation does read back is the
 disproof records, as this rule says below.
 
-The receipt. A command whose declaration has a secret field is run only inside an operation, after
-that operation's start record. Each execution of it answers for itself: before the child starts,
-the journal holds a step record that a receipt is due, naming the operation, the number of this
-execution, and the id under which the value will be kept; after the result is parsed, its secret is
-in its protected record and the search for it has been made (the next paragraph), a step record
-gives the receipt, naming that record, or saying that the result held no such value, or, for a value
-that failed its validator and was under SEC-4's least length, saying in fixed words that what stood
-at the secret field's place was under that length and was dropped. None of this waits on the rest of
-the result: the record, the search, the disproof record where it is owed and the receipt are made
-also where another field turns the result `malformed`, and where the secret's own value fails its
-validator and is kept (SEC-4). A receipt that
-is due and was not given is a secret that may have been received and lost, whatever receipts earlier
-executions of the same command have: every status form says so, naming the operation and the
-execution, and for EV-7 what needed that value is missing. So a look receives no secret from a
+The receipt. A command whose declaration has a secret field, or more than one, is run only inside an
+operation, after that operation's start record. Each execution of it answers for itself, and in it
+each secret field for itself. Before the child starts, the journal holds a step record that a
+receipt is due for each secret field of the declaration, naming the operation, the number of this
+execution and, field by field, the id under which that field's value will be kept. After the result
+is parsed, the secret fields are taken in the declaration's order, all of them before any other
+field, and in three passes. First each value that is kept is written to its own protected record.
+Then the search for each is made (the next paragraph), and each disproof record owed is written.
+Then a step record gives the receipt of each field, one record for each: naming that field's
+protected record, or saying that the result held no such value, or, for a value that failed its
+validator and was under SEC-4's least length, saying in fixed words that what stood at that field's
+place was under that length and was dropped. None of this waits on the rest of the result: the
+record, the search, the disproof record where it is owed and the receipt are made also where another
+field turns the result `malformed`, and where a secret's own value fails its validator and is kept
+(SEC-4). A receipt that is due and was not given is a secret that may have been received and lost,
+whatever receipts earlier executions of the same command have, and whatever receipts the other
+secret fields of the same execution have: every status form says so, naming the operation, the
+execution and the field by its declared name, and for EV-7 what needed that value is missing. So a
+look receives no secret from a
 provider. It reads one only from a file already on this machine (SEC-2). Where a look needs a secret
 that no such file holds, it does not fetch it: that is a planning stop (RUN-7), and its form gives
 the one command the owner runs himself before he summons again. The owner ruled this for the sunset
@@ -1413,7 +1460,11 @@ his word to go on, his answer, or his close. Then the records of whatever it doe
 `closed` record follows the disproof records and the receipts and comes before every other record. A
 close record (RUN-13) is one more record after all three kinds and never stands in the place of one.
 An invocation that is refused once the third is written, as a resume of a retirement that a restore
-has closed is, writes nothing more.
+has closed is, writes nothing more. One act stands before the first of these records and is no
+journal record: once its startup checks have passed, and not before, every invocation that continues
+a run removes a private password file that a kill left in that run directory (SEC-2), whatever it
+was summoned for, a status and a close among them. A stop by the startup checks leaves the file
+where it is.
 
 Another run's journal. An invocation that reads the journal or the records of a run other than its
 own (RUN-5, EV-7) first makes RUN-4's checks on that run directory and then that run's disproof
@@ -1443,7 +1494,13 @@ channel secret replaced before its channel was read is RK6.
 The withheld read, and what a refusal prints. A value a run has caught is hidden by every later
 invocation on every path, a refusal's included, and whatever the value is: a name, a run's own id,
 or a part of the tool's own fixed text. So the first act of the gate, before the invocation prints
-anything, is the withheld read. It reads the record of every lock and the record of open runs. For
+anything, is the withheld read. Every start of the shipped tool that prints anything makes it, a
+start that is no summons among them: the tool's help and a command's help; an identity answer; a
+check the tool ships, such as the check of its examples; a usage error; an unknown command; a
+failure to find what the tool depends on. A start that is no summons passes no gate, takes no lock
+and opens no run directory: it makes the withheld read as its first act and passes every line it
+prints against those values, as an early path does. No output of the shipped tool stands outside
+this paragraph. The withheld read reads the record of every lock and the record of open runs. For
 each run that either of them holds, a run on record, it makes RUN-4's checks on that run directory
 and, whatever they find, reads the disproof records of that journal as far as they can be read, and
 each value from where its record says it rests. A check that fails there stops nothing at the gate,
@@ -1459,9 +1516,13 @@ the disproof records of that run were read whole and the id holds none of those 
 whole where two things hold: the chain of that journal (LOG-1), which is one of RUN-4's two checks,
 holds from its first record to its last; and the value of every disproof record in the journal was
 read from where its record says it rests. RUN-4's other check, that the directory is owner-only,
-does not enter into it. Otherwise the fixed words stand in its place, with the name of the file
-whose record holds that id, which is a lock's file or the record of open runs, and the owner opens
-that file himself to read it. Where a
+does not enter into it. A run on record that has no journal, its run directory being there or not,
+is read by what names it. Where a lock's record alone names it, and the record of open runs holds it
+under no key, it has had no go, so there is no journal that could hold a disproof record: its read
+is whole. Where the record of open runs holds it, it has had its go and a journal is owed: without
+one its read is not whole. Where a run's id may not be printed, the fixed words stand in its place,
+with the name of the file whose record holds that id, which is a lock's file or the record of open
+runs, and the owner opens that file himself to read it. Where a
 disproof record of a run on record, or its value, cannot be read, the tool cannot tell what that run
 has caught: that run's id is printed on no path, and what else is printed is passed against the
 values the read did give. A disproof is a record in a run directory, and like every proof of this
@@ -1541,8 +1602,10 @@ fingerprint in a lock, and once the keying value.
 
 In any line that continues a run, a failure of RUN-4's checks stops the invocation with the fixed
 text, printed as the withheld read lets it be, and nothing else written. The rules that let an
-invocation begin or end are RUN-1 to RUN-13,
-OP-9 and EV-7; these twelve lines are every beginning they allow. Three things this rule does not
+invocation begin or end are RUN-1 to RUN-13, OP-9 and EV-7; these twelve lines are every beginning
+they allow. A start of the shipped tool that is no summons is none of the twelve: it works on no
+run, and the paragraph on the withheld read says all that this frame says of it. Three things this
+rule does not
 reach, and says so: a secret the frame never reads into memory (a value inside a file a tool wrote
 into staging), which SEC-11's scan is what checks; a secret that had left its channel before this
 invocation read that channel (a token since replaced); and the death of an invocation in the
@@ -1665,6 +1728,22 @@ no other published file. The record of open runs and a lock's own record hold on
 run ids; the cue's fake records the same fixed call in every run. No fake file system records a read
 of the protected folder of a run other than the one continued, but in the reads RUN-5 and EV-7
 order, and the register's content is in no file of the fixture home outside the places of SEC-7.
+Every shipped start. A fixture run on record has caught, with its disproof on record, a word that
+stands in the tool's help text, in a command's help text, in the identity answer and in the output
+of the check of examples. Each of these is then started as a child process of the shipped entry
+point, with no summons: the tool's help; a command's help; the identity command; the check of
+examples; a usage error; an unknown command; a start with what the tool depends on missing. In each
+the fake file system shows the withheld read made before the first byte of output, the caught word
+is in no output, and the fixed words of withholding stand in its place; with no run on record the
+same seven print their text whole. More than one secret field: a command with two secret fields is
+killed after the first field's protected record is written and before the second's. The next status
+form says that a secret may have been received and lost, naming the operation, the execution and the
+second field; and the first journal records of the next invocation that continues the run are the
+disproof record owed for the first field's value, where the run's records hold it, and then the
+first field's receipt. A run with no journal: a run that a lock's record alone names, with no run
+directory, is named by its id at the keying value's refusal; a run that the record of open runs
+holds, with its run directory removed, is named there by the fixed words and the file's name, and
+its id is in no output.
 
 ### 3.8 Forms
 
