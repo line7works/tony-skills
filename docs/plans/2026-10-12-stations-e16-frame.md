@@ -166,7 +166,8 @@ names it carries,
 having read nothing of the project; and again under each key its alias reads show, having read only
 those files besides. Both are made before a run directory is opened or made. While any of those
 keys has an open run, the summons may only resume it (RUN-10), re-plan it (RUN-11) or close it
-(RUN-13); any other summons is refused and names the open run. The one exception is in EV-7.
+(RUN-13); any other summons is refused and names the open run by its id, where SEC-12's withheld
+read lets that id be printed. The one exception is in EV-7.
 
 Test on fakes: with a sunrise left `waiting` that holds a second key, a sunset summons
 under either of those two names is refused at the early look with the open run named, having read
@@ -1079,9 +1080,8 @@ not declared.
 
 An undeclared field is dropped. A declared field that fails its validator, a required field that is
 missing, or a fixed field off its list, turns the whole result into kind `malformed` with nothing
-of its other fields kept. One thing stands whatever becomes of the result. A value read at a secret
-field's place is in the tool's custody from that moment, whether the result is whole or `malformed`,
-and whether or not that value passes its own validator: it is in the register; it is written to its
+kept, but for one thing. A value in a secret field that passed its own validator stays in the tool's
+custody whatever becomes of the rest of the result: it is in the register; it is written to its
 protected record; the search for it is made; the disproof record is written where the search finds
 it; and the receipt is given, all as SEC-12 orders. The operation's result is `malformed` all the
 same. A value received in a secret field is searched for in the run's records at once (SEC-12).
@@ -1245,10 +1245,11 @@ wider permissions is reported; an issued value planted in a form is found.
 
 **SEC-12. The secret register, the receipt, and the startup guard.** Whether a provider's value may
 be shown is SEC-4's to decide, and that never depends on what the tool knows to be a secret. This
-rule holds the four things that stand beside SEC-4: a register that is a backstop and no more, a
+rule holds the five things that stand beside SEC-4: a register that is a backstop and no more, a
 receipt for every execution that can receive a secret, a lasting record of every safe ground the
-tool finds disproved, and the limit on what an invocation may write before its startup checks have
-passed. It then says where these apply, place by place and beginning by beginning.
+tool finds disproved, a read of those records before anything is printed, and the limit on what an
+invocation may write before its startup checks have passed. It then says where these apply, place by
+place and beginning by beginning.
 
 The register. There is one for an invocation, held in memory and written nowhere. It holds each
 secret the invocation has read from a channel of SEC-2, each value it has received in a secret
@@ -1374,15 +1375,22 @@ or a part of the tool's own fixed text. So the first act of the gate, before the
 anything, is the withheld read. It reads the record of every lock and the record of open runs. For
 each run that either of them holds, a run on record, it makes RUN-4's checks on that run directory
 and, whatever they find, reads the disproof records of that journal as far as they can be read, and
-each value from where its record says it rests. It holds those values for printing only: they are
-not entries of the register, and no check of a name or of an input sees them. It reads nothing
+each value from where its record says it rests. A check that fails there stops nothing at the gate,
+whichever run's directory it is: it bears only on whether that run's id may be printed, as this
+paragraph goes on to say. The stop RUN-4 orders is made in RUN-1's third step, by an invocation that
+continues that run, and by no other. The withheld read holds those values for printing only: they
+are not entries of the register, and no check of a name or of an input sees them. It reads nothing
 outside the tool's own folder and those run directories, and it writes nothing. Until the startup
 checks have passed, every line the invocation prints is passed against those values, as the
 register's paragraph passes a line against an entry. A line of fixed text that holds one of them is
 not printed, and the fixed words of withholding stand in its place. A run's id is printed only where
-the disproof records of that run were read whole and the id holds none of those values. Otherwise
-the fixed words stand in its place, with the name of the file whose record holds that id, which is a
-lock's file or the record of open runs, and the owner opens that file himself to read it. Where a
+the disproof records of that run were read whole and the id holds none of those values. That read is
+whole where two things hold: the chain of that journal (LOG-1), which is one of RUN-4's two checks,
+holds from its first record to its last; and the value of every disproof record in the journal was
+read from where its record says it rests. RUN-4's other check, that the directory is owner-only,
+does not enter into it. Otherwise the fixed words stand in its place, with the name of the file
+whose record holds that id, which is a lock's file or the record of open runs, and the owner opens
+that file himself to read it. Where a
 disproof record of a run on record, or its value, cannot be read, the tool cannot tell what that run
 has caught: that run's id is printed on no path, and what else is printed is passed against the
 values the read did give. A disproof is a record in a run directory, and like every proof of this
@@ -1392,7 +1400,8 @@ values of the withheld read are used only to decide, in the same way, whether an
 be printed. The early paths are these, and each prints under this paragraph: a
 failed check of the gate, the keying value's among them (RUN-2); a name that fails its check; a held
 lock, the first key's or a later key's; a new summons met by an open run, at the early look or at
-the second (RUN-3); and a stop by RUN-4's checks, a disproof record that cannot be read among them.
+the second (RUN-3); and a stop by RUN-4's checks on the run directory that the invocation itself
+continues, a disproof record of that run that cannot be read among them.
 
 Before the startup checks pass. The startup checks are RUN-1's first two steps (the gate; the name
 check, the locks and the looks for an open run), RUN-4's checks on the run directory the invocation
@@ -1499,9 +1508,17 @@ with no status form rendered from the records. The early paths. A fixture run ha
 disproof on record, its own id, and in a second pass a word of the tool's fixed refusal text that
 its journal holds; RUN-2's test line drives it to the keying value's refusal and RUN-12's to every
 other early path. On each the fake file system shows the withheld read made before the first byte of
-output, and the caught id and the caught word in no output. With that run's disproof record then cut
-out of its journal, its id is still in no output on any early path, and the name of the file whose
-record holds it stands in its place. RK8's case. A row's validator passes a line of a file on the
+output, and the caught id and the caught word in no output. That run's disproof record is then cut
+out of its journal, from between two records that stay, so that the chain breaks there: its id is
+still in no output on any early path, and the name of the file whose record holds it stands in its
+place. Another run's directory: a second run on record, which has caught nothing, has a file in its
+directory given wider permissions, and in another pass has a record cut from the middle of its
+journal. In neither pass does that failed check stop a summons for another project: with the keying
+value's file in place that summons passes the gate and goes on; with the keying value's file
+removed, the gate's refusal lists the second run by its id in the first pass, and by the fixed words
+and the file's name in the second. A summons that continues the second run is stopped by RUN-4's
+checks in both passes, in RUN-1's third step. RK8's case. A row's validator passes a line of a file
+on the
 fixture machine as safe, and the manifest holds that line. A fake returns the line in a secret field
 and the invocation is killed after the receipt-due record and before the protected record is
 written. The next status form says that a secret may have been received and lost, naming the
