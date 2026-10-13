@@ -223,7 +223,8 @@ Measured, not assumed:
 Risk the design names and cannot remove. **The owner accepted RK1 to RK3 and ruled Q7 (the
 contract's section 18, A4), and accepted RK4, RK5 and the run directory's assumption (A6), on
 2026-10-12, and RK6 the same day (A18). The same day his word on a lost sealed secret was
-withdrawn and RK6 came to cover less (A21, A22).** How likely each is was never measured.
+withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026-10-13 (A26).**
+How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
   tools with his own configuration, and they keep their own logs, caches and credential stores as
@@ -261,6 +262,20 @@ withdrawn and RK6 came to cover less (A21, A22).** How likely each is was never 
   this risk as the frame words it. What RK6 still covers: the tool keeps no copy of a replaced
   token, so it does not recognise the old token where the owner types it or where it sits in a
   file on this machine. The outside reviewer has not yet read the rules this rests on. Not
+  measured.
+- **RK7, a live secret he typed, across runs** (accepted by the owner, A26). Where a value he
+  typed into the tool turns out to be a live secret, the run that finds it, when a provider
+  returns the same value, stops and hides the value from then on. Other runs under the same
+  project name do not know. A run that ended before the catch, and a new run, can still show the
+  value, until a provider returns the secret to that run too. Files already written and names
+  already sent to a provider are not taken back. This names a value he typed, and no other. He was
+  told that accepting it is a step toward the option he passed over when the reviewer marked the
+  leak returned a fourth time (A24). Not measured.
+- **RK8, a death in the instant a secret arrives** (accepted by the owner, A26). If the tool dies
+  in the moment a provider hands it a secret, before its first record of it, every later status of
+  that run says that a secret may have been received and lost, and the run goes on. The tool never
+  recorded the value, so it cannot tell whether it equals something he typed; if it does, the run
+  can still show it. It takes both a live secret typed by mistake and a death in that instant. Not
   measured.
 - **His word on a lost sealed secret: WITHDRAWN** (ruled by the owner, A18; retired by his ruling
   of A21, question PS5). The frame no longer takes that word, so nothing rests on it and nothing
