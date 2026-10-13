@@ -1063,7 +1063,7 @@ not declared.
 | fixed | ground A. A value on the field's list is kept as the tool's own word; a value off the list makes the result `malformed` |
 | equal | ground B or C, against the safe value the declaration names. Where it is equal, the tool keeps its own copy. Where it is not, the tool keeps the fixed fact that it differs, and the value itself is held |
 | held | never shown and never written where it can be read. It is kept as a protected record (SEC-6) where a later step needs it, and is otherwise dropped |
-| secret | held, and entered in the register (SEC-12) on receipt, before any other field of that result is read. It is the disposition of a credential, a code, a signed or one-time link, and a connection address |
+| secret | held, and entered in the register (SEC-12) on receipt, before any other field of that result is read, whether it passes its own validator or fails it; the one value not entered is a failing one under the least length this rule gives below, which is dropped. It is the disposition of a credential, a code, a signed or one-time link, and a connection address |
 
 | Type | Its validator, which can refuse a value and never proves one | Dispositions it may have | A value of this type is safe when |
 |---|---|---|---|
@@ -1080,11 +1080,21 @@ not declared.
 
 An undeclared field is dropped. A declared field that fails its validator, a required field that is
 missing, or a fixed field off its list, turns the whole result into kind `malformed` with nothing
-kept, but for one thing. A value in a secret field that passed its own validator stays in the tool's
-custody whatever becomes of the rest of the result: it is in the register; it is written to its
-protected record; the search for it is made; the disproof record is written where the search finds
-it; and the receipt is given, all as SEC-12 orders. The operation's result is `malformed` all the
-same. A value received in a secret field is searched for in the run's records at once (SEC-12).
+kept, but for one thing: a secret. A value at a secret field's place stays in the tool's custody
+whatever becomes of the rest of the result, and whether it passed its own validator or failed it
+(the owner's ruling, A34): it is in the register; it is written to its protected record; the search
+for it is made; the disproof record is written where the search finds it; and the receipt is given,
+all as SEC-12 orders. One such value is not kept: one that fails its own validator and is under the
+least length. The least length is eight bytes, counted on the value's text in UTF-8 as the tool read
+it at the field's place, with white space at either end left out of the count; a place that holds no
+text holds no bytes. A failing value under it is dropped with the rest of the result: it does not
+enter the register, no search is made for it, no protected record is written, and the receipt says
+so (SEC-12). This least length is for that one case. It does not bear on a secret that passed its
+validator, on a channel secret, on a value read back from a disproof record, or on what counts as a
+line that holds a value. Custody changes nothing in the result itself: a result that another field
+made `malformed` stays `malformed`, and a secret field's value that fails its own validator makes
+the result `malformed` whether that value is kept or dropped. A kept value is kept as it was read. A
+value received in a secret field and kept is searched for in the run's records at once (SEC-12).
 Where they hold it, a safe ground is disproved: the run stops, and SEC-12 says what is written first
 and what holds in every later invocation. An account or a team that equals no name in his settings
 ends the look (RUN-7), and the name the provider reported is shown nowhere. A field that the row
@@ -1135,7 +1145,22 @@ the operation's result is `malformed` and no other field of that result is kept;
 the receipt-due record and then the receipt, which names the protected record; that record holds
 the secret; and the secret is in the register and in no output. In a third pass the fixture's saved
 inputs hold that same value: the journal then holds the receipt-due record, the disproof record and
-the receipt, in that order, and the run is `stopped` on the disproof.
+the receipt, in that order, and the run is `stopped` on the disproof. A secret field's value that
+fails its own validator: inside an operation a fake returns, at the secret field's place, a value
+that fails that field's validator and is exactly at the least length, and in a second pass one five
+times that long. In both the value is kept: the journal holds the receipt-due record and then the
+receipt, which names the protected record; that record holds the value as it was read; the value is
+in the register and in no output; and the result is `malformed`. In a third pass the fixture's saved
+inputs hold the first pass's value: the journal holds the receipt-due record, the disproof record
+and the receipt, in that order, and the run is `stopped` on the disproof. Under the least length, in
+five passes: the failing value is one byte under it; one byte long; empty; over it where its white
+space is counted and one byte long once the white space at its ends is left out; and not text at
+all. In each the result is `malformed`; no protected record is written;
+the receipt says, in fixed words, that what stood at the secret field's place was under the least
+length and was dropped; and no disproof record is written. In the first two of the five the
+fixture's saved inputs hold that same text: the run is not stopped on a disproof, and the next
+status form shows that saved input as text, so the register holds no entry for it and nothing is
+withheld.
 
 **SEC-5. Nothing a tool prints is kept or shown** (the owner's ruling, A4). What the owner or the
 executor sees of a failure is the operation, the kind, and the command with its declared arguments,
@@ -1277,9 +1302,12 @@ that operation's start record. Each execution of it answers for itself: before t
 the journal holds a step record that a receipt is due, naming the operation, the number of this
 execution, and the id under which the value will be kept; after the result is parsed, its secret is
 in its protected record and the search for it has been made (the next paragraph), a step record
-gives the receipt, naming that record, or saying that the result held no such value. None of this
-waits on the rest of the result: the record, the search, the disproof record where it is owed and
-the receipt are made also where another field turns the result `malformed` (SEC-4). A receipt that
+gives the receipt, naming that record, or saying that the result held no such value, or, for a value
+that failed its validator and was under SEC-4's least length, saying in fixed words that what stood
+at the secret field's place was under that length and was dropped. None of this waits on the rest of
+the result: the record, the search, the disproof record where it is owed and the receipt are made
+also where another field turns the result `malformed`, and where the secret's own value fails its
+validator and is kept (SEC-4). A receipt that
 is due and was not given is a secret that may have been received and lost, whatever receipts earlier
 executions of the same command have: every status form says so, naming the operation and the
 execution, and for EV-7 what needed that value is missing. So a look receives no secret from a
@@ -1305,8 +1333,8 @@ invocation made: it records no go, writes no journal record and opens no run. In
 is rendered, with the fixed words in the value's place, and the next summons starts a new look
 (RUN-12). That look reads the same channel and meets the same secret; where the channel no longer
 holds it, that is RK6. The reason kind is a safe ground disproved, and its line is the lane's to
-give (FORM-2). For a command with a secret field, the receipt is given only after the search and,
-where the search found the value, after the disproof record.
+give (FORM-2). For a command with a secret field whose value is kept, the receipt is given only
+after the search and, where the search found the value, after the disproof record.
 
 What holds from then on. No disproof record is removed or ended, by the tool or by a word. Every
 invocation that continues the run makes the disproof read, and so does the invocation that is to
@@ -1479,8 +1507,9 @@ instant between a provider's handing it a secret and its first record of that se
 RK6, which the owner accepted (A18; RISK-1), and by his word the tool keeps no copy of a channel
 secret to close it. Such a value repeated in a provider's answer is held by SEC-4 like any other;
 RK6 now covers only the same value typed by the owner or found in a file on this machine, which the
-register does not know. The third is RK8, which the owner accepted, and by his later ruling for
-anything the run holds as safe (A26, A32; RISK-1). The receipt stays due, every status form of that
+register does not know. The third is RK8, which the owner accepted, and by his later rulings for
+anything a run holds as safe and for any run that shows the lost value (A26, A32, A33; RISK-1). The
+receipt stays due, every status form of that
 run says so, the run goes on, and the tool cannot tell whether that lost value is one that run's
 records hold as safe. RK8 reaches no further: a value the run does not hold as safe is held back by
 SEC-4, and a secret whose protected record was written before the death is found by the next
@@ -1722,8 +1751,9 @@ unanswered or names a row that does not exist.
 ## Part 4. The risk that is left
 
 **RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted eight
-risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30 and A32): RK1; RK2, which
-by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5, for a
+risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32 and A33): RK1; RK2,
+which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7; RK5,
+for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
 before an invocation read its channel (SEC-12); RK7, for a live secret among whatever a run holds as
 safe, across runs (SEC-12); RK8, for a death in the instant a provider hands the tool a secret
@@ -1738,12 +1768,13 @@ Test on fakes: every operation built by C3, C6 or C7 carries the mark of its ris
 and its put-back carry RK5's mark beside RK2's; each mark is recorded exactly once for its operation
 and its risk, also after a kill and a resume; no other operation carries a mark, and no record
 carries a mark for RK1, RK6, RK7 or RK8, an operation with a receipt due and not given and a run
-that holds a disproof record among them. What RK8 covers is tested by its case in SEC-12's test
-line, and by nothing wider: after a death between a provider's handing over a secret and the tool's
-first record of it, the receipt is due and not given, the status form says a secret may have been
-received and lost, the run goes on, and the one thing still shown that the secret may equal is
-content that run held as safe before the death; with the protected record written before the death,
-that content is withheld.
+that holds a disproof record among them. What the run that died does after RK8's instant is tested
+by that case in SEC-12's test line: after a death between a provider's handing over a secret and the
+tool's first record of it, the receipt is due and not given, the status form of that run says a
+secret may have been received and lost, and the run goes on; a value that run does not hold as safe
+is in no output; and with the protected record written before the death, the content the secret
+equals is withheld. That is a test of what one run does. How far RK8 reaches is Part 6's to say, and
+this test line does not narrow it.
 
 **RISK-2. A window nobody accepted is not the tool's to take.** A row whose effect has a window that
 no accepted risk names is written as an owner step (OP-9), and a manifest that holds it as a tool's
