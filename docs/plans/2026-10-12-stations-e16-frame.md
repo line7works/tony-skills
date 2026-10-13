@@ -201,9 +201,19 @@ operation's effect call is recorded a second time; the superseded manifest is st
 directory, byte-equal; a create left outstanding before the re-plan is still outstanding in the new
 plan unless OP-7 resolves it.
 
-**RUN-12. How an invocation and a run end.** An invocation runs operations (ORD-5) until none can
-run or a rule says stop, then ends in exactly one of five ways, and each ending renders a status
-form from the manifest and the journal.
+**RUN-12. How an invocation and a run end.** An invocation of a run that has a go on record runs
+operations (ORD-5) until none can run or a rule says stop, then ends in exactly one of five ways,
+and each ending renders a status form from the manifest and the journal. Before a run's first go
+there is no open run, nothing to resume, and none of the five. An invocation that ends then ends in
+one of two ways: with its preview rendered, awaiting his go; or `refused`, where the gate fails
+(RUN-1), a lock is held or a run is open (RUN-2, RUN-3), a planning stop is met (RUN-7), an input is
+refused (SEC-9) or an answer is lacking (RUN-5). A refusal renders a refusal form from the summons's
+validated inputs and from what the look had read by then, naming each cause; it writes no manifest
+and no journal, and the next summons starts a new look. A summons turned away at the gate, at a held
+lock or by RUN-3 is `refused` in the same way whether or not the run it names has a go, and changes
+nothing in that run. A planning stop, a refused input or a lacking answer met in the look of a
+re-plan, in a run that already has a go, ends that invocation `stopped`, with the manifest in force
+unchanged.
 
 | Ending | When | The run is then |
 |---|---|---|
@@ -215,10 +225,13 @@ form from the manifest and the journal.
 
 Test on fakes: the kill sweep's reference run ends `complete`; a fixture with an owner step ends
 `waiting` with the step listed and no lock held; a planted stop inside an operation ends `stopped`
-with that operation named; a stop that belongs to no operation (RUN-4, a planning stop of RUN-7)
-ends `stopped` or before any preview with each cause named; a fixture with a `left` step ends
-`ended with exceptions` with it listed; a closed run ends `closed`; no ending other than these five
-is ever recorded.
+with that operation named; a stop that belongs to no operation in a run that has its go (a RUN-4
+failure) ends `stopped` with the cause named; a planning stop in a first look ends `refused`, with a
+refusal form naming each cause, no manifest and no journal written, no run open under the key, and a
+later resume summons finding nothing to resume; the same planning stop in a re-plan's look ends
+`stopped` with the manifest in force unchanged; a fixture with a `left` step ends
+`ended with exceptions` with it listed; a closed run ends `closed`; for a run with a go on record no
+ending other than these five is ever recorded.
 
 **RUN-13. The owner can close a run.** On his word an open run is recorded `closed`. A closed run
 never resumes. Closing changes nothing outside the run directory and undoes nothing; the form lists
@@ -360,13 +373,17 @@ What "the same thing" means is decided by the construction, and by nothing else:
 | C3 | it is the file at the recorded path. The object's own identity is not asked here, because a swap and an editor both replace it; whether the object in place is the staged one is asked by OP-6 |
 | C4 | it is the same named branch or tag of the same repository |
 | C5, C6 | it has the provider id, or is the named thing of this machine, that the start record holds |
-| C7 | the object at the target has the identity read at the source into the start record, and the source holds nothing; any other pairing is `foreign` |
+| C7 | the object has the identity read at the source into the start record. The before-state is that object at the source with nothing at the target; the after-state is nothing at the source with that object at the target; any other pairing of the two places is `foreign` |
 
 Test on fakes: for each kind that has an effect, fixtures for the six answers each yield that answer
 and no state-changing call; a fixture with no record in which both tests hold yields `already so`,
 and one with a start record in which both states hold yields `landed`; for a swap, a file replaced
 by another actor with the after-content yields `landed`, and one with any other content `foreign`;
-for a build, an object with another identity at the place yields `foreign`.
+for a build, an object with another identity at the place yields `foreign`; for a move with a start
+record, the recorded object at the source with nothing at the target yields `not landed`, nothing at
+the source with the recorded object at the target yields `landed`, and every other pairing (both
+places hold something, neither does, or either holds an object of another identity) yields
+`foreign`.
 
 **OP-6. What the tool does with each answer.** Owner kinds follow OP-9 and adopt follows OP-10. On
 what ground a completion record may be written is EV-1's to say; this table says only when.
@@ -446,13 +463,24 @@ read each time, never from an earlier form and never by repeating an effect. Whe
 content before he answers, the row gives a review file (SEC-6). An answer that is not on the row's
 list is refused and the operation stays `waiting`. The value of a recorded answer is what needs and
 conditions name (ORD-1, ORD-3); an answer has no other consequence. In any mode his answer "leave
-it" records the operation `left`.
+it" records the operation `left`. An owner step whose row declares a way back is shown to him as a
+step to take only after every input its reverse needs (the inputs LOG-2 names for an effect) has
+been read, saved as a protected record (SEC-6) and read back against its fingerprint; its `waiting`
+record is written after that and names those records. Where the look finds that such an input
+cannot be read, the step is planned with no way back, the preview says of that step that no reverse
+can be offered, and his go covers it. Where the look could read it and the save then fails, the run
+stops and the step is not shown.
 
 Test on fakes: a step in read-back mode completes on the read alone and never on his word alone; a
 step on his word completes on the word and is listed as not checked; an answer the row does not list
 is refused and nothing is recorded as `answered`; a waiting step shown again after the provider's
 state changed shows what the fresh read gave and not the earlier form's text; "leave it" ends the
-wait as `left`; no fake records a call that performs an owner's step.
+wait as `left`; no fake records a call that performs an owner's step; for an owner step that
+declares a way back, the fakes' sequence shows each input of its reverse saved and read back before
+the `waiting` record and before the step is in any form, and after the owner then removes the thing
+those inputs are still readable from the run directory alone; where the look cannot read an input,
+the preview says no reverse can be offered for that step; where the save fails after the go, the
+run stops with the step never shown.
 
 **OP-10. Adopt.** Adoption is offered for one output and for no other: the local project folder (the
 owner's ruling, A6). An adopt is in a manifest only because the owner's own input names that folder
@@ -535,27 +563,36 @@ other than its target, was changed by another actor stops and names that thing.
 **EV-4. When a way back may be recorded.** A way back is recorded for an operation when all four
 hold, and only then: its row declares one (ROW-1); the operation is `done`; every input the reverse
 needs was on disk before the effect (LOG-2); and the reverse is itself an operation this frame
-allows. In every other case the record says "no way back" with one reason from this list: the row
-declares none; found already so; not proven; an input is missing; done by the owner.
+allows. The fourth is settled before the go and never after it: when the manifest is built, a
+declared reverse is checked as a row of its own kind, with its construction and its accepted risks
+(OP-2, OP-3, RISK-2), and a row whose declared reverse is not allowed fails the build (ROW-1). In
+every other case the record says "no way back" with one reason from this list: the row declares
+none; found already so; not proven; an input is missing; done by the owner.
 
-Test on fakes: every `done` operation whose row declares a way back and whose inputs are on record
-has that way back recorded; for each final status other than `done`, and for a `done` operation with
-an input removed, the record's way-back field is "none" with the matching reason.
+Test on fakes: every `done` operation whose row declares a way back that passed the build, and whose
+inputs are on record, has that way back recorded; a row whose declared reverse cannot be built under
+OP-3 and RISK-2 (a reverse that is a read-then-ask on a row RK3 does not name) fails the manifest
+build, names the row, and none of its operations runs; for each final status other than `done`, and
+for a `done` operation with an input removed, the record's way-back field is "none" with the
+matching reason.
 
 **EV-5. What a restore offers.** A restore builds its manifest from the retiring run's journal. It
 offers the reverse of each operation that has a way back on record (EV-4) and of no other, with two
 additions the owner ruled (A6): for an operation that ended `not proven`, it lists it and offers the
 reverse only if the owner asks for that line in the restore's look, and every form then says it runs
 on his word and was not proven the run's; for an owner step that ended `done by owner`, in either
-mode, it offers the reverse as an owner step in the same mode. It may copy from a keep (KEEP-4).
+mode, it offers the reverse as an owner step in the same mode, where the retiring run saved what
+that reverse needs (OP-9), and offers none where its preview said none could be. It may copy from a
+keep (KEEP-4).
 Everything it does not offer it lists, with the reason EV-4 recorded. Every reverse is an ordinary
 operation under every rule of this frame. A reverse that needs the output of a reverse that is not
 offered is planned by ORD-2.
 
 Test on fakes: from a sunset journal holding one operation of each final status, the restore's
 manifest holds the reverse of the `done` operation with a way back, the `not proven` reverse only
-with the owner's answer and with its form line saying so, the owner step's reverse as an owner step,
-and no other; a reverse whose thing is not in the last tracked state the retiring journal holds
+with the owner's answer and with its form line saying so, the owner step's reverse as an owner step
+where its inputs were saved and none for an owner step previewed as having no reverse, and no other;
+a reverse whose thing is not in the last tracked state the retiring journal holds
 stops under EV-3; a reverse that needs the output of one not offered is settled as ORD-2's test line
 says.
 
@@ -579,15 +616,25 @@ at the end of the shortcut file only when its name is free.
 **EV-7. A restore is a run.** It has its own look, manifest, preview, go, journal and phases
 (ORD-4), and never runs the retiring run's order backwards. It reads the journal of the project
 key's latest retiring run, whatever that run's ending; if that run is open, the restore's go closes
-it. Where a protected record or a keep that the restore needs is missing or fails its fingerprint,
+it. That handover is one step with one deciding write: the record of the restore's go and of its
+opening under its keys (RUN-3), which names the retiring run it closes. Until that write is durable
+nothing has changed: the retirement is open and the restore has no go. From the moment it is durable
+the retirement is closed for every purpose of RUN-3, whether or not its own journal yet says so, and
+a summons to resume it is refused. The retirement's own `closed` record, naming the restore, is
+written next; any invocation of either run that finds it missing writes it before it does anything
+else. Where a protected record or a keep that the restore needs is missing or fails its fingerprint,
 the operations that need it are planned `not applicable` with that reason, and the rest are still
 offered.
 
 Test on fakes: a restore over a sunset that stopped after its barrier reverses exactly the
 operations that are `done` with a way back, and that sunset run is `closed` once the restore has its
-go; with two retiring runs on record for the key, the later one is the one read; a missing protected
-record, and a keep whose fingerprint no longer matches, each take only their dependents out of the
-offer, with the reason in the preview.
+go; a kill before the restore's go is durable leaves the sunset open and resumable and the restore
+with no go; a kill after it and before the sunset's `closed` record leaves the restore open, a
+resume of the sunset refused, and the next invocation writing that `closed` record before any other
+record or call; at no write boundary can both runs apply an effect, and at none is the key left with
+no run that can go on; with two retiring runs on record for the key, the later one is the one read;
+a missing protected record, and a keep whose fingerprint no longer matches, each take only their
+dependents out of the offer, with the reason in the preview.
 
 ### 3.5 Order
 
@@ -964,22 +1011,35 @@ found, including in the recorded arguments of a fake's own child; a canary at a 
 wider permissions is reported; an issued value planted in a form is found.
 
 **SEC-12. The secret register.** There is one register for an invocation, held in memory and written
-nowhere. A value enters it at one of four moments and at no other: when the frame reads a secret
+nowhere. A value enters it at one of five moments and at no other: when the frame reads a secret
 from a channel of SEC-2, at the read and before any runner or parser use; when a result field sealed
 as a secret is received (SEC-4), before any other field of that result is read; when an input is
-checked (SEC-9); and when the run's fingerprint key is made or read (SEC-6). An entry holds the
+checked (SEC-9); when the run's fingerprint key is made or read (SEC-6); and when a later invocation
+rebuilds the register, as this rule says below. An entry holds the
 value whole, each component its source declares (for a connection address: the password, and the
 user and password pair), and the percent-encoded and base64 forms of each. The runner (SEC-3), the
 result parser (SEC-4), the input check (SEC-9) and every write to the journal, a manifest, a form,
-the CLI's output or an error consult it. A later invocation starts with an empty register and fills
-it from the channels again before any runner use. A secret the frame never reads into memory (a
-value inside a file a tool wrote into staging) is not in the register; SEC-11's scan is what checks
-that it reached no output.
+the CLI's output or an error consult it. A protected record that holds a value sealed as a secret
+keeps with it the components its declaration names. Every later invocation rebuilds the register
+before its first runner use, its first parse of a result and its first write to the journal, a
+manifest, a form, the CLI's output or an error: from the channels of SEC-2, and from every protected
+record of the run that holds a value sealed as a secret, with its components, and for a restore from
+those of the retiring run it reads (EV-7). The rebuilding reads those records into memory and
+nowhere else; it promotes nothing and shows nothing. Where such a record cannot be read or fails its
+fingerprint, the invocation stops before any of those uses. A secret the frame never reads into
+memory (a value inside a file a tool wrote into staging) is not in the register; SEC-11's scan is
+what checks that it reached no output.
 
 Test on fakes: a value a fake issues in a field sealed as a secret, and then asks for back in an
 argument of a later command or returns in a promoted field of a later result, is refused by the
-runner or turns that result `malformed`; the register's content is in no file of the fixture home;
-a resumed invocation refuses a planted channel secret in an argument before its first child starts.
+runner or turns that result `malformed`; the same holds when the value was issued and sealed in one
+invocation, the run then waited, and the fake returns it, whole or by a declared component, in a
+promotable name field or asks for it in an argument in the next invocation: that result is
+`malformed`, that argument is refused, and the value is in no journal record, form or output; the
+register's content is in no file of the fixture home outside the places of SEC-7; a resumed
+invocation refuses a planted channel secret in an argument before its first child starts; and with
+the sealed record removed or altered between the two invocations, the second stops before its first
+child starts.
 
 ### 3.8 Forms
 
@@ -1037,31 +1097,47 @@ that occurred in that restore, the line FORM-2 or the lane's list of form change
 
 ### 3.9 What a row states
 
-**ROW-1. A row states all of this, or the manifest is not built from it.**
+**ROW-1. A row states all of this, or the manifest is not built from it.** Every row of every kind
+carries every entry of this table. For its kind each entry is one of three things. R: required, and
+the row states it. F: forbidden, and the row writes the word `none`. O: it applies to some rows of
+the kind, by the condition the entry gives; the row states it where it applies and writes `none`
+where it does not. An entry is never left out and never left empty.
 
-| A row states | Used by |
-|---|---|
-| its id, kind and phase | OP-2, ORD-4 |
-| the thing it acts on: its role, how its identity is read, and its tracked state; or the output field it refers to | RUN-6, OP-5, EV-3 |
-| its planning test | RUN-6, RUN-7 |
-| its before-test and its after-test | OP-5 |
-| its construction; for C2 and C5 the document cited, and for C5 each condition the refusal covers; for C3, C6 and C7, and for a shortcut's add or put-back, each accepted risk it is carried under | OP-3, RISK-1, RISK-2 |
-| its one effect as a declared command: the argument template, the registered environment names, any protected input, the time limit; each result field with its place, type, meaning, disposition and whether it is required; the definite results; the alternative results | OP-1, SEC-3, SEC-4, ORD-3 |
-| each command that can change a repository | OP-11 |
-| its after-check | OP-6, EV-1 |
-| the output it provides and that output's fields; each need, with its level, the answer value it names where the level is answered, and its treatment when nothing provides it; its condition | ORD-1, ORD-2, ORD-3 |
-| for a create: how a lost answer can be resolved, with the provider's document, or "by dropping the layer only" | OP-7 |
-| its way back, or "none" with the reason; for a span, its placement and whether the file is ordered | EV-4, EV-6 |
-| for an owner kind: its mode, the safe content its step is built from, the answers it allows, any review file | OP-9, SEC-6 |
-| for the local project folder, the one output that may be adopted: how the owner names it | OP-10 |
-| for a keep: its scope, how the inventory and the copy share one state, and its content checks. For a retirement: the keeps it requires | KEEP-1, KEEP-2, KEEP-3 |
-| the class of every content it reads, stores or shows; any validator that makes content safe; each resting place it uses | SEC-1, SEC-7 |
-| its lines in each form | FORM-2 |
+| Entry | check | build | keep | create | change | move | owner step | owner answer | adopt | Used by |
+|---|---|---|---|---|---|---|---|---|---|---|
+| id, kind and phase | R | R | R | R | R | R | R | R | R | OP-2, ORD-4 |
+| the thing it acts on or reads: its role, how its identity is read, and its tracked state; or the output field it refers to | R | R | R | R | R | R | R | F | R | RUN-6, OP-5, OP-8, EV-3 |
+| planning test | F | R | R | R | R | R | F | F | R | RUN-6, RUN-7 |
+| before-test | F | R | R | R | R | R | F | F | F | OP-5 |
+| after-test | F | R | R | R | R | R | O: in read-back mode | F | F | OP-5, OP-9 |
+| construction; for C2 and C5 the document cited, and for C5 each condition the refusal covers; for C3, C6 and C7, and for a shortcut's add or put-back, each accepted risk it is carried under | F | R | R | R | R | R | F | F | F | OP-3, RISK-1, RISK-2 |
+| each declared command: the argument template, the registered environment names, any protected input, the time limit; each result field with its place, type, meaning, disposition and whether it is required; the definite results; the alternative results | O: where it runs a tool or calls the adapter | O: the same | O: the same | R | O: the same; always for C4, C5 and C6 | O: the same | O: where its read runs a tool or calls the adapter | F | F | OP-1, SEC-3, SEC-4, ORD-3 |
+| each command that can change a repository | F | O: where there is one | O: the same | O: the same | O: the same | O: the same | F | F | F | OP-11 |
+| after-check | F | R | R | R | R | R | F | F | F | OP-6, EV-1 |
+| the output it provides and that output's fields | R | R | R | R | R | R | R | R | R | ORD-1 |
+| each need, with its level, the answer value it names where the level is answered, and its treatment when nothing provides it | O: where it has a need | O | O | O | O | O | O | O | O | ORD-1, ORD-2 |
+| condition | O: where it has one | O | O | O | O | O | O | O | O | ORD-3 |
+| how a lost answer can be resolved, with the provider's document, or "by dropping the layer only" | F | F | F | R | F | F | F | F | F | OP-7 |
+| way back: the reverse, written as a row of its own kind that this frame allows, or `none` with the reason | F | F | F | F | R | R | R | F | F | EV-4 |
+| the inputs its reverse needs, and how each is read and saved | F | F | F | F | O: where a way back is declared | O: the same | O: the same | F | F | LOG-2, OP-9 |
+| for a span, its placement and whether the file is ordered | F | F | F | F | O: where the thing is a span and a way back is declared | F | F | F | F | EV-6 |
+| mode | F | F | F | F | F | F | R | F | F | OP-9 |
+| the safe content its step or its question is built from | F | F | F | F | F | F | R | R | F | OP-9 |
+| the answers it allows | F | F | F | F | F | F | F | R | F | OP-9 |
+| review file | F | F | F | F | F | F | O: where he must read content first | O: the same | F | SEC-6 |
+| how the owner names the thing | F | F | F | F | F | F | F | F | R | OP-10 |
+| its scope, how the inventory and the copy share one state, and its content checks | F | F | R | F | F | F | F | F | F | KEEP-1 |
+| the keeps it requires | F | F | F | F | O: where it retires a thing | O: the same | O: the same | F | F | KEEP-2, KEEP-3 |
+| the class of every content it reads, stores or shows; any validator that makes content safe; each resting place it uses | R | R | R | R | R | R | R | R | R | SEC-1, SEC-7 |
+| its lines in each form | R | R | R | R | R | R | R | R | R | FORM-2 |
 
-Test on fakes: for each kind, a complete and well-formed row builds; the same row with each required
-entry removed in turn fails the manifest build and names the entry; and a row whose entry is present
-but not allowed (a construction OP-2 does not give its kind, an accepted risk that does not cover
-its construction, a level ORD-1 does not have, a meaning SEC-4 does not list) fails the same way.
+Test on fakes: for each of the nine kinds, a row that states every R entry, writes `none` for every
+F entry, and states or writes `none` for each O entry as its condition says, builds; the same row
+fails the manifest build, naming the entry, with an R entry written `none`, with an F entry stated,
+with an O entry written `none` where its condition holds or stated where it does not, and with any
+entry left out or left empty; and a row whose entry is stated but not allowed (a construction OP-2
+does not give its kind, an accepted risk that does not cover its construction, a level ORD-1 does
+not have, a meaning SEC-4 does not list, a reverse EV-4 does not allow) fails the same way.
 
 **ROW-2. A step becomes the owner's only by his word.** Where a lane finds a tool that cannot be
 split into single effects (OP-1), whose repository writes cannot be listed (OP-11), or that cannot
@@ -1181,12 +1257,12 @@ give a way back to a move whose completion record was lost.
 | Kill at | On disk and in the world | Resume | Rules |
 |---|---|---|---|
 | before the start record | the repository at its path, with the head the look recorded | `ready` | OP-5 |
-| after the start record, before the rename | the same | `not landed`: a new start record; the rename again | OP-6 |
-| after the rename, before the completion record | the source absent; the target holds the identity on record | `landed`: `not proven`; the run goes on, later operations reading the new path from this record; a restore asks before reversing it | OP-6, EV-2, EV-5 |
+| after the start record, before the rename | the recorded object at the source; nothing at the target | `not landed`, the before pairing: a new start record; the rename again | OP-5, OP-6 |
+| after the rename, before the completion record | nothing at the source; the recorded object at the target | `landed`, the after pairing: `not proven`; the run goes on, later operations reading the new path from this record; a restore asks before reversing it | OP-6, EV-2, EV-5 |
 | variant: killed before the rename, and the owner then moves the folder by hand | exactly the same as the line above | the same: `not proven`. The run does not claim the move | EV-1 |
 | after the completion record | `done`, with its way back recorded | not probed | EV-3, EV-4 |
 | variant: another folder is put at the source between the identity read and the rename | the target holds a folder with another identity | the read after the rename differs: stop with both places named and no completion recorded; on resume the probe answers `foreign` | OP-3, RISK-1 |
-| variant: both paths hold a folder, or neither does, or the target holds another identity | neither state of the row | `foreign`: stop, naming both places | OP-5 |
+| variant: both places hold a folder, or neither does, or either holds a folder of another identity | neither pairing | `foreign`: stop, naming both places | OP-5 |
 
 ### Example 6. keep: the database dump (draft row T03)
 
