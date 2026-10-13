@@ -225,8 +225,8 @@ contract's section 18, A4), and accepted RK4, RK5 and the run directory's assump
 2026-10-12, and RK6 the same day (A18). The same day his word on a lost sealed secret was
 withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026-10-13 (A26),
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
-merged into it (A30); by his ruling of the same day RK8 reaches anything a run holds as safe
-(A32).**
+merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
+(A32) and covers any run that shows the value (A33).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -290,19 +290,26 @@ How likely each is was never measured.
   risk, and found one sequence that reaches past it, a caught value printed afresh by the run
   that caught it, which is not accepted and is the frame author's to close. Not measured.
 - **RK8, a death in the instant a secret arrives** (accepted by the owner for a secret he typed,
-  A26; by his ruling of A32 it reaches anything a run holds as safe). If the tool dies in the
+  A26; by his ruling of A32 it reaches anything a run holds as safe; by his ruling of A33 it
+  covers any run that shows the value, and not only the run that died). If the tool dies in the
   moment a provider hands it a secret, before its first record of it, every later status of that
   run says that a secret may have been received and lost, and the run goes on. The tool never
-  recorded the value, so it cannot tell whether it equals something the run holds as safe; if it
-  does, the run can still show it. What a run holds as safe is the list RK7 gives above. It takes
-  both a live secret among what the run holds as safe and a death in that instant. He was told
-  that this is his fifth acceptance on this one case since the reviewer marked the leak returned a
-  fourth time (A24). From A26 to A32 this entry said that the tool "cannot tell whether it equals
-  something he typed" and that "It takes both a live secret typed by mistake and a death in that
-  instant". The frame said more than that from the fix round on her eight findings on (SEC-12),
-  the control room's records did not set the two side by side, and the outside reviewer found the
-  difference in her check 6 (A32). She has read the rule this rests on; her check of it as code is
-  still to come. Not measured.
+  recorded the value, so no run can tell whether it equals something that run holds as safe; where
+  it does, that run or any other run can still show it. No rule has another run learn that a
+  secret may have been lost: the status that says so is the status of the run that died. What a
+  run holds as safe is the list RK7 gives above. It takes both a live secret among what a run
+  holds as safe and a death in that instant. He was told that the reach of A32 was his fifth
+  acceptance on this one case since the reviewer marked the leak returned a fourth time (A24), and
+  that the reach of A33 was his sixth, with nothing changed in what the tool does. From A26 to A32
+  this entry said that the tool "cannot tell whether it equals something he typed" and that "It
+  takes both a live secret typed by mistake and a death in that instant". The frame said more than
+  that from the fix round on her eight findings on (SEC-12), the control room's records did not
+  set the two side by side, and the outside reviewer found the difference in her check 6 (A32).
+  From A32 to A33 it said "it cannot tell whether it equals something the run holds as safe; if it
+  does, the run can still show it", and spoke of no other run, while RK7's entry leaves that
+  instant to this one; the frame's author and a second reader found that another run showing the
+  value was in the words of neither entry. She has read the rule this rests on; her check of it as
+  code is still to come. Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
