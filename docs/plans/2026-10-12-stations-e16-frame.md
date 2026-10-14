@@ -66,6 +66,20 @@ with nothing created and no lock taken; a name that fails its check, a held lock
 that turns a new summons away, end it with nothing created. Once the startup checks have passed, an
 invocation's first journal records are written in the one order SEC-12 gives, and in no other.
 
+The shipped tool itself starts in one way and no other (the owner's ruling, A47). Its entry point is
+run by the system's shell, `/bin/sh`, by its full path. The shell starts `/usr/bin/python3` by that
+full path, the system folder's stand-in that runs the developer tools' Python, with an environment
+that holds only the names this frame has the tool read: `HOME`, `USER`, `LOGNAME`, the hosting
+token's variable (SEC-2), and each name a
+provider module registers as passed (SEC-3). Every other name of the session is cleared, among them
+each name that can redirect the system folder's Python to another folder (`DEVELOPER_DIR`), every
+Python setting, and `PATH`. The interpreter is started so that it reads no folder of packages of the
+account. The tool loads nothing but its own files and that Python's own library, and it checks its
+own schema files with its own code. Two of these are the ruling's conditions, which the builder
+shows by the test below: that the start clears each name that can redirect that Python, and that
+nothing loads from outside the tool's own files and that Python's own library. Where either cannot
+be built, the start goes back to the owner before anything else is built.
+
 Test on fakes: with no vault, with a stub vault, and with a vault inside a synced folder, the
 invocation ends refused, the fixture home is byte-equal to before, no lock file exists and the cue
 fake recorded no call; on a sound fixture vault the gate passes and the fakes' records show the
@@ -74,7 +88,17 @@ look for an open run, then for a new summons or a re-plan the alias reads, the l
 second look for an open run, then the run directory with, for a continued run, the read of its
 disproof records, then the reads, in that order; a close records no runner call, and a status-only
 summons no planning read; an invocation of a retirement that owes at once a disproof record, a
-receipt and EV-7's closing record writes those three in that order before any other record.
+receipt and EV-7's closing record writes those three in that order before any other record. The
+start, with the shipped entry point started as a child in a fixture home: with `DEVELOPER_DIR` set
+to a folder that does not exist, the tool starts and answers as it does without it. Then, one at a
+time, a folder named by a Python setting of the session that holds, with a marker, a module of the
+name of one the tool imports; a customizing module, with a marker, in the account's folder of
+packages under the fixture home; and a decoy `python3`, with a marker, first on the session's path:
+in each, no marker runs and the output is byte-equal to the start without it. A probe started by the
+same line as the entry point, which imports the tool's modules and lists the file of every module
+then loaded, finds each one under the tool's own folder or that Python's own library. No file of the
+tool declares an outside package or a launcher. A schema file of the tool, with a document that
+breaks it, is refused by the tool's own check, and a document that meets it passes.
 
 **RUN-2. One lock per project key.** The project key is the project's name folded: lowercased, with
 every character that is not a letter or a digit removed. A key is written nowhere as it is. What
@@ -259,8 +283,9 @@ before it reads any thing of the project; a byte changed in the middle of the jo
 with the run directory untouched the second invocation passes both checks and goes on.
 
 **RUN-5. The look only reads.** Before the owner's word an invocation changes nothing outside its
-run directory. The look reads: the tools on the path and each provider's identity, which is the
-account every remote operation will act as; what the harness adapter declares it can do (its
+run directory. The look reads: the tools on the search list (SEC-3) and each provider's identity,
+which is the account every remote operation will act as; what the harness adapter declares it can do
+(its
 capabilities); the journals of the project key's earlier runs, each read as SEC-12 has another run's
 journal read; the planning facts of RUN-6; and the
 owner's answers that shape the plan. An answer taken in the look is an input of the run, validated
@@ -272,7 +297,8 @@ Test on fakes: with every fake recording its calls, a look that reaches its prev
 read calls, and among them each provider's identity read, the adapter's capability declaration and
 the read of the key's earlier journals; it leaves every fake's state, and the fixture home outside
 the run directory, byte-equal; a look with an unanswered question ends with the question listed and
-no manifest written.
+no manifest written; a tool that stands on the session's path and in no folder of the search list is
+not found, and the look ends as RUN-7's planning stop, naming it.
 
 **RUN-6. A planning test reads only what exists before the run.** For each candidate operation the
 look makes one planning test. It may read (a) the place where the operation would make a thing, and
@@ -298,14 +324,15 @@ present paths and probed at the moved path.
 | `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2) | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
-| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12) | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
+| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
 
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
 at the host, a shortcut that shadows a program) ends the look with the condition named and no
 manifest; so does each of a failed read, a partial read, a read made as the wrong account and a read
-that ran out of time, each named; a provider resource that is already retired yields a preview line
-and no operation.
+that ran out of time, each named; so does a program a candidate needs that is in no folder of the
+search list, with the program named and the settings file named as where a folder is put on the
+list; a provider resource that is already retired yields a preview line and no operation.
 
 **RUN-8. The manifest is the plan, and the preview is the manifest.** A manifest holds: the inputs;
 the accounts, capabilities and machine locations the look read; the phases (ORD-4); every operation
@@ -1133,8 +1160,8 @@ parsed by SEC-4.
 
 | Aspect | Contract |
 |---|---|
-| command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line. A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2) |
-| environment | built from nothing. It holds the base names `HOME`, `PATH`, `USER`, `LOGNAME`, `LANG` and `LC_ALL` (the last two set to one fixed locale) and `TMPDIR` (set to a private folder in the run directory), and the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
+| command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line. A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2). The program is found by the runner itself: it looks for the program's declared name in the folders of the tool's search list (the environment row), and starts the file it finds there by that file's full path. The session's path is not consulted. A name found in no folder of the search list is a tool not found (RUN-7). A program found in a folder the owner named is started as it stands there, with no check of the folder or of the program: that is RK11, which the owner accepted (A48; RISK-1) |
+| environment | built from nothing. It holds the base names: `PATH`, set to the tool's search list and to nothing of the session's path; `HOME`, `USER` and `LOGNAME`, as the tool itself has them; `LANG` and `LC_ALL`, set to one fixed locale; and `TMPDIR`, set to a private folder in the run directory. The search list is the fixed list of system folders written in the tool, which is `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin` (A48), and each folder the owner names in his settings file (the owner's ruling, A46). No other folder is on it, the local folder and the package manager's folder among them, unless he names it there. It also holds the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential, and never for `PATH` or any other name that chooses which program or which code a child runs); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
 | protected input | a slot the declaration names, with the type of protected record it accepts (SEC-6). The frame fills it only with the path of an owner-only file it made from that record, passed in the environment name or the argument position the slot declares. The content is never an argument, never an environment value and never in the CLI's output |
 | refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it. Where the refused command is an operation's, the operation is not started and the run ends `stopped` on that refusal. Where it is a command of a look, which runs through this same runner with no operation, the refusal is a failed read and the look ends as a planning stop does (RUN-7, RUN-12): `refused` before a first go, where there is no open run to stop, and `stopped`, with the manifest in force unchanged, in a re-plan of a run that has its go. No rule lets a child be started with that check left out |
 | files it makes | a file-creation mask that gives every new file to the owner only; the working directory the row declares |
@@ -1143,7 +1170,14 @@ parsed by SEC-4.
 
 Test on fakes: the fake records its arguments and the names of its environment, and the names equal
 the base list plus the registered names; a session debug variable and a session token variable are
-absent; a command with no declaration, a trace flag, and a register entry planted in an argument
+absent; the fake's `PATH` holds the search list and nothing of the session's path. The search list:
+a decoy that stands under a declared program's name in a folder that is first on the session's
+path, and in no folder of the search list, is never started, and the fake that stands under that
+name in a folder the fixture's settings name is started by its full path; with that folder not
+named in the fixture's settings, the look ends as a planning stop that names the program and the
+settings file, and no decoy is started; a module that registers `PATH`, or another name that
+chooses which program or which code a child runs, as passed fails the manifest build. A command
+with no declaration, a trace flag, and a register entry planted in an argument
 whole, by component, percent-encoded and in base64 are each refused before the start; a register
 entry equal to the value of a base name, the fixture's user name, and in a second pass one that is
 a part of the temporary folder's path, each refuse the command before any child is created, the
@@ -1839,7 +1873,12 @@ the output of the check of examples. Each of the seven is started as a child pro
 entry point, with that home as its home and with nothing else handed to it: no fake, and no code
 that the environment names. In each the caught word is in neither stream of the child's output and
 the fixed words of withholding stand in its place; the fixture home is byte-equal after each; and
-with no run on record the same seven print their text whole. The second fixture shows the order,
+with no run on record the same seven print their text whole. Each of the seven is then started again
+with the settings of RUN-1's test line planted in the session, one at a time: the variable that can
+redirect the system folder's Python set to a folder that does not exist, a Python setting that names
+a folder of code, a customizing module in the account's folder of packages, and a decoy first on the
+session's path. The start ignores each: no marker runs, and the output is byte-equal to the start
+without it. The second fixture shows the order,
 and is no child of the shipped entry point. The test's own driver calls, in its own process, the
 code the entry point runs for each of the seven, and hands it the recording file system that the
 driver stands up and an output that the driver records. Its record shows, for each of the seven,
@@ -2014,28 +2053,31 @@ unanswered or names a row that does not exist.
 
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted nine
-risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33 and A40): RK1;
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted ten
+risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40 and A48):
+RK1;
 RK2, which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7;
 RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
 before an invocation read its channel (SEC-12); RK7, for a live secret among whatever a run holds as
 safe, across runs (SEC-12); RK8, for a death in the instant a provider hands the tool a secret
-(SEC-12); RK10, for a record of the tool's own that cannot be read (SEC-12); and the run
-directory's assumption (RUN-4). RK10 is the ninth: no risk bears the number nine, RK9 being merged
-into RK7. Their wording is in the catalog's Part 6 and
+(SEC-12); RK10, for a record of the tool's own that cannot be read (SEC-12); RK11, for a program
+the tool starts from a folder he named (SEC-3); and the run directory's assumption (RUN-4). RK10 and
+RK11 are the ninth and the tenth: no risk bears the number nine, RK9 being merged into RK7. Their
+wording is in the catalog's Part 6 and
 is not restated here. This frame removes none of them and accepts none itself. An operation carried
 under RK2, RK3, RK4 or RK5 is marked so in the journal, once for each of those risks it is carried
-under. RK1, RK6, RK7, RK8 and RK10 belong to no one operation, and no mark is recorded for any of
-them.
+under. RK1, RK6, RK7, RK8, RK10 and RK11 belong to no one operation, and no mark is recorded for any
+of them.
 Where RK8's instant has passed, the journal already shows a receipt due and not given (SEC-12); that
 is the record of what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark beside RK2's; each mark is recorded exactly once for its operation
 and its risk, also after a kill and a resume; no other operation carries a mark, and no record
-carries a mark for RK1, RK6, RK7, RK8 or RK10, an operation with a receipt due and not given and a
-run that holds a disproof record among them. What a start does where a record of the tool's own
+carries a mark for RK1, RK6, RK7, RK8, RK10 or RK11, an operation with a receipt due and not given,
+a run that holds a disproof record and an operation whose program stands in a folder the fixture's
+settings name among them. What a start does where a record of the tool's own
 cannot be read is tested by that case in SEC-12's test line; it is a test of what the tool does, and
 how far RK10 reaches is Part 6's to say. What the run that died does after RK8's instant is tested
 by that case in SEC-12's test line: after a death between a provider's handing over a secret and the
