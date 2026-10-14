@@ -173,7 +173,7 @@ RUN-1's second step runs in this order, all of it before a run directory is open
 |---|---|---|
 | (a) the name check | every name the summons carries, the one it was summoned with and each further name the owner gave, is checked in memory: it must hold no entry of the register, into which the invocation first reads each secret SEC-2 lets it read without the project (the hosting token). A name that fails is refused with the tool's fixed text: nothing of it is written, in any form, no lock is taken and nothing is created | the token's channel; nothing of the project |
 | (b) the first locks | the lock of the key of each of those names, in sorted order. Where the machine has no keying value yet, it is made now, by a create that fails if another invocation made it first | each lock's own record |
-| (c) the early look for an open run | under the keys of (b). A new summons that finds one is refused here (RUN-3). A summons that continues a run takes from the record the other keys that run is open under, and their locks, in sorted order | the record of open runs; nothing of the project |
+| (c) the early look for an open run | under the keys of (b). A new summons that finds one is refused here (RUN-3). A summons that continues a run takes from the record the other keys that run is open under, and their locks, in sorted order; one that carries a name whose key that run is not open under is turned away here, as the paragraph below says | the record of open runs; nothing of the project |
 | (d) the alias reads | for a new summons, which is one that continues no open run, and for a re-plan, and for no other: the reads of this machine's own files that the lane's rows declare as showing another name form of the project, made in-process, with no runner and no provider | those files, and no other thing of the project |
 | (e) the later locks, and the second look for an open run | the lock of the key of each name form (d) showed, in sorted order; then the look for an open run under those keys, which refuses a new summons as (c) does. In a re-plan, a name form whose key the run does not hold takes no lock, and the re-plan ends as the paragraph below says (the owner's ruling, A72) | each lock's own record; the record of open runs |
 
@@ -188,11 +188,17 @@ no key is added: the re-plan's look ends at once as a planning stop (RUN-7), `st
 manifest in force unchanged, its form saying in the tool's fixed words that the project now shows
 another name and, as for a name a provider shows, naming the private file that holds it. The ways
 on are a close of the run (RUN-13) and a new summons that gives all the names. It is a stop the
-owner ruled on its own (A72). A lock is of the kind the system releases when its holder dies, and is
-never broken by age. A lock's file is made when the lock is taken and removed when the lock is
-released, by the invocation that took it and however that invocation ends (the owner's ruling, A41;
-LOG-3). A holder that is killed leaves its file. That file holds no lock from then on; it stays,
-with its record, until an invocation takes that lock again, and that invocation removes it when it
+owner ruled on its own (A72). A summons that continues a run, a resume, a re-plan or the go of a
+re-plan, and carries a name whose key that run is not open under, is turned away at part (c) as
+RUN-3 turns a summons away: `refused`, the run unchanged (RUN-12), the output the tool's fixed text
+that the run is not open under a name the summons gave. No key is added for it. He summons again
+with the run's own names, or closes the run and summons anew under all the names. That stop rests
+on A72; the owner was not asked of it apart. A lock is of the kind the system releases when its
+holder dies, and is never broken by age. A lock's file is made when the lock is taken and removed
+when the lock is released, by the invocation that took it and however that invocation ends (the
+owner's ruling, A41; LOG-3). A holder that is killed leaves its file. That file holds no lock from
+then on; it stays, with its record, until an invocation takes that lock again, and that invocation
+removes it when it
 releases the lock. A lock's record is never at its place half written: whether the file is made or
 a left one is taken over, another start reads no file, the record as it was, or the new record
 whole, so that the taking of a lock is never a record that cannot be read (SEC-12). Where the record
@@ -227,10 +233,14 @@ both names, it meets the first's lock or its open run and is refused naming that
 answer met in the look of a re-plan of a run that has its go ends that invocation `stopped`, with
 the manifest in force byte-equal and the same form line; the alias reads of a re-plan that show a
 name form whose key the run does not hold take no lock under it, the lock fake recording none, and
-end that re-plan `stopped` as RUN-3's test line has it; after the first is killed a third takes the
-locks and goes on; two runs of different projects that change one shared file both land their
-change. The names: a summons whose name is a canary equal to the fixture's hosting token, and one
-that carries that canary as a further name, each end refused with fixed text, and the fixture home
+end that re-plan `stopped` as RUN-3's test line has it; a resume, and in a second pass a re-plan, of
+a fixture run, summoned with the run's own name and a further name whose key the run is not open
+under, is refused at the early look with the tool's fixed text, the run's journal and the record of
+open runs byte-equal and no lock's file of that summons left; after the first is killed a third
+takes the locks and goes on; two runs of different projects that change one shared file both land
+their change. The names: a summons whose name is a canary equal to the fixture's hosting token, and
+one that carries that canary as a further name, each end refused with fixed text, and the fixture
+home
 then holds no lock file, no lock record and no new file; a summons whose name is a canary that
 equals no secret the tool can read before the project takes its locks and, after its go, is recorded
 as open, and the canary and its folded form, whole and in each form SEC-11 names, are in no lock's
@@ -457,7 +467,7 @@ present paths and probed at the moved path.
 | `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias, shell function, builtin or reserved word of that name, as his login zsh finds them (SEC-3; the owner's ruling, A63). Each counts where it exists for that shell, whatever that shell would run first for the name: a program wherever it stands in a folder of that shell's path, and an alias, a function, a builtin or a reserved word wherever that shell holds one, though another command of the name comes before it. A builtin of the name that a startup file brings in between the check and the add is RK13, which the owner accepted (A63; RISK-1) | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
-| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); the alias reads of a re-plan show a name form whose key the run does not hold (RUN-2; the owner's ruling, A72); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file, which is not the line for the shell the shortcut check starts, found in the system folders alone: where none holds it, that check's read failed (SEC-3); a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words; a restore's look that finds two latest sunsets carrying the same time (EV-7), and a look whose keys would make the record of its run's opening longer than the most a look reads of a first record (RUN-5), each a stop that rests on GOV-1, where the form says which in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
+| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); the alias reads of a re-plan show a name form whose key the run does not hold (RUN-2; the owner's ruling, A72); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file, which is not the line for the shell the shortcut check starts, found in the system folders alone: where none holds it, that check's read failed (SEC-3); a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words; a restore's look that finds an open retirement of the key that is not its latest sunset by the clock (EV-7), a stop that rests on RUN-3's and EV-7's words, where the form says so in fixed words; a restore's look that finds two latest sunsets carrying the same time (EV-7), and a look whose keys would make the record of its run's opening longer than the most a look reads of a first record (RUN-5), each a stop that rests on GOV-1, where the form says which in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
 
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
@@ -968,14 +978,17 @@ allows. The fourth is settled before the go and never after it: when the manifes
 declared reverse is checked as a row of its own kind, with its construction and its accepted risks
 (OP-2, OP-3, RISK-2), and a row whose declared reverse is not allowed fails the build (ROW-1). In
 every other case the record says "no way back" with one reason from this list: the row declares
-none; found already so; not proven; an input is missing; done by the owner.
+none; found already so; not proven; an input is missing; done by the owner. Where none of these is
+true of an operation, the reason is its own final status, named as such: a `not needed`, `refused`,
+`left` or `held` change whose row declares a way back among them.
 
 Test on fakes: every `done` operation whose row declares a way back that passed the build, and whose
 inputs are on record, has that way back recorded; a row whose declared reverse cannot be built under
 OP-3 and RISK-2 (a reverse that is a read-then-ask on a row RK3 does not name) fails the manifest
 build, names the row, and none of its operations runs; for each final status other than `done`, and
 for a `done` operation with an input removed, the record's way-back field is "none" with the
-matching reason.
+matching reason; a change whose row declares a way back and that ended `not needed` has the reason
+`not needed`, and every final record of the run holds a way-back field.
 
 **EV-5. What a restore offers.** A restore builds its manifest from the retiring run's journal. It
 offers the reverse of each operation that has a way back on record (EV-4) and of no other, with two
@@ -985,17 +998,22 @@ on his word and was not proven the run's; for an owner step that ended `done by 
 mode, it offers the reverse as an owner step in the same mode, where the retiring run saved what
 that reverse needs (OP-9), and offers none where its preview said none could be. It may copy from a
 keep (KEEP-4).
-Everything it does not offer it lists, with the reason EV-4 recorded. Every reverse is an ordinary
-operation under every rule of this frame. A reverse that needs the output of a reverse that is not
-offered is planned by ORD-2.
+Everything it does not offer it lists, with the reason EV-4 recorded. An operation of the retiring
+run's manifest in force that has no final record in its journal is listed too, with the tool's fixed
+words that it was not run to its end and that no way back is on record for it. Every reverse is an
+ordinary operation under every rule of this frame. A reverse that needs the output of a reverse that
+is not offered is planned by ORD-2.
 
 Test on fakes: from a sunset journal holding one operation of each final status, the restore's
 manifest holds the reverse of the `done` operation with a way back, the `not proven` reverse only
 with the owner's answer and with its form line saying so, the owner step's reverse as an owner step
 where its inputs were saved and none for an owner step previewed as having no reverse, and no other;
-a reverse whose thing is not in the last tracked state the retiring journal holds
-stops under EV-3; a reverse that needs the output of one not offered is settled as ORD-2's test line
-says.
+an operation the sunset's manifest holds and its journal shows no final record for is listed as not
+offered, with the fixed words, and a change that ended `not needed` is listed with that reason; a
+reverse whose thing, at the restore's look, is in neither the state the retiring journal last
+tracked for it nor the reverse's after-state ends the look as RUN-7's planning stop, `refused`
+before a first go, and one whose thing changes after the look stops at its turn under EV-3; a
+reverse that needs the output of one not offered is settled as ORD-2's test line says.
 
 **EV-6. Putting text back.** A span the retiring run replaced is put back only when its recorded
 after-image occurs in the file exactly once; the recorded before-image then takes its place and
@@ -1047,12 +1065,21 @@ back between two runs of the project, the later run reads as the earlier one, wh
 which is the latest, no rule picks one, and it stops (GOV-1): it ends as RUN-7's planning stop,
 `refused` before a first go and `stopped`, with the manifest in force unchanged, in a re-plan, its
 form saying in the tool's fixed words that two retirements of the project carry the same time.
-That stop rests on GOV-1; the owner was not asked of it apart. A retirement that a restore has
-closed is still a retiring run, and stays the key's latest until a later sunset: a later restore
-reads its journal again, and EV-5 offers its reverses again. RUN-7 plans each against the thing as
-it now stands: a change or a move an earlier restore put back is `already so`; a reverse that would
-make a thing where an earlier restore made one finds its place taken, which is a planning stop; an
-owner step's reverse is offered again as EV-5 offers it. A restore whose every reverse is
+That stop rests on GOV-1; the owner was not asked of it apart. Where a retirement of the key is
+open and the latest sunset by time is another run, which only a clock set back can make, the
+restore would build from a run that is not open, so its go closes nothing, and RUN-3 lets no
+summons but a restore over that open retirement through while it is open: the look ends as RUN-7's
+planning stop, `refused` before a first go, its form saying in the tool's fixed words that an open
+retirement of the project is not its latest by the clock. Nothing is closed and nothing is planned
+from either run. The ways on are a resume or a close of that retirement (RUN-13); a restore
+summoned once it is closed builds from the latest sunset by time, which is RK14 (RISK-1). This stop
+rests on RUN-3's words and this rule's; the owner was not asked of it apart. A retirement that a
+restore has closed is still a retiring run, and stays the key's latest until a later sunset: a
+later restore reads its journal again, and EV-5 offers its reverses again. RUN-7 plans each against
+the thing as it now stands: a change or a move an earlier restore put back is `already so`; a
+reverse that would make a thing where an earlier restore made one finds its place taken, which is a
+planning stop; an owner step's reverse is offered again as EV-5 offers it. A restore whose every
+reverse is
 `already so` has a manifest that holds no reverse. It is previewed and takes a go like any other
 (RUN-8, RUN-9), and its go closes an open retirement as above. Where the lane has a restore write
 its own entry, that entry is the one operation its manifest holds; with no other operation to wait
@@ -1087,10 +1114,16 @@ and a restore reads the one with the later time; with the fixture's clock set ba
 so that the second carries the earlier time, the restore reads the first (RK14); with both at one
 time to the clock's grain, the restore's look ends `refused` before any preview with the fixed
 words that two retirements of the project carry the same time, and no fake records an effect call;
-a missing protected record, and a keep whose fingerprint no longer matches, each take only their
-dependents out of the offer, with the reason in the preview. The sunset it finds: a restore summoned
-under the name of a closed sunset reads that sunset's journal as its retiring run's; after the
-fixture's owner has removed the keying value's file, the lock files and the record of open runs and
+with a first sunset ended, the fixture's clock then set back, and a second sunset that goes at an
+earlier time left `stopped`, a restore's look ends `refused` before any preview with the fixed
+words that an open retirement of the project is not its latest by the clock, both sunsets'
+journals byte-equal and no `closed` record written, and no fake records an effect call; once the
+open one is closed by the fixture's owner, the restore builds from the first (RK14); a missing
+protected record, and a keep whose
+fingerprint no longer matches, each take only their dependents out of the offer, with the reason
+in the preview. The sunset it finds: a restore summoned under the name of a closed sunset reads
+that sunset's journal as its retiring run's; after the fixture's owner has removed the keying
+value's file, the lock files and the record of open runs and
 a summons has made a new value (RUN-2), a restore summoned under the same name reads that sunset's
 journal as no retiring run's, no manifest it writes holds a reverse of that sunset's operations,
 and no fake records an effect call. No retiring run: that restore's look ends `refused` before any
