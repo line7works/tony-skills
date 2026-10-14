@@ -226,7 +226,8 @@ contract's section 18, A4), and accepted RK4, RK5 and the run directory's assump
 withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026-10-13 (A26),
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
-(A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40).**
+(A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40), and
+RK11 on 2026-10-14 (A48).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -326,6 +327,21 @@ How likely each is was never measured.
   whether anything followed he gave no word of its own (A40, A41). The frame's sentences for this
   ruling are written and no reviewer has read them yet (A45; SEC-12 and RISK-1 cite this entry). Not
   measured.
+- **RK11, a program the tool starts from a folder he named** (accepted by the owner, A48). The tool
+  starts what stands under a program's name in a folder he names in his settings file, and hands it
+  the path of a secret's file; it checks neither the folder nor the program. Its records are only as
+  true as those programs: a swapped program can make them say a step is done when it is not.
+  Something already running as him gains no secret by a swap, since it can read his owner-only files
+  already; an agent session on his machine was shown to be that kind. The author named one
+  exception, not seen on that machine: a program confined so that it can write that folder and not
+  read his files would gain, by a swap, a program started as him. Another account that can write the
+  folder gains every secret by a swap, since the swapped program runs as him. On the machine
+  checked, no account but his own and the system's can write the package manager's folder; the
+  administrators' group's list holds a leftover name with no account behind it, and an account made
+  later under that name would join the group. He was told that every option left something accepted
+  and that this is the first acceptance on this case; the card he answered carried a false fact, a
+  second account, corrected and told to him after his answer. Under this entry and every other, the
+  tool's own installed files stand in his home and his account can write them. Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
