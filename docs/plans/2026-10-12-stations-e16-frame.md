@@ -587,9 +587,10 @@ whole only where its end mark stands. A cut-off record is a last piece that lack
 kill or a lost write leaves, and a journal of no bytes holds no record. A piece that has its end
 mark and is no record of the kinds below is not cut off: it is a record of no listed kind, and it
 stops the invocation. The journal's records are of these kinds and no other: the run's opening
-under its keys (RUN-3); a go and each later word; an operation's start, step, answer, completion
-and status records; a check's attempt (OP-8); an owner operation's waiting record and his answer; a
-disproof (SEC-12); an invocation's ending; the run's ending.
+under its keys, naming the run's kind, a sunrise, a sunset or a restore (RUN-3; EV-7); a go and
+each later word; an operation's start, step, answer, completion and status records; a check's
+attempt (OP-8); an owner operation's waiting record and his answer; a disproof (SEC-12); an
+invocation's ending; the run's ending.
 
 Test on fakes: on a fake file system that loses every write not yet synced at a kill, a kill at
 every write boundary leaves, for every effect call the fakes recorded, that operation's start record
@@ -598,7 +599,8 @@ record belonged to is probed under OP-5 as if it were absent; a record of a kind
 list stops the invocation. The end mark: a last piece of bytes that are no record, with no end mark
 after them, is dropped as a cut-off record and the journal reads back without it; the same bytes
 with the end mark after them stop the invocation as a record of no listed kind; a journal of no
-bytes reads back as holding no record.
+bytes reads back as holding no record. The kind: the record of the opening of a sunrise, of a sunset
+and of a restore each names that run's kind.
 
 **LOG-2. The start record holds everything that is needed later.** Before an operation's effect the
 journal holds its start record: the thing's identity and tracked state as just read, where what a
@@ -1001,12 +1003,24 @@ needs is missing or fails its fingerprint, the operations that need it are plann
 with that reason, and the rest are still offered; a receipt that is due and was not given (SEC-12)
 counts as such a missing record.
 
+A retiring run is a sunset. The look tells one among the key's earlier runs by the kind its
+journal's record of its opening names (LOG-1), and uses that kind only once it has read that run as
+SEC-12 has another run's journal read, as RUN-5 reads every earlier run of the key it finds; the
+match by fingerprint uses nothing of it (RUN-5). Of the runs so read, the latest sunset is the
+retiring run EV-5 builds from. A retirement that a restore has closed is still a retiring run, and
+stays the key's latest until a later sunset: a later restore reads its journal again, and EV-5
+offers its reverses again. RUN-7 plans each against the thing as it now stands: a change or a move
+an earlier restore put back is `already so`; a reverse that would make a thing where an earlier
+restore made one finds its place taken, which is a planning stop; an owner step's reverse is
+offered again as EV-5 offers it.
+
 Where the look finds no retiring run among the key's earlier runs, the key having no earlier run or
 none of its earlier runs being a retirement, it is one case: a restore builds its manifest from the
 retiring run's journal (EV-5), no rule gives it a plan without one, and so it stops (GOV-1). Its
-look ends as RUN-7's planning stop, `refused`, with no manifest written, its form saying in the
-tool's fixed words that no retiring run of the project is found. That stop rests on GOV-1; the owner
-was not asked of it apart.
+look ends as RUN-7's planning stop: `refused`, with no manifest written, before a first go; and
+`stopped`, with the manifest in force unchanged, in the look of a re-plan of a restore that has its
+go (RUN-11, RUN-12). Its form says in the tool's fixed words that no retiring run of the project is
+found. That stop rests on GOV-1; the owner was not asked of it apart.
 
 Test on fakes: a restore over a sunset that stopped after its barrier reverses exactly the
 operations that are `done` with a way back, and that sunset run is `closed` once the restore has its
@@ -1032,7 +1046,19 @@ and no fake records an effect call. No retiring run: that restore's look ends `r
 preview, with no manifest and no journal written and its form holding the fixed words that no
 retiring run of the project is found; so does a restore summoned under a name whose key has no
 earlier run, and one under a name whose key's one earlier run is a sunrise; in each, no fake
-records an effect call (GOV-1).
+records an effect call (GOV-1). A re-plan: a restore that has its go stops; the fixture's owner then
+moves the sunset's run directory out of the folder of run directories; the look of a re-plan ends
+`stopped`, with the manifest in force byte-equal, its form holding the same fixed words, and no
+fake records an effect call. The kind: a key's earlier runs are a sunrise and then a sunset; a
+restore's look reads both journals, each after that run's disproof read, takes the sunset as its
+retiring run by the kind its record of its opening names, and plans from it; with a file of the
+sunrise's run directory given wider permissions, the restore's look ends as a failed read. A
+retirement a restore
+closed: a restore over a sunset that moved a folder and changed a file has its go and ends
+`complete`; a second restore under the same name reads that sunset's journal again, its preview
+lists the move and the change `already so` and holds no reverse to run, and no fake records an
+effect call in its look; with the sunset having also removed a file that the first restore put
+back, the second restore's look ends as a planning stop that names that place as taken.
 
 ### 3.5 Order
 
@@ -1927,7 +1953,7 @@ fingerprint in a lock, and once the keying value.
 | How the invocation begins | Allowed by | What it reads at its start | Before the startup checks pass it writes | Once they have passed it may write |
 |---|---|---|---|---|
 | a first look of a sunrise or a sunset | RUN-1, RUN-5 | the whole look; within it, the journal's record of a run's opening in every run directory, read only as RUN-5 says, and the journals of the key's earlier runs that read finds, each after that run's disproof read; a secret only from a file on this machine, and where none holds it the look ends as a planning stop (A23) | fixed text | its forms, the CLI's output and its manifest; no journal before a go (RUN-12) |
-| a first look of a restore | RUN-1, RUN-5, EV-7 | the whole look; within it, the journal's record of a run's opening in every run directory, read only as RUN-5 says; of the retiring run that read finds it reads the journal and the records EV-7 needs, after that run's disproof read | fixed text | the same |
+| a first look of a restore | RUN-1, RUN-5, EV-7 | the whole look; within it, the journal's record of a run's opening in every run directory, read only as RUN-5 says, and the journals of the key's earlier runs that read finds, each after that run's disproof read; of the latest retiring run among them, the records EV-7 needs | fixed text | the same |
 | the invocation that records a go and runs operations | RUN-9 | where the look was made by an earlier invocation, what RUN-10 (b) compares and OP-9's reads; otherwise nothing further | fixed text | the journal, its forms and the CLI's output |
 | a resume on his current word | RUN-10 | what RUN-10 (b) compares (each provider's identity among it) and OP-9's reads | fixed text | the same |
 | a summons with no word or a stale one, the first after a kill included: it renders status and ends | RUN-10 | for each provider that has a waiting read-back step, its identity read and that step's read (OP-9); no planning read | fixed text | the journal, the status form and the CLI's output |
