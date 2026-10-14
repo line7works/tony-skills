@@ -227,7 +227,7 @@ withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
 (A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40), and
-RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63).**
+RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -364,6 +364,14 @@ How likely each is was never measured.
   typed. RK5's entry ("a program, an alias or a shell function; no wider than this") does not reach
   it, and RK5 and RK12 reach no further than their entries. He was told that this option accepts
   something none of the eleven accepted risks named. The laptop is not checked. Not measured.
+- **RK14, a project's runs misordered by a clock set back** (accepted by the owner, A68). The tool
+  orders a project's runs by the machine's clock at each run's go, written in the run's opening
+  record, and a restore builds from the latest sunset by that order. Where the machine's clock is
+  set back between two runs of the same project, the later run reads as the earlier one: a restore
+  would take the older sunset as the latest and offer the reverses of what that older sunset did,
+  with nothing printed. On the machine checked, the build already stamps every journal record with
+  the clock's time in UTC, to the second. He was told that this option accepts something none of
+  the twelve accepted risks named. The laptop is not checked. Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
