@@ -189,7 +189,10 @@ LOG-3). A holder that is killed leaves its file. That file holds no lock from th
 with its record, until an invocation takes that lock again, and that invocation removes it when it
 releases the lock. A lock's record is never at its place half written: whether the file is made or
 a left one is taken over, another start reads no file, the record as it was, or the new record
-whole, so that the taking of a lock is never a record that cannot be read (SEC-12). A lock's file
+whole, so that the taking of a lock is never a record that cannot be read (SEC-12). Where the record
+is built beside the place and put there whole, and two starts find no file at once, the start whose
+record meets the other's file at the place has met a held lock: it removes the record it built,
+which never became a lock's file (LOG-3), and ends as at a held lock. A lock's file
 that is made and gone again when a summons ends is no thing that summons created. "Nothing is
 created, no file and no folder" (RUN-1, RUN-12) is said of what stands in the owner's home when the
 invocation has ended: a summons turned away at a held lock or by an open run, having taken locks of
@@ -262,7 +265,9 @@ killed while it holds a lock leaves that lock's file with its record, the next s
 key takes the lock, and at its end the file is gone. At every write boundary of one invocation's
 taking of a lock, of its taking over of a left file, and of its release, a second start's read of
 that lock's record finds no file, the record as it was or the new record whole, and the second start
-never prints the sentence for a record that cannot be read. On a fixture machine with no keying
+never prints the sentence for a record that cannot be read. Two starts that find no file at a lock's
+place at once: one holds the lock; the other ends at the held lock, the record it built is removed,
+and no file of its making is left in the tool's folder. On a fixture machine with no keying
 value, a first summons that is turned away at a later key's held lock leaves the keying value's file
 and nothing else new.
 
@@ -529,15 +534,18 @@ inside its run directory or a staging folder: the private password file; the fil
 run directory to hand a protected input to a child (SEC-3), once that child has ended; a staged
 object that was never published; an emptied staging folder. There is one named exception outside
 both, and no other: the file of a lock that the invocation itself took, in the tool's own folder,
-which it removes when it releases that lock (RUN-2; the owner's ruling, A41). That file is the
-tool's own bookkeeping, and nothing of the owner's is removed by it. A swap (OP-3, C3) replaces a
+which it removes when it releases that lock (RUN-2; the owner's ruling, A41). It covers too the
+record an invocation built beside a lock's place to put there whole, which it removes where another
+start's file took that place first, so that the record never became a lock's file. Both are the
+tool's own bookkeeping, and nothing of the owner's is removed by them. A swap (OP-3, C3) replaces a
 file's object and is not a removal, because the before-image is on record first (LOG-2).
 
 Test on fakes: across the whole kill sweep, every removal the fixture file system records lies under
 the run directory or a staging folder that the journal recorded, or is the removal of a lock's file
-by the invocation that took that lock; no invocation removes the file of a lock it did not itself
-take, and a killed holder's left file is removed only by an invocation that took that lock after
-it; the password file and each unpublished staged object are in fact gone after the next
+by the invocation that took that lock, or of the record an invocation built beside a lock's place
+when another start's file took that place first; no invocation removes the file of a lock it did not
+itself take, and a killed holder's left file is removed only by an invocation that took that lock
+after it; the password file and each unpublished staged object are in fact gone after the next
 invocation; a file made to hand a protected input to a fake child lies under the run directory and,
 where it is removed, is removed only after that child has ended; and for every swap the
 before-image's record precedes the swap call in the fakes' sequence.
@@ -1188,7 +1196,7 @@ parsed by SEC-4.
 |---|---|
 | command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line, but for one command named here. The check that a shortcut's name is free starts his shell, zsh, which the runner finds in the system folders of the search list, the way a terminal window starts it by default: as a login and interactive shell, with an environment built as the next row says. It hands the shell one fixed line written in the tool, which asks whether a command of that name exists, and passes the name as a separate argument, never written into the line. The declaration maps the shell's exit number to taken or free, and nothing the shell prints is read. Each time the check is made, the system's startup files and his own run as a child of the tool: that is RK12, which the owner accepted (the owner's ruling, A55; RISK-1). A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2). The program is found by the runner itself: it looks for the program's declared name in the folders of the tool's search list, in the list's order (the environment row), and starts the first file of that name it finds, by that file's full path. The session's path is not consulted. A name found in no folder of the search list is a tool not found (RUN-7). A program found in a folder the owner named is started as it stands there, with no check of the folder or of the program: that is RK11, which the owner accepted (A48; RISK-1) |
 | environment | built from nothing. It holds the base names: `PATH`, set to the tool's search list and to nothing of the session's path; `HOME`, `USER` and `LOGNAME`, as the tool itself has them; `LANG` and `LC_ALL`, set to one fixed locale; and `TMPDIR`, set to a private folder in the run directory. A child of a start that is no summons is given no `TMPDIR`: that start makes no run directory (SEC-12), and nothing of the session may stand in its place. The search list is the fixed list of system folders written in the tool and then each folder the owner names in his settings file (the owner's ruling, A46). Its order and its fixed folders were decided on the owner's behalf, his to change by a word: first `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, in that order, and then his folders, in the order he writes them there. No other folder is on it, the local folder and the package manager's folder among them, unless he names it there. It also holds the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential, and never for `PATH` or any other name that chooses which program or which code a child runs); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
-| protected input | a slot the declaration names, with the type of protected record it accepts (SEC-6). The frame fills it only with the path of an owner-only file it made from that record, passed in the environment name or the argument position the slot declares. The content is never an argument, never an environment value and never in the CLI's output |
+| protected input | a slot the declaration names, with the type of protected record it accepts (SEC-6). The frame fills it only with the path of an owner-only file it made from that record, passed in the environment name or the argument position the slot declares. That file is made in the run directory's protected folder, the place SEC-7 gives the record it is made from, so that one a kill leaves rests where its record may rest; the run may remove it once its child has ended (LOG-3). The content is never an argument, never an environment value and never in the CLI's output |
 | refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it. Where the refused command is an operation's, the operation is not started and the run ends `stopped` on that refusal. Where it is a command of a look, which runs through this same runner with no operation, the refusal is a failed read and the look ends as a planning stop does (RUN-7, RUN-12): `refused` before a first go, where there is no open run to stop, and `stopped`, with the manifest in force unchanged, in a re-plan of a run that has its go. Where it is a read that a later invocation makes at its start, the reads RUN-10 (b) compares and OP-9's reads among them, the refusal is no changed context and asks for no re-plan, whose look would meet the same refusal (GOV-1): no effect is applied, and the run ends `stopped` on that refusal, its form naming it. No rule lets a child be started with that check left out |
 | files it makes | a file-creation mask that gives every new file to the owner only; the working directory the row declares |
 | input and output | standard input empty; both output streams captured in memory up to a fixed size and handed only to the parser of SEC-4; output over that size is discarded and the result is `malformed` |
@@ -1236,7 +1244,10 @@ whose templates put a held field (a provider's own id) into an argument and into
 environment value, and a secret field into an argument and into a registered environment value,
 each fail the manifest build with the row named and no child started; the same held field declared
 as a protected input builds, and reaches the fake as a path to an owner-only file with its content
-in no argument or environment value; a file the fake creates is owner-only; a fake that hangs
+in no argument or environment value; that file lies in the run directory's protected folder, and a
+kill after it is made and before the fake ends leaves it there, owner-only, the next invocation
+passing RUN-4's checks and SEC-11's scan finding its content at no place but SEC-7's; a file the
+fake creates is owner-only; a fake that hangs
 after starting a child of its own is ended at its limit with that child, and the result is
 `timeout`.
 
