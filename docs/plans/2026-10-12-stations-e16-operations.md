@@ -321,7 +321,10 @@ How likely each is was never measured.
   assumption above covers a run's own folder and not the tool's folder. He was told that every
   option left something printed in that way, that the only way without it is a tool that prints
   nothing at all there, and that this was his seventh acceptance on the one case of a live secret
-  among what a run holds as safe. The frame's sentences for this ruling are not yet written. Not
+  among what a run holds as safe. His typed answer to that question was the option's name cut short
+  at an open bracket; the reading of it as this option is the control room's, and when he was asked
+  whether anything followed he gave no word of its own (A40, A41). The frame's sentences for this
+  ruling are written and no reviewer has read them yet (A45; SEC-12 and RISK-1 cite this entry). Not
   measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
