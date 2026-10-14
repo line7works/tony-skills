@@ -175,14 +175,20 @@ RUN-1's second step runs in this order, all of it before a run directory is open
 | (b) the first locks | the lock of the key of each of those names, in sorted order. Where the machine has no keying value yet, it is made now, by a create that fails if another invocation made it first | each lock's own record |
 | (c) the early look for an open run | under the keys of (b). A new summons that finds one is refused here (RUN-3). A summons that continues a run takes from the record the other keys that run is open under, and their locks, in sorted order | the record of open runs; nothing of the project |
 | (d) the alias reads | for a new summons, which is one that continues no open run, and for a re-plan, and for no other: the reads of this machine's own files that the lane's rows declare as showing another name form of the project, made in-process, with no runner and no provider | those files, and no other thing of the project |
-| (e) the later locks, and the second look for an open run | the lock of the key of each name form (d) showed, in sorted order; then the look for an open run under those keys, which refuses a new summons as (c) does | each lock's own record; the record of open runs |
+| (e) the later locks, and the second look for an open run | the lock of the key of each name form (d) showed, in sorted order; then the look for an open run under those keys, which refuses a new summons as (c) does. In a re-plan, a name form whose key the run does not hold takes no lock, and the re-plan ends as the paragraph below says (the owner's ruling, A72) | each lock's own record; the record of open runs |
 
 Where a provider's answer later shows the project under a name whose key the invocation does not
 hold, no lock is taken under that name. The look ends as a planning stop does (RUN-7, RUN-12):
 `refused` before a first go; `stopped`, with the manifest in force unchanged, in a re-plan of a run
 that has its go. Either way the form says that a provider shows the project under another name and
 names the private file that holds it (SEC-6), and the owner summons again and gives that name too
-(the owner's ruling, A21). A lock is of the kind the system releases when its holder dies, and is
+(the owner's ruling, A21). A run is never opened under a key after its first go. Where the alias
+reads of a re-plan show a name form whose key the run does not hold, no lock is taken under it and
+no key is added: the re-plan's look ends at once as a planning stop (RUN-7), `stopped`, with the
+manifest in force unchanged, its form saying in the tool's fixed words that the project now shows
+another name and, as for a name a provider shows, naming the private file that holds it. The ways
+on are a close of the run (RUN-13) and a new summons that gives all the names. It is a stop the
+owner ruled on its own (A72). A lock is of the kind the system releases when its holder dies, and is
 never broken by age. A lock's file is made when the lock is taken and removed when the lock is
 released, by the invocation that took it and however that invocation ends (the owner's ruling, A41;
 LOG-3). A holder that is killed leaves its file. That file holds no lock from then on; it stays,
@@ -219,7 +225,9 @@ provider's answer shows them to be one project, the second's first look ends `re
 other name in a private file and in no output, and with no lock taken under it; summoned again with
 both names, it meets the first's lock or its open run and is refused naming that run; the same
 answer met in the look of a re-plan of a run that has its go ends that invocation `stopped`, with
-the manifest in force byte-equal and the same form line; after the first is killed a third takes the
+the manifest in force byte-equal and the same form line; the alias reads of a re-plan that show a
+name form whose key the run does not hold take no lock under it, the lock fake recording none, and
+end that re-plan `stopped` as RUN-3's test line has it; after the first is killed a third takes the
 locks and goes on; two runs of different projects that change one shared file both land their
 change. The names: a summons whose name is a canary equal to the fixture's hosting token, and one
 that carries that canary as a further name, each end refused with fixed text, and the fixture home
@@ -279,8 +287,9 @@ and nothing else new.
 **RUN-3. One open run per project key.** A run is open from its first go (RUN-9) until it ends
 `complete`, `ended with exceptions` or `closed` (RUN-12). At the go the run is recorded as open
 under every project key it holds the lock of, in one write that records all of those keys or none
-of them, made together with the record of the go; a re-plan whose alias reads show a further key
-adds it the same way with its own go. A key is recorded there by its fingerprint (RUN-2). Every
+of them, made together with the record of the go. No key is added after that first go: a re-plan
+whose alias reads show a name form whose key the run does not hold stops, as RUN-2 says (the owner's
+ruling, A72). A key is recorded there by its fingerprint (RUN-2). Every
 summons looks for an open run twice, where RUN-2 places each look: early, under the keys of the
 names it carries,
 having read nothing of the project; and again under each key its alias reads show, having read only
@@ -300,7 +309,14 @@ go and the opening record leaves the run open under all of its keys or under non
 re-plan and a close of that run are each accepted; and a restore summoned under either of those two
 names while that sunrise is open is refused at the early look as the sunset is, with the open run
 named as the withheld read lets it be and with no file and no folder left (the owner's ruling,
-A42). EV-7's exception is for a restore over an open retirement and for no other open run.
+A42). EV-7's exception is for a restore over an open retirement and for no other open run. A name
+learnt midway: that sunrise is stopped, and the fixture's alias reads then show a third name; a
+re-plan of it ends `stopped`, with the manifest in force byte-equal, no lock taken under the third
+name's key, the record of open runs and the run's journal holding no fingerprint of that key, and
+its form saying in fixed words that the project now shows another name and naming the private file
+that holds it; no fake records an effect call. A close of that run is then accepted, and a new
+summons under all three names takes all three locks and, at its go, is opened under all three keys
+(the owner's ruling, A72).
 
 **RUN-4. The run directory, and the one assumption.** The run directory is a private folder in the
 owner's home directory, outside every repository, one folder per run, owner-only, and kept after the
@@ -327,9 +343,10 @@ except through the manifest.
 
 The project key's earlier runs are found by one record and no other. The one record of the keys a
 run was opened under that stays once the run has ended is its journal's record of its opening
-(RUN-3, LOG-1); the record of open runs holds them only while the run is open. Both hold each key
-only as its keyed fingerprint (RUN-2). So a run is an earlier run of the look's keys when its
-record of its opening holds the fingerprint, keyed with the value now on this machine, of a key
+(RUN-3, LOG-1); the record of open runs holds them only while the run is open. No key is added
+after the first go (RUN-3), so that record holds every key the run was ever open under. Both hold
+each key only as its keyed fingerprint (RUN-2). So a run is an earlier run of the look's keys when
+its record of its opening holds the fingerprint, keyed with the value now on this machine, of a key
 whose lock the invocation holds. To find them the look reads that record in every run directory,
 and nothing else of a run it has not found. It uses that record for one thing: to compare each
 fingerprint it holds with the fingerprints the invocation made itself. The comparison rests on the
@@ -350,13 +367,14 @@ a first record is the build's to set, above the longest record of a run's openin
 the frame names no number. Nothing else caps the keys a run is opened under (RUN-2), so where the
 keys a look holds, with those its alias reads show, would make the record of its run's opening
 longer than that, the tool cannot write the record and keep this bound, no rule says what follows,
-and the look stops (GOV-1). It ends as RUN-7's planning stop, `refused` before a first go and
-`stopped`, with the manifest in force unchanged, in a re-plan, its form saying in the tool's fixed
-words that the project has more names than one run can be opened under. That stop rests on GOV-1;
-the owner was not asked of it apart. So no record of a run's opening is longer than the most a look
-reads. A directory whose journal cannot be examined at all, for any cause but
-its not being there, holds a first record the look cannot read: it ends the look as the same stop,
-with the same form, and rests on A57. Where the folder that holds
+and the look stops (GOV-1). It ends as RUN-7's planning stop, `refused` before a first go, its form
+saying in the tool's fixed words that the project has more names than one run can be opened under.
+That stop rests on GOV-1; the owner was not asked of it apart. A re-plan adds no key (RUN-3), so it
+never meets this bound: a name form it shows that the run does not hold ends it at RUN-2's stop
+first. So no record of a run's opening is longer than the most a look reads. A directory whose
+journal cannot be examined at all, for any cause but its not being there, holds a first record the
+look cannot read: it ends the look as the same stop, with the same form, and rests on A57. Where the
+folder that holds
 the run directories cannot be listed, the look ends the same way, its form saying in fixed words
 that that folder cannot be listed and where it is. That is the same stop made for every directory
 at once: it rests on A57, and the owner was not asked of it apart. Each run found, and only those,
@@ -410,7 +428,8 @@ same fixed words and no directory named. The bound: a fixture whose alias reads 
 forms that the record of the run's opening would be longer than the most the look reads of a first
 record ends its first look `refused` before any preview, with the fixed words that the project has
 more names than one run can be opened under, and no manifest and no journal written; the same name
-forms met in the look of a re-plan end it `stopped`, with the manifest in force byte-equal; and the
+forms met by a re-plan end it at RUN-2's stop for a name the run does not hold, `stopped` with the
+manifest in force byte-equal, and not with this bound's words; and the
 record of the opening of a run under the most keys a look lets through is no longer than the most
 the look reads of a first record.
 
@@ -438,7 +457,7 @@ present paths and probed at the moved path.
 | `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias, shell function, builtin or reserved word of that name, as his login zsh finds them (SEC-3; the owner's ruling, A63). Each counts where it exists for that shell, whatever that shell would run first for the name: a program wherever it stands in a folder of that shell's path, and an alias, a function, a builtin or a reserved word wherever that shell holds one, though another command of the name comes before it. A builtin of the name that a startup file brings in between the check and the add is RK13, which the owner accepted (A63; RISK-1) | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
-| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file, which is not the line for the shell the shortcut check starts, found in the system folders alone: where none holds it, that check's read failed (SEC-3); a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words; a restore's look that finds two latest sunsets carrying the same time (EV-7), and a look whose keys would make the record of its run's opening longer than the most a look reads of a first record (RUN-5), each a stop that rests on GOV-1, where the form says which in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
+| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); the alias reads of a re-plan show a name form whose key the run does not hold (RUN-2; the owner's ruling, A72); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file, which is not the line for the shell the shortcut check starts, found in the system folders alone: where none holds it, that check's read failed (SEC-3); a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words; a restore's look that finds two latest sunsets carrying the same time (EV-7), and a look whose keys would make the record of its run's opening longer than the most a look reads of a first record (RUN-5), each a stop that rests on GOV-1, where the form says which in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
 
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
