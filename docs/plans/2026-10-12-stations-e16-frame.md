@@ -347,7 +347,14 @@ are kept; it names no directory, since no directory's name has passed SEC-12's w
 stop is made for a directory of any project, at every look and every restore, until he mends that
 directory or moves it by hand. It is a stop the owner ruled on its own. The most the look reads of
 a first record is the build's to set, above the longest record of a run's opening the tool writes;
-the frame names no number. A directory whose journal cannot be examined at all, for any cause but
+the frame names no number. Nothing else caps the keys a run is opened under (RUN-2), so where the
+keys a look holds, with those its alias reads show, would make the record of its run's opening
+longer than that, the tool cannot write the record and keep this bound, no rule says what follows,
+and the look stops (GOV-1). It ends as RUN-7's planning stop, `refused` before a first go and
+`stopped`, with the manifest in force unchanged, in a re-plan, its form saying in the tool's fixed
+words that the project has more names than one run can be opened under. That stop rests on GOV-1;
+the owner was not asked of it apart. So no record of a run's opening is longer than the most a look
+reads. A directory whose journal cannot be examined at all, for any cause but
 its not being there, holds a first record the look cannot read: it ends the look as the same stop,
 with the same form, and rests on A57. Where the folder that holds
 the run directories cannot be listed, the look ends the same way, its form saying in fixed words
@@ -399,7 +406,13 @@ and so is a journal of no bytes, the look reaching its preview; the same bytes w
 after them end the look as a first record that cannot be read does. So do a first record longer
 than the most the look reads of it, and a journal that cannot be examined, its directory made
 unsearchable to its owner with its other permissions kept: each ends the look `refused` with the
-same fixed words and no directory named.
+same fixed words and no directory named. The bound: a fixture whose alias reads show so many name
+forms that the record of the run's opening would be longer than the most the look reads of a first
+record ends its first look `refused` before any preview, with the fixed words that the project has
+more names than one run can be opened under, and no manifest and no journal written; the same name
+forms met in the look of a re-plan end it `stopped`, with the manifest in force byte-equal; and the
+record of the opening of a run under the most keys a look lets through is no longer than the most
+the look reads of a first record.
 
 **RUN-6. A planning test reads only what exists before the run.** For each candidate operation the
 look makes one planning test. It may read (a) the place where the operation would make a thing, and
@@ -425,7 +438,7 @@ present paths and probed at the moved path.
 | `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias, shell function, builtin or reserved word of that name, as his login zsh finds them (SEC-3; the owner's ruling, A63). Each counts where it exists for that shell, whatever that shell would run first for the name: a program wherever it stands in a folder of that shell's path, and an alias, a function, a builtin or a reserved word wherever that shell holds one, though another command of the name comes before it. A builtin of the name that a startup file brings in between the check and the add is RK13, which the owner accepted (A63; RISK-1) | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
-| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file; a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
+| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file; a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words; a restore's look that finds two latest sunsets carrying the same time (EV-7), and a look whose keys would make the record of its run's opening longer than the most a look reads of a first record (RUN-5), each a stop that rests on GOV-1, where the form says which in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
 
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
@@ -587,10 +600,11 @@ whole only where its end mark stands. A cut-off record is a last piece that lack
 kill or a lost write leaves, and a journal of no bytes holds no record. A piece that has its end
 mark and is no record of the kinds below is not cut off: it is a record of no listed kind, and it
 stops the invocation. The journal's records are of these kinds and no other: the run's opening
-under its keys, naming the run's kind, a sunrise, a sunset or a restore (RUN-3; EV-7); a go and
-each later word; an operation's start, step, answer, completion and status records; a check's
-attempt (OP-8); an owner operation's waiting record and his answer; a disproof (SEC-12); an
-invocation's ending; the run's ending.
+under its keys, naming the run's kind, a sunrise, a sunset or a restore, and the time of its go by
+the machine's clock (RUN-3; EV-7; the owner's ruling, A68); a go and each later word; an
+operation's start, step, answer, completion and status records; a check's attempt (OP-8); an owner
+operation's waiting record and his answer; a disproof (SEC-12); an invocation's ending; the run's
+ending.
 
 Test on fakes: on a fake file system that loses every write not yet synced at a kill, a kill at
 every write boundary leaves, for every effect call the fakes recorded, that operation's start record
@@ -600,7 +614,7 @@ list stops the invocation. The end mark: a last piece of bytes that are no recor
 after them, is dropped as a cut-off record and the journal reads back without it; the same bytes
 with the end mark after them stop the invocation as a record of no listed kind; a journal of no
 bytes reads back as holding no record. The kind: the record of the opening of a sunrise, of a sunset
-and of a restore each names that run's kind.
+and of a restore each names that run's kind, and holds the time the fixture's clock gave at its go.
 
 **LOG-2. The start record holds everything that is needed later.** Before an operation's effect the
 journal holds its start record: the thing's identity and tracked state as just read, where what a
@@ -1007,18 +1021,25 @@ A retiring run is a sunset. The look tells one among the key's earlier runs by t
 journal's record of its opening names (LOG-1), and uses that kind only once it has read that run as
 SEC-12 has another run's journal read, as RUN-5 reads every earlier run of the key it finds; the
 match by fingerprint uses nothing of it (RUN-5). Of the runs so read, the latest sunset is the
-retiring run EV-5 builds from. A retirement that a restore has closed is still a retiring run, and
-stays the key's latest until a later sunset: a later restore reads its journal again, and EV-5
-offers its reverses again. RUN-7 plans each against the thing as it now stands: a change or a move
-an earlier restore put back is `already so`; a reverse that would make a thing where an earlier
-restore made one finds its place taken, which is a planning stop; an owner step's reverse is
-offered again as EV-5 offers it. A restore whose every reverse is `already so` has a manifest that
-holds no reverse. It is previewed and takes a go like any other (RUN-8, RUN-9), and its go closes
-an open retirement as above. Where the lane has a restore write its own entry, that entry is the
-one operation its manifest holds; with no other operation to wait on, it runs at once and is
-published once (KEEP-5), so the project's record gains an entry for a restore that put nothing
-back. Where the lane has none, the run holds no operation and ends `complete` with no effect call
-(RUN-12).
+retiring run EV-5 builds from: the one whose record of its opening holds the latest time of go
+(LOG-1). The machine's clock orders a project's runs (the owner's ruling, A68); where it was set
+back between two runs of the project, the later run reads as the earlier one, which is RK14
+(RISK-1). Where two sunsets carry the same time and no sunset a later one, the look cannot tell
+which is the latest, no rule picks one, and it stops (GOV-1): it ends as RUN-7's planning stop,
+`refused` before a first go and `stopped`, with the manifest in force unchanged, in a re-plan, its
+form saying in the tool's fixed words that two retirements of the project carry the same time.
+That stop rests on GOV-1; the owner was not asked of it apart. A retirement that a restore has
+closed is still a retiring run, and stays the key's latest until a later sunset: a later restore
+reads its journal again, and EV-5 offers its reverses again. RUN-7 plans each against the thing as
+it now stands: a change or a move an earlier restore put back is `already so`; a reverse that would
+make a thing where an earlier restore made one finds its place taken, which is a planning stop; an
+owner step's reverse is offered again as EV-5 offers it. A restore whose every reverse is
+`already so` has a manifest that holds no reverse. It is previewed and takes a go like any other
+(RUN-8, RUN-9), and its go closes an open retirement as above. Where the lane has a restore write
+its own entry, that entry is the one operation its manifest holds; with no other operation to wait
+on, it runs at once and is published once (KEEP-5), so the project's record gains an entry for a
+restore that put nothing back. Where the lane has none, the run holds no operation and ends
+`complete` with no effect call (RUN-12).
 
 Where the look finds no retiring run among the key's earlier runs, the key having no earlier run or
 none of its earlier runs being a retirement, it is one case: a restore builds its manifest from the
@@ -1041,7 +1062,12 @@ inputs, the sunset's journal shows the disproof record, then the `closed` record
 the summons is then refused with that description in no output; a failed gate or a held lock in
 that invocation leaves the record unwritten and nothing changed; at no write boundary can both runs
 apply an effect, and at none is the key left with
-no run that can go on; with two retiring runs on record for the key, the later one is the one read;
+no run that can go on; with two retiring runs on record for the key, the later one is the one read.
+The clock: two sunsets of one key have their goes at two times the fixture's clock gives in order,
+and a restore reads the one with the later time; with the fixture's clock set back between them,
+so that the second carries the earlier time, the restore reads the first (RK14); with both at one
+time to the clock's grain, the restore's look ends `refused` before any preview with the fixed
+words that two retirements of the project carry the same time, and no fake records an effect call;
 a missing protected record, and a keep whose fingerprint no longer matches, each take only their
 dependents out of the offer, with the reason in the preview. The sunset it finds: a restore summoned
 under the name of a closed sunset reads that sunset's journal as its retiring run's; after the
@@ -2297,9 +2323,9 @@ unanswered or names a row that does not exist.
 
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted twelve
-risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40, A48, A55
-and A63): RK1;
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted
+thirteen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
+A48, A55, A63 and A68): RK1;
 RK2, which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7;
 RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
@@ -2308,24 +2334,25 @@ safe, across runs (SEC-12); RK8, for a death in the instant a provider hands the
 (SEC-12); RK10, for a record of the tool's own that cannot be read (SEC-12); RK11, for a program
 the tool starts from a folder he named (SEC-3); RK12, for his shell's startup files run by the
 shortcut check (SEC-3); RK13, for a builtin of a shortcut's name coming into being in the instant it
-is added (RUN-7); and the run directory's assumption (RUN-4). RK10, RK11, RK12 and RK13 are the
-ninth, the tenth, the eleventh and the twelfth: no risk bears the number nine, RK9 being merged into
+is added (RUN-7); RK14, for a project's runs misordered by a clock set back (EV-7); and the run
+directory's assumption (RUN-4). RK10, RK11, RK12, RK13 and RK14 are the ninth, the tenth, the
+eleventh, the twelfth and the thirteenth: no risk bears the number nine, RK9 being merged into
 RK7. Their wording is in the catalog's Part 6 and
 is not restated here. This frame removes none of them and accepts none itself. An operation carried
 under RK2, RK3, RK4, RK5 or RK13 is marked so in the journal, once for each of those risks it is
 carried under. RK13's window is the one RK5's is, between the check and the add, so a shortcut's add
-and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11 and RK12 belong to no one
-operation, and no mark is recorded for any of them.
+and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11, RK12 and RK14 belong to
+no one operation, and no mark is recorded for any of them.
 Where RK8's instant has passed, the journal already shows a receipt due and not given (SEC-12); that
 is the record of what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark and RK13's beside RK2's; each mark is recorded exactly once for
 its operation and its risk, also after a kill and a resume; no other operation carries a mark, and
-no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11 or RK12, an operation with a receipt
-due and not given, a run that holds a disproof record, an operation whose program stands in a folder
-the
-fixture's settings name, and a look that made the shortcut check among them. What a start does
+no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11, RK12 or RK14, an operation with a
+receipt due and not given, a restore that read the later of two sunsets by their times, a run that
+holds a disproof record, an operation whose program stands in a folder the fixture's settings name,
+and a look that made the shortcut check among them. What a start does
 where a record of the tool's own cannot be read is tested by that case in SEC-12's test line; it is
 a test of what the tool does, and how far RK10 reaches is Part 6's to say. What the run that died
 does after RK8's instant is tested by that case in SEC-12's test line: after a death between a
