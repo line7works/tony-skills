@@ -227,7 +227,7 @@ withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
 (A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40), and
-RK11 on 2026-10-14 (A48), and RK12 the same day (A55).**
+RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -355,6 +355,15 @@ How likely each is was never measured.
   and 3 let RK5 reach further than its entry and this one does not, and that it accepts something
   none of the ten accepted risks named. His terminal's own settings and the laptop are not checked.
   Not measured.
+- **RK13, a builtin of the shortcut's name coming into being in the instant it is added** (accepted
+  by the owner, A63). The shortcut check counts a shell builtin or a reserved word of the
+  shortcut's name as taken, as v1 did. A reserved word cannot come into being between the check and
+  the add. A builtin can, only where a startup file loads a zsh module in that instant (loading one
+  adds builtins: on the machine checked, `strftime` appears after `zmodload zsh/datetime`). The
+  shortcut then hides that builtin until the line is removed; it shows the first time the name is
+  typed. RK5's entry ("a program, an alias or a shell function; no wider than this") does not reach
+  it, and RK5 and RK12 reach no further than their entries. He was told that this option accepts
+  something none of the eleven accepted risks named. The laptop is not checked. Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
