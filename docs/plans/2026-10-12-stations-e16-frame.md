@@ -422,22 +422,25 @@ present paths and probed at the moved path.
 
 | Planning outcome | When | What follows |
 |---|---|---|
-| `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias or shell function of that name, as his login zsh finds them (SEC-3). Each counts where it exists for that shell, whatever that shell would run first for the name: a program wherever it stands in a folder of that shell's path, an alias or a function wherever that shell holds one, though a builtin, a reserved word or another command of the name comes before it | the operation is in the manifest |
+| `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias, shell function, builtin or reserved word of that name, as his login zsh finds them (SEC-3; the owner's ruling, A63). Each counts where it exists for that shell, whatever that shell would run first for the name: a program wherever it stands in a folder of that shell's path, and an alias, a function, a builtin or a reserved word wherever that shell holds one, though another command of the name comes before it. A builtin of the name that a startup file brings in between the check and the add is RK13, which the owner accepted (A63; RISK-1) | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
 | planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file; a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
 
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
-at the host, a shortcut whose name a program, an alias or a shell function already has, as the
-fixture's login zsh finds them) ends the look with the condition named and no manifest; and so does
-a name that the fixture's login zsh would run first as a builtin, and in a second pass as a reserved
-word, and that also names a program in a folder of that shell's path, and in a third pass a reserved
-word that is also the name of a shell function there, each with the name taken; so does
-each of a failed read, a partial read, a read made as the wrong account and a read that ran out of
-time, each named; so does a program a candidate needs that is in no folder of the
-search list, with the program named and the settings file named as where a folder is put on the
-list; so do a run directory whose first journal record cannot be read and a folder of run
+at the host, a shortcut whose name a program, an alias, a shell function, a builtin or a reserved
+word already has, as the fixture's login zsh finds them) ends the look with the condition named and
+no manifest; and so does a name that the fixture's login zsh would run first as a builtin, and in a
+second pass as a reserved word, and that also names a program in a folder of that shell's path, and
+in a third pass a reserved word that is also the name of a shell function there, each with the name
+taken. A name that is only a builtin there, with no program, alias or function of it, and in a
+second pass only a reserved word, each ends the look with the name taken; so does a name that is a
+builtin only because the fixture's startup file loads a zsh module (the owner's ruling, A63); so
+does each of a failed read, a partial read, a read made as the wrong account and a read that ran out
+of time, each named; so does a program a candidate needs that is in no folder of the search list,
+with the program named and the settings file named as where a folder is put on the list; so do a
+run directory whose first journal record cannot be read and a folder of run
 directories that cannot be listed, each with the fixed words and no directory named, as RUN-5's test
 line drives them; a provider resource that is already retired yields a preview line and no
 operation.
@@ -975,9 +978,10 @@ neighbours that occur next to each other twice; a removed line between two diffe
 between them, and with a line inserted above it in an ordered file the restore stops; a row that
 declares `at the end` for a file it marks as ordered fails the manifest build; an alias line returns
 at the end of the shortcut file only when its name is free: a program of that name in the
-package manager's folder, an alias of that name and a shell function of that name, each found by
-the fixture's login zsh, each stop the restore's look with the name taken, and with none of them the
-line is added.
+package manager's folder, an alias of that name, a shell function of that name, a builtin of that
+name and a reserved word of that name, each found by the fixture's login zsh, each stop the
+restore's look with the name taken (the owner's ruling, A63), and with none of them the line is
+added.
 
 **EV-7. A restore is a run.** It has its own look, manifest, preview, go, journal and phases
 (ORD-4), and never runs the retiring run's order backwards. It reads the journal of the project
@@ -1331,7 +1335,11 @@ shell in a system folder of the fixture's list is started as a login and interac
 records the line written in the tool and the shortcut's name as separate arguments, the name never
 inside the line; a name that holds shell marks reaches it as that one argument and nothing it marks
 is run; the fake's exit as for a command found reads taken, and as for none, free; and a fake that
-also prints a canary leaves the canary in no output, form or record. Its temporary folder: with the
+also prints a canary leaves the canary in no output, form or record. The fixed line itself, run by
+the system's zsh with no startup files and the name as its one argument, exits as taken for a name
+that is only a builtin, only a reserved word, a builtin with a program of its name behind it, and a
+reserved word with a function of its name, and as free for a name that is none of these (the
+owner's ruling, A63). Its temporary folder: with the
 session's `TMPDIR` set to a decoy folder, the fake shell's `TMPDIR` is the fixture account's own
 temporary folder as the fixture's system gives it, and neither the decoy nor a folder of the run
 directory; a fake shell that writes a file to its `TMPDIR` leaves that file there and nothing in the
@@ -2243,9 +2251,9 @@ unanswered or names a row that does not exist.
 
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted eleven
-risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40, A48 and
-A55): RK1;
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted twelve
+risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40, A48, A55
+and A63): RK1;
 RK2, which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7;
 RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
@@ -2253,21 +2261,24 @@ before an invocation read its channel (SEC-12); RK7, for a live secret among wha
 safe, across runs (SEC-12); RK8, for a death in the instant a provider hands the tool a secret
 (SEC-12); RK10, for a record of the tool's own that cannot be read (SEC-12); RK11, for a program
 the tool starts from a folder he named (SEC-3); RK12, for his shell's startup files run by the
-shortcut check (SEC-3); and the run directory's assumption (RUN-4). RK10, RK11 and RK12 are the
-ninth, the tenth and the eleventh: no risk bears the number nine, RK9 being merged into RK7. Their
-wording is in the catalog's Part 6 and
+shortcut check (SEC-3); RK13, for a builtin of a shortcut's name coming into being in the instant it
+is added (RUN-7); and the run directory's assumption (RUN-4). RK10, RK11, RK12 and RK13 are the
+ninth, the tenth, the eleventh and the twelfth: no risk bears the number nine, RK9 being merged into
+RK7. Their wording is in the catalog's Part 6 and
 is not restated here. This frame removes none of them and accepts none itself. An operation carried
-under RK2, RK3, RK4 or RK5 is marked so in the journal, once for each of those risks it is carried
-under. RK1, RK6, RK7, RK8, RK10, RK11 and RK12 belong to no one operation, and no mark is recorded
-for any of them.
+under RK2, RK3, RK4, RK5 or RK13 is marked so in the journal, once for each of those risks it is
+carried under. RK13's window is the one RK5's is, between the check and the add, so a shortcut's add
+and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11 and RK12 belong to no one
+operation, and no mark is recorded for any of them.
 Where RK8's instant has passed, the journal already shows a receipt due and not given (SEC-12); that
 is the record of what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
-and its put-back carry RK5's mark beside RK2's; each mark is recorded exactly once for its operation
-and its risk, also after a kill and a resume; no other operation carries a mark, and no record
-carries a mark for RK1, RK6, RK7, RK8, RK10, RK11 or RK12, an operation with a receipt due and not
-given, a run that holds a disproof record, an operation whose program stands in a folder the
+and its put-back carry RK5's mark and RK13's beside RK2's; each mark is recorded exactly once for
+its operation and its risk, also after a kill and a resume; no other operation carries a mark, and
+no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11 or RK12, an operation with a receipt
+due and not given, a run that holds a disproof record, an operation whose program stands in a folder
+the
 fixture's settings name, and a look that made the shortcut check among them. What a start does
 where a record of the tool's own cannot be read is tested by that case in SEC-12's test line; it is
 a test of what the tool does, and how far RK10 reaches is Part 6's to say. What the run that died
