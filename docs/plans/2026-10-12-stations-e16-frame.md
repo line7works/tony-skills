@@ -1183,9 +1183,9 @@ parsed by SEC-4.
 | Aspect | Contract |
 |---|---|
 | command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line. A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2). The program is found by the runner itself: it looks for the program's declared name in the folders of the tool's search list, in the list's order (the environment row), and starts the first file of that name it finds, by that file's full path. The session's path is not consulted. A name found in no folder of the search list is a tool not found (RUN-7). A program found in a folder the owner named is started as it stands there, with no check of the folder or of the program: that is RK11, which the owner accepted (A48; RISK-1) |
-| environment | built from nothing. It holds the base names: `PATH`, set to the tool's search list and to nothing of the session's path; `HOME`, `USER` and `LOGNAME`, as the tool itself has them; `LANG` and `LC_ALL`, set to one fixed locale; and `TMPDIR`, set to a private folder in the run directory. The search list is the fixed list of system folders written in the tool and then each folder the owner names in his settings file (the owner's ruling, A46). Its order and its fixed folders were decided on the owner's behalf, his to change by a word: first `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, in that order, and then his folders, in the order he writes them there. No other folder is on it, the local folder and the package manager's folder among them, unless he names it there. It also holds the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential, and never for `PATH` or any other name that chooses which program or which code a child runs); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
+| environment | built from nothing. It holds the base names: `PATH`, set to the tool's search list and to nothing of the session's path; `HOME`, `USER` and `LOGNAME`, as the tool itself has them; `LANG` and `LC_ALL`, set to one fixed locale; and `TMPDIR`, set to a private folder in the run directory. A child of a start that is no summons is given no `TMPDIR`: that start makes no run directory (SEC-12), and nothing of the session may stand in its place. The search list is the fixed list of system folders written in the tool and then each folder the owner names in his settings file (the owner's ruling, A46). Its order and its fixed folders were decided on the owner's behalf, his to change by a word: first `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, in that order, and then his folders, in the order he writes them there. No other folder is on it, the local folder and the package manager's folder among them, unless he names it there. It also holds the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential, and never for `PATH` or any other name that chooses which program or which code a child runs); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
 | protected input | a slot the declaration names, with the type of protected record it accepts (SEC-6). The frame fills it only with the path of an owner-only file it made from that record, passed in the environment name or the argument position the slot declares. The content is never an argument, never an environment value and never in the CLI's output |
-| refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it. Where the refused command is an operation's, the operation is not started and the run ends `stopped` on that refusal. Where it is a command of a look, which runs through this same runner with no operation, the refusal is a failed read and the look ends as a planning stop does (RUN-7, RUN-12): `refused` before a first go, where there is no open run to stop, and `stopped`, with the manifest in force unchanged, in a re-plan of a run that has its go. No rule lets a child be started with that check left out |
+| refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it. Where the refused command is an operation's, the operation is not started and the run ends `stopped` on that refusal. Where it is a command of a look, which runs through this same runner with no operation, the refusal is a failed read and the look ends as a planning stop does (RUN-7, RUN-12): `refused` before a first go, where there is no open run to stop, and `stopped`, with the manifest in force unchanged, in a re-plan of a run that has its go. Where it is a read that a later invocation makes at its start, the reads RUN-10 (b) compares and OP-9's reads among them, the refusal is no changed context and asks for no re-plan, whose look would meet the same refusal (GOV-1): no effect is applied, and the run ends `stopped` on that refusal, its form naming it. No rule lets a child be started with that check left out |
 | files it makes | a file-creation mask that gives every new file to the owner only; the working directory the row declares |
 | input and output | standard input empty; both output streams captured in memory up to a fixed size and handed only to the parser of SEC-4; output over that size is discarded and the result is `malformed` |
 | lifetime | its own process group; a time limit from the declaration; at the limit, or when the invocation is ending, the runner ends the group it started, every descendant in it included, and nothing else |
@@ -1210,7 +1210,12 @@ a part of the temporary folder's path, each refuse the command before any child 
 fake recording no start, and the run ends `stopped`; each of the two, met by the first command of a
 first look, ends that look `refused`, with no child created, no manifest and no journal written, no
 run open under the key and the entry in no output or form, and met in the look of a re-plan of a
-run that has its go ends that invocation `stopped`, with the manifest in force byte-equal; four
+run that has its go ends that invocation `stopped`, with the manifest in force byte-equal; and, met
+by the identity read of a resume on his current word, it ends that resume with no effect call and
+the run `stopped`, the form naming the refusal and asking for no re-plan. A start that is no
+summons and starts a child, as the identity command does where it reads the commit through a fake
+git, starts it with no `TMPDIR` among the names of its environment, and the fixture home is
+byte-equal after it. Four
 rows,
 whose templates put a held field (a provider's own id) into an argument and into a registered
 environment value, and a secret field into an argument and into a registered environment value,
@@ -1904,15 +1909,21 @@ of the protected folder of a run other than the one continued, but in the reads 
 order, and the register's content is in no file of the fixture home outside the places of SEC-7.
 Every shipped start, in two fixtures. The seven starts are these, each with no summons: the tool's
 help; a command's help; the identity command; the check of examples; a usage error; an unknown
-command; a start with what the tool depends on missing. The first fixture is the shipped tool
-itself. A fixture home on disk holds a run on record that has caught, with its disproof on record,
-a word that stands in the tool's help text, in a command's help text, in the identity answer and in
-the output of the check of examples. Each of the seven is started as a child process of the shipped
-entry point, with that home as its home and with nothing else handed to it: no fake, and no code
-that the environment names. In each the caught word is in neither stream of the child's output and
-the fixed words of withholding stand in its place; the fixture home is byte-equal after each; and
-with no run on record the same seven print their text whole. Each of the seven is then started again
-with the settings of RUN-1's test line planted in the session, one at a time: the variable that can
+command; and a start with what the tool depends on missing, which is a start whose own code runs
+and finds missing a file of the tool outside its first code, or a program it needs in no folder of
+the search list (SEC-3), and prints the tool's own failure line. A start that cannot run its first
+code is none of the seven: it prints nothing, and RUN-1's test line has its fixture. The first
+fixture is the shipped tool itself. A fixture home on disk holds a run on record that has caught,
+with its disproof on record, a word that stands in the tool's help text, in a command's help text,
+in the identity answer, in the output of the check of examples and in the tool's own failure line.
+Each of the seven is started as a child process of the shipped entry point, with that home as its
+home and with nothing else handed to it: no fake, and no code that the environment names. The
+seventh is started so on a copy of the shipped tool in the test's temporary folder, the one change
+to it being a file outside the first code removed. In each the caught word is in neither stream of
+the child's output and the fixed words of withholding stand in its place; the fixture home is
+byte-equal after each; and with no run on record the same seven print their text whole. Each of the
+seven is then started again with the settings of RUN-1's test line planted in the session, one at a
+time: the variable that can
 redirect the system folder's Python set to a folder that does not exist, a Python setting that names
 a folder of code, a customizing module in the account's folder of packages, and a decoy first on the
 session's path. The start ignores each: no marker runs, and the output is byte-equal to the start
