@@ -320,12 +320,49 @@ owner's answers that shape the plan. An answer taken in the look is an input of 
 the questions listed and nothing approved. Nothing a look read is carried to a later invocation
 except through the manifest.
 
+The project key's earlier runs are found by one record and no other. The one record of the keys a
+run was opened under that stays once the run has ended is its journal's record of its opening
+(RUN-3, LOG-1); the record of open runs holds them only while the run is open. Both hold each key
+only as its keyed fingerprint (RUN-2). So a run is an earlier run of the look's keys when its
+record of its opening holds the fingerprint, keyed with the value now on this machine, of a key
+whose lock the invocation holds. To find them the look reads that record in every run directory,
+and nothing else of a run it has not found. It uses that record for one thing: to compare each
+fingerprint it holds with the fingerprints the invocation made itself. The comparison rests on the
+invocation's own fingerprints, and what the record holds is only matched against them: nothing of
+it is rendered, copied or written, the run's id among it, and nothing of it is taken as a ground,
+so a value a run has caught, a fingerprint among them, goes nowhere. A directory with no journal,
+or whose journal holds only a cut-off record (LOG-1), is of a run that had no go (RUN-12) and is no
+earlier run. Each run found, and only those, is then read as SEC-12 has another run's journal read:
+RUN-4's checks and the disproof read are made on no directory of a run the comparison did not find,
+and a failure there fails no read of the look. A name that a run's own records hold is not used to
+find it. A run
+opened under an earlier keying value is therefore no earlier run of any key: once a new value is
+made (RUN-2), every run opened before it, of every project, is out of every later look's sight,
+and out of a restore's (EV-7).
+
 Test on fakes: with every fake recording its calls, a look that reaches its preview records only
 read calls, and among them each provider's identity read, the adapter's capability declaration and
 the read of the key's earlier journals; it leaves every fake's state, and the fixture home outside
 the run directory, byte-equal; a look with an unanswered question ends with the question listed and
 no manifest written; a tool that stands on the session's path and in no folder of the search list is
-not found, and the look ends as RUN-7's planning stop, naming it.
+not found, and the look ends as RUN-7's planning stop, naming it. Earlier runs: a fixture machine
+holds three closed runs, two opened under one key, one of those also under a second key that only
+its alias reads showed, and a third under another key. A look summoned under the first key's name
+reads as the key's earlier journals those of the first two runs and not the third's; a look
+summoned under the second key's name, its alias reads showing no other name, reads the one run
+opened under that key and no other. The fixture's owner
+then removes the keying value's file, the lock files and the record of open runs, and the next
+summons makes a new value (RUN-2). A look summoned under the first key's name then reads no earlier
+journal, the three run directories being byte-equal. Directories not found: on that machine before
+the new value, the third run's directory is given wider permissions, and in another pass a record
+is cut from the middle of its journal, after its record of its opening. In both passes a look
+summoned under the first key's name reads, of that directory, its journal's first record and
+nothing else, makes no check of RUN-4 there, and reaches its preview. The same two changes made to
+the first run's directory end that look as a failed read (RUN-7). A fourth directory with no
+journal, and a fifth whose journal holds only a cut-off record, are passed by: no file is read in
+the fourth, and nothing but that record in the fifth. The third run has caught, with its disproof on
+record, a fingerprint that its record of its opening holds: that fingerprint is in no output, form
+or manifest of the look, and the look reads the same earlier journals as without it.
 
 **RUN-6. A planning test reads only what exists before the run.** For each candidate operation the
 look makes one planning test. It may read (a) the place where the operation would make a thing, and
@@ -894,7 +931,8 @@ line is added.
 
 **EV-7. A restore is a run.** It has its own look, manifest, preview, go, journal and phases
 (ORD-4), and never runs the retiring run's order backwards. It reads the journal of the project
-key's latest retiring run, whatever that run's ending, as SEC-12 has another run's journal read; if
+key's latest retiring run, found among the key's earlier runs as RUN-5 finds them, whatever that
+run's ending, as SEC-12 has another run's journal read; if
 that run is open, the restore's go closes it. That handover is one step with one deciding write:
 the record of the restore's go and of its opening under its keys (RUN-3), which names the retiring
 run it closes. Until that write is durable
@@ -924,7 +962,12 @@ that invocation leaves the record unwritten and nothing changed; at no write bou
 apply an effect, and at none is the key left with
 no run that can go on; with two retiring runs on record for the key, the later one is the one read;
 a missing protected record, and a keep whose fingerprint no longer matches, each take only their
-dependents out of the offer, with the reason in the preview.
+dependents out of the offer, with the reason in the preview. The sunset it finds: a restore summoned
+under the name of a closed sunset reads that sunset's journal as its retiring run's; after the
+fixture's owner has removed the keying value's file, the lock files and the record of open runs and
+a summons has made a new value (RUN-2), a restore summoned under the same name reads that sunset's
+journal as no retiring run's, no manifest it writes holds a reverse of that sunset's operations,
+and no fake records an effect call.
 
 ### 3.5 Order
 
@@ -1643,7 +1686,11 @@ whatever it takes from the records of any of those runs that holds a value any o
 reads gave is held (SEC-4): it is no ground, it is rendered only as the fixed words, and it enters
 no new record and no command. A restore plans an operation that would need such content
 `not applicable`, with that reason, and still offers the rest (the owner's ruling, A26; EV-7). Those
-values are used for nothing else and do not enter the reading run's register.
+values are used for nothing else and do not enter the reading run's register. One read of another
+run stands before all of this and is not such a read: the look's read, in every run directory, of
+the journal's record of a run's opening, which finds the key's earlier runs and is used only as
+RUN-5 says. This paragraph applies to each run that read finds; a run it does not find is read no
+further in that look, and this paragraph does not reach it there.
 
 What another run does not know. A disproof is known only where a journal holds its record; the tool
 keeps no memory of one across runs (the owner's ruling, A26). Take a run that closed before the
@@ -1802,8 +1849,8 @@ fingerprint in a lock, and once the keying value.
 
 | How the invocation begins | Allowed by | What it reads at its start | Before the startup checks pass it writes | Once they have passed it may write |
 |---|---|---|---|---|
-| a first look of a sunrise or a sunset | RUN-1, RUN-5 | the whole look; within it, the journals of the key's earlier runs, each after that run's disproof read; a secret only from a file on this machine, and where none holds it the look ends as a planning stop (A23) | fixed text | its forms, the CLI's output and its manifest; no journal before a go (RUN-12) |
-| a first look of a restore | RUN-1, RUN-5, EV-7 | the whole look; of the retiring run it reads the journal and the records EV-7 needs, after that run's disproof read | fixed text | the same |
+| a first look of a sunrise or a sunset | RUN-1, RUN-5 | the whole look; within it, the journal's record of a run's opening in every run directory, read only as RUN-5 says, and the journals of the key's earlier runs that read finds, each after that run's disproof read; a secret only from a file on this machine, and where none holds it the look ends as a planning stop (A23) | fixed text | its forms, the CLI's output and its manifest; no journal before a go (RUN-12) |
+| a first look of a restore | RUN-1, RUN-5, EV-7 | the whole look; within it, the journal's record of a run's opening in every run directory, read only as RUN-5 says; of the retiring run that read finds it reads the journal and the records EV-7 needs, after that run's disproof read | fixed text | the same |
 | the invocation that records a go and runs operations | RUN-9 | where the look was made by an earlier invocation, what RUN-10 (b) compares and OP-9's reads; otherwise nothing further | fixed text | the journal, its forms and the CLI's output |
 | a resume on his current word | RUN-10 | what RUN-10 (b) compares (each provider's identity among it) and OP-9's reads | fixed text | the same |
 | a summons with no word or a stale one, the first after a kill included: it renders status and ends | RUN-10 | for each provider that has a waiting read-back step, its identity read and that step's read (OP-9); no planning read | fixed text | the journal, the status form and the CLI's output |
