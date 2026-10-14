@@ -108,14 +108,19 @@ tool declares an outside package or a launcher. A schema file of the tool, with 
 breaks it, is refused by the tool's own check, and a document that meets it passes. A failed start,
 in three cases, the fixture home holding a run that has caught a word of the tool's help text, each
 asked for the tool's help: a copy of the tool in the test's temporary folder whose start line points
-the stand-in at a folder that does not exist; a copy whose first code file is cut short so that it
-cannot be read as code; and the shipped start, untouched. In the first two, both
+the stand-in at a folder that does not exist; a copy in which one file of the first code (SEC-12)
+is cut short so that it cannot be read as code, run once for each of its files in turn, the file
+the start hands to the interpreter among them; and the shipped start, untouched. In the first two,
+both
 output streams are empty, to the byte, and the exit number is the fixed one; in the third, the help
 is printed with the fixed words of withholding in the caught word's place, and the exit number is
-not the fixed one. A copy whose later module is cut short, the first code whole, prints the tool's
-own failure line under the withheld read, the caught word in no output, and its exit number is not
-the fixed one. No path of the tool's own code ends with the fixed number: a search of the tool's
-exit numbers finds it written once.
+not the fixed one. A copy in which a module outside the first code is cut short, the first code
+whole, prints the tool's own failure line under the withheld read, the caught word in no output,
+and its exit number is not the fixed one. A probe started by the shipped start's line lists the
+tool's files loaded at the moment the withheld read is made: each is a file of the first code, and
+none of the tool's other modules (its runner, its forms, a lane's rows) is among them. No path
+of the tool's own code ends with the fixed number: a search of the tool's exit numbers finds it
+written once.
 
 **RUN-2. One lock per project key.** The project key is the project's name folded: lowercased, with
 every character that is not a letter or a digit removed. A key is written nowhere as it is. What
@@ -1635,10 +1640,14 @@ continues no run and makes no run directory. It makes the withheld read as its f
 all that it reads in any run directory, and passes every line it prints against those values, as an
 early path does. No output of the shipped tool stands outside this paragraph, and a start that
 cannot run the tool's own code prints nothing (the owner's ruling, A50). The tool's own first code
-makes the withheld read before any other module of the tool loads, so every line the tool's code
-prints, the failure of a later module among them, is passed against those values. Where the start
-cannot run that first code (the developer tools missing, the machine's own setting pointing the
-system folder's Python at a folder that does not exist, that first code itself broken), nothing is
+is the code that runs up to the withheld read and makes it: the file the start hands to the
+interpreter, and the modules of the tool that the read uses, whether one or several; no other
+module of the tool is part of it. That code is carried once, in those files, and in no second copy.
+It makes the withheld read before any other module of the tool loads, so every line the tool's
+code prints, the failure of a later module among them, is passed against those values. Where the
+start cannot run that first code (the developer tools missing, the machine's own setting pointing
+the system folder's Python at a folder that does not exist, that first code itself broken, in the
+file the start hands to the interpreter or in any one of the read's modules), nothing is
 printed on either output stream, and the start ends with the one fixed exit number RUN-1 gives it.
 One line stands outside: where the tool's own file is missing, nothing of the tool exists to run,
 and the caller's shell prints its own line. The withheld read
