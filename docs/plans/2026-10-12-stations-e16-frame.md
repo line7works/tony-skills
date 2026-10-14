@@ -78,7 +78,14 @@ account. The tool loads nothing but its own files and that Python's own library,
 own schema files with its own code. Two of these are the ruling's conditions, which the builder
 shows by the test below: that the start clears each name that can redirect that Python, and that
 nothing loads from outside the tool's own files and that Python's own library. Where either cannot
-be built, the start comes back to the owner before anything else is built.
+be built, the start comes back to the owner before anything else is built. A start that cannot run
+the tool's own code prints nothing on either output stream and ends with one fixed exit number
+(the owner's ruling, A50; SEC-12). That number is written once in the tool, among its exit numbers,
+and the tool uses it for nothing else; the skills' own text says what it means and that he runs the
+start line by hand to see why. The start keeps the shell's, the stand-in's and the interpreter's own
+lines from showing in that case only, and never silences a line of the tool's own code. Where the
+builder cannot keep a failed start silent without silencing the tool's own checked lines, the start
+comes back to the owner before anything else is built.
 
 Test on fakes: with no vault, with a stub vault, and with a vault inside a synced folder, the
 invocation ends refused, the fixture home is byte-equal to before, no lock file exists and the cue
@@ -98,7 +105,17 @@ in each, no marker runs and the output is byte-equal to the start without it. A 
 same line as the entry point, which imports the tool's modules and lists the file of every module
 then loaded, finds each one under the tool's own folder or that Python's own library. No file of the
 tool declares an outside package or a launcher. A schema file of the tool, with a document that
-breaks it, is refused by the tool's own check, and a document that meets it passes.
+breaks it, is refused by the tool's own check, and a document that meets it passes. A failed start,
+in three cases, the fixture home holding a run that has caught a word of the tool's help text, each
+asked for the tool's help: a copy of the tool in the test's temporary folder whose start line points
+the stand-in at a folder that does not exist; a copy whose first code file is cut short so that it
+cannot be read as code; and the shipped start, untouched. In the first two, both
+output streams are empty, to the byte, and the exit number is the fixed one; in the third, the help
+is printed with the fixed words of withholding in the caught word's place, and the exit number is
+not the fixed one. A copy whose later module is cut short, the first code whole, prints the tool's
+own failure line under the withheld read, the caught word in no output, and its exit number is not
+the fixed one. No path of the tool's own code ends with the fixed number: a search of the tool's
+exit numbers finds it written once.
 
 **RUN-2. One lock per project key.** The project key is the project's name folded: lowercased, with
 every character that is not a letter or a digit removed. A key is written nowhere as it is. What
@@ -1616,7 +1633,15 @@ check the tool ships, such as the check of its examples; a usage error; an unkno
 failure to find what the tool depends on. A start that is no summons passes no gate, takes no lock,
 continues no run and makes no run directory. It makes the withheld read as its first act, which is
 all that it reads in any run directory, and passes every line it prints against those values, as an
-early path does. No output of the shipped tool stands outside this paragraph. The withheld read
+early path does. No output of the shipped tool stands outside this paragraph, and a start that
+cannot run the tool's own code prints nothing (the owner's ruling, A50). The tool's own first code
+makes the withheld read before any other module of the tool loads, so every line the tool's code
+prints, the failure of a later module among them, is passed against those values. Where the start
+cannot run that first code (the developer tools missing, the machine's own setting pointing the
+system folder's Python at a folder that does not exist, that first code itself broken), nothing is
+printed on either output stream, and the start ends with the one fixed exit number RUN-1 gives it.
+One line stands outside: where the tool's own file is missing, nothing of the tool exists to run,
+and the caller's shell prints its own line. The withheld read
 reads the record of every lock and the record of open runs. Those records are the tool's own, kept
 in its own folder and outside any run, and three things of them can fail at the withheld read: a
 lock's record cannot be read, or what is read is no lock's record; the folder of locks cannot be
