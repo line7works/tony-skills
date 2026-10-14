@@ -425,7 +425,7 @@ present paths and probed at the moved path.
 | `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias, shell function, builtin or reserved word of that name, as his login zsh finds them (SEC-3; the owner's ruling, A63). Each counts where it exists for that shell, whatever that shell would run first for the name: a program wherever it stands in a folder of that shell's path, and an alias, a function, a builtin or a reserved word wherever that shell holds one, though another command of the name comes before it. A builtin of the name that a startup file brings in between the check and the add is RK13, which the owner accepted (A63; RISK-1) | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
-| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file; a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
+| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file; a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
 
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
@@ -1001,6 +1001,13 @@ needs is missing or fails its fingerprint, the operations that need it are plann
 with that reason, and the rest are still offered; a receipt that is due and was not given (SEC-12)
 counts as such a missing record.
 
+Where the look finds no retiring run among the key's earlier runs, the key having no earlier run or
+none of its earlier runs being a retirement, it is one case: a restore builds its manifest from the
+retiring run's journal (EV-5), no rule gives it a plan without one, and so it stops (GOV-1). Its
+look ends as RUN-7's planning stop, `refused`, with no manifest written, its form saying in the
+tool's fixed words that no retiring run of the project is found. That stop rests on GOV-1; the owner
+was not asked of it apart.
+
 Test on fakes: a restore over a sunset that stopped after its barrier reverses exactly the
 operations that are `done` with a way back, and that sunset run is `closed` once the restore has its
 go; a kill before the restore's go is durable leaves the sunset open and resumable and the restore
@@ -1021,7 +1028,11 @@ under the name of a closed sunset reads that sunset's journal as its retiring ru
 fixture's owner has removed the keying value's file, the lock files and the record of open runs and
 a summons has made a new value (RUN-2), a restore summoned under the same name reads that sunset's
 journal as no retiring run's, no manifest it writes holds a reverse of that sunset's operations,
-and no fake records an effect call.
+and no fake records an effect call. No retiring run: that restore's look ends `refused` before any
+preview, with no manifest and no journal written and its form holding the fixed words that no
+retiring run of the project is found; so does a restore summoned under a name whose key has no
+earlier run, and one under a name whose key's one earlier run is a sunrise; in each, no fake
+records an effect call (GOV-1).
 
 ### 3.5 Order
 
