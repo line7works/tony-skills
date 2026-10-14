@@ -336,15 +336,20 @@ fingerprint it holds with the fingerprints the invocation made itself. The compa
 invocation's own fingerprints, and what the record holds is only matched against them: nothing of
 it is rendered, copied or written, the run's id among it, and nothing of it is taken as a ground,
 so a value a run has caught, a fingerprint among them, goes nowhere. A directory with no journal,
-or whose journal holds only a cut-off record (LOG-1), is of a run that had no go (RUN-12) and is no
-earlier run. Where the look cannot tell, it stops and tells (the owner's ruling, A57). A directory
-whose journal's first record is there and cannot be read, being unreadable to its owner or no
-record of a run's opening, ends the look as a failed read (RUN-7): `refused` before a first go, and
-`stopped`, with the manifest in force unchanged, in a re-plan. Its form says in the tool's fixed
+or whose journal holds no bytes or only a cut-off record (LOG-1), is of a run that had no go
+(RUN-12) and is no earlier run. Where the look cannot tell, it stops and tells (the owner's ruling,
+A57). A directory whose journal's first record is there and cannot be read, being unreadable to its
+owner, a whole record (LOG-1) that is no record of a run's opening, or longer than the most the
+look reads of a first record, ends the look as a failed read (RUN-7): `refused` before a first go,
+and `stopped`, with the manifest in force unchanged, in a re-plan. Its form says in the tool's fixed
 words that a run directory's first journal record cannot be read, and where the run directories
 are kept; it names no directory, since no directory's name has passed SEC-12's withheld read. The
 stop is made for a directory of any project, at every look and every restore, until he mends that
-directory or moves it by hand. It is a stop the owner ruled on its own. Where the folder that holds
+directory or moves it by hand. It is a stop the owner ruled on its own. The most the look reads of
+a first record is the build's to set, above the longest record of a run's opening the tool writes;
+the frame names no number. A directory whose journal cannot be examined at all, for any cause but
+its not being there, holds a first record the look cannot read: it ends the look as the same stop,
+with the same form, and rests on A57. Where the folder that holds
 the run directories cannot be listed, the look ends the same way, its form saying in fixed words
 that that folder cannot be listed and where it is. That is the same stop made for every directory
 at once: it rests on A57, and the owner was not asked of it apart. Each run found, and only those,
@@ -388,7 +393,13 @@ manifest in force byte-equal; and a restore's look ends `refused` as the first l
 record put back, each look reads as before. The folder of run directories: made unlistable to its
 owner, its other permissions kept, it ends a first look `refused` the same way, the form saying in
 fixed words that the folder cannot be listed and where it is; with its permissions put back the
-look reaches its preview.
+look reaches its preview. The end mark (LOG-1): in the third run's directory a journal whose one
+piece is bytes that are no record, with no end mark after them, is passed by as a cut-off record,
+and so is a journal of no bytes, the look reaching its preview; the same bytes with the end mark
+after them end the look as a first record that cannot be read does. So do a first record longer
+than the most the look reads of it, and a journal that cannot be examined, its directory made
+unsearchable to its owner with its other permissions kept: each ends the look `refused` with the
+same fixed words and no directory named.
 
 **RUN-6. A planning test reads only what exists before the run.** For each candidate operation the
 look makes one planning test. It may read (a) the place where the operation would make a thing, and
@@ -564,17 +575,24 @@ a later resume of the closed run is refused.
 together with its directory before the step it describes begins; a record of an outcome is synced
 before any later operation starts. Every record carries the hash of the record before it. On read, a
 cut-off last record is discarded and its operation is treated as if that record had never been
-written; a break in the chain anywhere else stops the invocation. The journal's records are of these
-kinds and no other: the run's opening under its keys (RUN-3); a go and each later word; an
-operation's start, step, answer, completion and status records; a check's attempt (OP-8); an owner
-operation's waiting record and his answer; a disproof (SEC-12); an invocation's ending; the run's
-ending.
+written; a break in the chain anywhere else stops the invocation. Each record is written whole with
+a mark of its end, which no record's content holds; what that mark is, is the build's. A record is
+whole only where its end mark stands. A cut-off record is a last piece that lacks the mark, which a
+kill or a lost write leaves, and a journal of no bytes holds no record. A piece that has its end
+mark and is no record of the kinds below is not cut off: it is a record of no listed kind, and it
+stops the invocation. The journal's records are of these kinds and no other: the run's opening
+under its keys (RUN-3); a go and each later word; an operation's start, step, answer, completion
+and status records; a check's attempt (OP-8); an owner operation's waiting record and his answer; a
+disproof (SEC-12); an invocation's ending; the run's ending.
 
 Test on fakes: on a fake file system that loses every write not yet synced at a kill, a kill at
 every write boundary leaves, for every effect call the fakes recorded, that operation's start record
 in the journal; the journal reads back with at most its last record dropped, and the operation that
 record belonged to is probed under OP-5 as if it were absent; a record of a kind this rule does not
-list stops the invocation.
+list stops the invocation. The end mark: a last piece of bytes that are no record, with no end mark
+after them, is dropped as a cut-off record and the journal reads back without it; the same bytes
+with the end mark after them stop the invocation as a record of no listed kind; a journal of no
+bytes reads back as holding no record.
 
 **LOG-2. The start record holds everything that is needed later.** Before an operation's effect the
 journal holds its start record: the thing's identity and tracked state as just read, where what a
@@ -1267,7 +1285,7 @@ parsed by SEC-4.
 | Aspect | Contract |
 |---|---|
 | command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line, but for one command named here. The check that a shortcut's name is free starts his shell, zsh, which the runner finds in the system folders of the search list, the way a terminal window starts it by default: as a login and interactive shell, with an environment built as the next row says. It hands the shell one fixed line written in the tool, which asks whether a command of that name exists, and passes the name as a separate argument, never written into the line. The declaration maps the shell's exit number to taken or free, and nothing the shell prints is read. Each time the check is made, the system's startup files and his own run as a child of the tool: that is RK12, which the owner accepted (the owner's ruling, A55; RISK-1). A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2). The program is found by the runner itself: it looks for the program's declared name in the folders of the tool's search list, in the list's order (the environment row), and starts the first file of that name it finds, by that file's full path. The session's path is not consulted. A name found in no folder of the search list is a tool not found (RUN-7). A program found in a folder the owner named is started as it stands there, with no check of the folder or of the program: that is RK11, which the owner accepted (A48; RISK-1) |
-| environment | built from nothing. It holds the base names: `PATH`, set to the tool's search list and to nothing of the session's path; `HOME`, `USER` and `LOGNAME`, as the tool itself has them; `LANG` and `LC_ALL`, set to one fixed locale; and `TMPDIR`, set to a private folder in the run directory. One child is the exception: the shell that the check of a shortcut's name starts (the command row) is given as its `TMPDIR` his account's own temporary folder, the one a terminal window uses by default, which the tool reads from the system and not from the session, so that the shell starts as RK12 describes, the way a terminal window starts it (the owner's ruling, A58). Every other child keeps the run directory's folder. A child of a start that is no summons is given no `TMPDIR`: that start makes no run directory (SEC-12), and nothing of the session may stand in its place. The search list is the fixed list of system folders written in the tool and then each folder the owner names in his settings file (the owner's ruling, A46). Its order and its fixed folders were decided on the owner's behalf, his to change by a word: first `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, in that order, and then his folders, in the order he writes them there. No other folder is on it, the local folder and the package manager's folder among them, unless he names it there. It also holds the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential, and never for `PATH` or any other name that chooses which program or which code a child runs); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
+| environment | built from nothing. It holds the base names: `PATH`, set to the tool's search list and to nothing of the session's path; `HOME`, `USER` and `LOGNAME`, as the tool itself has them; `LANG` and `LC_ALL`, set to one fixed locale; and `TMPDIR`, set to a private folder in the run directory. One child is the exception: the shell that the check of a shortcut's name starts (the command row) is given as its `TMPDIR` his account's own temporary folder, the one a terminal window uses by default, which the tool reads from the system and not from the session, so that the shell starts as RK12 describes, the way a terminal window starts it (the owner's ruling, A58). Where the system gives no such folder, or gives one that is not an owner-only folder of his account, that shell is not started: the check is a failed read, and the look ends as RUN-7's planning stop, naming the check. No rule gives that shell another folder, and the tool never picks one (GOV-1); his own folder, as A58 put it to him, is an owner-only one, and a folder others share is the option he did not take. Every other child keeps the run directory's folder. A child of a start that is no summons is given no `TMPDIR`: that start makes no run directory (SEC-12), and nothing of the session may stand in its place. The search list is the fixed list of system folders written in the tool and then each folder the owner names in his settings file (the owner's ruling, A46). Its order and its fixed folders were decided on the owner's behalf, his to change by a word: first `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, in that order, and then his folders, in the order he writes them there. No other folder is on it, the local folder and the package manager's folder among them, unless he names it there. It also holds the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential, and never for `PATH` or any other name that chooses which program or which code a child runs); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
 | protected input | a slot the declaration names, with the type of protected record it accepts (SEC-6). The frame fills it only with the path of an owner-only file it made from that record, passed in the environment name or the argument position the slot declares. That file is made in the run directory's protected folder, the place SEC-7 gives the record it is made from, so that one a kill leaves rests where its record may rest; the run may remove it once its child has ended (LOG-3). The content is never an argument, never an environment value and never in the CLI's output |
 | refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it. Where the refused command is an operation's, the operation is not started and the run ends `stopped` on that refusal. Where it is a command of a look, which runs through this same runner with no operation, the refusal is a failed read and the look ends as a planning stop does (RUN-7, RUN-12): `refused` before a first go, where there is no open run to stop, and `stopped`, with the manifest in force unchanged, in a re-plan of a run that has its go. Where it is a read that a later invocation makes at its start, the reads RUN-10 (b) compares and OP-9's reads among them, the refusal is no changed context and asks for no re-plan, whose look would meet the same refusal (GOV-1): no effect is applied, and the run ends `stopped` on that refusal, its form naming it. No rule lets a child be started with that check left out |
 | files it makes | a file-creation mask that gives every new file to the owner only; the working directory the row declares |
@@ -1315,7 +1333,10 @@ session's `TMPDIR` set to a decoy folder, the fake shell's `TMPDIR` is the fixtu
 temporary folder as the fixture's system gives it, and neither the decoy nor a folder of the run
 directory; a fake shell that writes a file to its `TMPDIR` leaves that file there and nothing in the
 run directory, which holds after the check only what the tool itself wrote; and every other child
-that run starts has its `TMPDIR` in the run directory (the owner's ruling, A58; RK12). Four
+that run starts has its `TMPDIR` in the run directory (the owner's ruling, A58; RK12). With the
+fixture's system giving no folder for the account, and in a second pass one that other accounts may
+read or write, the fake shell is not started, and a first look ends `refused` before any preview,
+with the shortcut check named as a failed read and no manifest written (GOV-1). Four
 rows,
 whose templates put a held field (a provider's own id) into an argument and into a registered
 environment value, and a secret field into an argument and into a registered environment value,
