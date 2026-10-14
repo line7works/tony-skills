@@ -517,7 +517,11 @@ manifest whose bytes no longer give the recorded hash, and never applies an oper
 does not hold. A first go recorded by an invocation other than its look's is recorded only where
 every key that invocation holds is one its manifest records (RUN-8): where its alias reads show, or
 a name it carries gives, a key the look did not hold, no go is recorded and it ends `refused`, as
-RUN-2 says (the owner's ruling, A76).
+RUN-2 says (the owner's ruling, A76). A go that holds fewer keys than its look did, a name form
+being gone from its alias reads, is recorded: the look's locks went with its invocation (RUN-2), the
+go takes none under the name that went, and the run is opened under the keys the go holds and no
+other (RUN-3). That name is on no record of the run, and a later look under it alone does not find
+the run (RUN-5).
 
 Test on fakes: a manifest altered after the go is refused before any operation; an operation
 injected outside the manifest is refused; with no go on record no effect call is made; with a go on
@@ -527,7 +531,13 @@ summoned in a later invocation, takes no lock under that name, records no go, wr
 opens no run and ends `refused`, its refusal form saying in fixed words that the project now shows
 another name and naming the private file that holds it, and no fake records an effect call; a go
 summons that carries a further name of its own ends the same way; a new summons under all the
-names then makes a new look, and its go is recorded with every key (the owner's ruling, A76).
+names then makes a new look, and its go is recorded with every key (the owner's ruling, A76). A
+name gone between the look and the go: a first look whose alias reads showed a second name ends
+with its preview; the fixture's alias reads then no longer show it; the go, summoned in a later
+invocation, takes no lock under the second name and is recorded, and the record of the run's
+opening and the record of open runs hold the first key's fingerprint and not the second's; a later
+look summoned under the second name alone, its alias reads showing no other name, does not find the
+run.
 
 **RUN-10. Every later invocation needs his word again.** After the first, an invocation applies an
 effect only on the owner's word to go on, given in answer to a status form of this run, and only if
@@ -583,9 +593,11 @@ had read by then, naming each cause. A refusal writes no manifest and no journal
 summons
 starts a new look. A summons turned away at the gate, at a held lock or by RUN-3 is `refused` in the
 same way whether or not the run it names has a go, and changes nothing in that run, but for the one
-closing record EV-7 has it write. A planning stop, a refused input or a lacking answer met in the
-look of a re-plan, in a run that already has a go, ends that invocation `stopped`, with the manifest
-in force unchanged.
+closing record EV-7 has it write. So is a summons that continues a run and carries a name whose key
+that run is not open under, which RUN-2 turns away at its part (c): `refused`, its output the
+tool's fixed text, the run unchanged, and none of the five endings recorded for it. A planning
+stop, a refused input or a lacking answer met in the look of a re-plan, in a run that already has a
+go, ends that invocation `stopped`, with the manifest in force unchanged.
 
 | Ending | When | The run is then |
 |---|---|---|
@@ -603,7 +615,9 @@ nothing from the journal or the manifest in any output; a failed gate ends `refu
 fixture home byte-equal, so no refusal form, no run directory and no lock file, and with the CLI's
 output holding only fixed text that names the failed check; a name that fails its check, a held
 lock, the first key's or a later key's, and an open run met by a new summons, each end `refused` the
-same way, the output naming the failed check, the holding run or the open run; a planning stop in a
+same way, the output naming the failed check, the holding run or the open run; a resume of a run
+left `stopped`, carrying a further name the run is not open under, ends `refused` with fixed text,
+the run's journal byte-equal and its status still `stopped`; a planning stop in a
 first look ends `refused`, with a refusal form in its run directory naming each cause, no manifest
 and no journal written, no run open under the key, and a later resume summons finding nothing to
 resume; the same planning stop in a re-plan's look ends `stopped` with the manifest in force
