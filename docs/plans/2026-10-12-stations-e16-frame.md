@@ -343,16 +343,17 @@ present paths and probed at the moved path.
 
 | Planning outcome | When | What follows |
 |---|---|---|
-| `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2) | the operation is in the manifest |
+| `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias or shell function of that name, as his login zsh finds them (SEC-3) | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
 | planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
 
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
-at the host, a shortcut that shadows a program) ends the look with the condition named and no
-manifest; so does each of a failed read, a partial read, a read made as the wrong account and a read
-that ran out of time, each named; so does a program a candidate needs that is in no folder of the
+at the host, a shortcut whose name a program, an alias or a shell function already has, as the
+fixture's login zsh finds them) ends the look with the condition named and no manifest; so does
+each of a failed read, a partial read, a read made as the wrong account and a read that ran out of
+time, each named; so does a program a candidate needs that is in no folder of the
 search list, with the program named and the settings file named as where a folder is put on the
 list; a provider resource that is already retired yields a preview line and no operation.
 
@@ -878,7 +879,10 @@ changed and no file text in any output; so does an after-image that occurs twice
 neighbours that occur next to each other twice; a removed line between two different lines returns
 between them, and with a line inserted above it in an ordered file the restore stops; a row that
 declares `at the end` for a file it marks as ordered fails the manifest build; an alias line returns
-at the end of the shortcut file only when its name is free.
+at the end of the shortcut file only when its name is free: a program of that name in the
+package manager's folder, an alias of that name and a shell function of that name, each found by
+the fixture's login zsh, each stop the restore's look with the name taken, and with none of them the
+line is added.
 
 **EV-7. A restore is a run.** It has its own look, manifest, preview, go, journal and phases
 (ORD-4), and never runs the retiring run's order backwards. It reads the journal of the project
@@ -1182,7 +1186,7 @@ parsed by SEC-4.
 
 | Aspect | Contract |
 |---|---|
-| command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line. A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2). The program is found by the runner itself: it looks for the program's declared name in the folders of the tool's search list, in the list's order (the environment row), and starts the first file of that name it finds, by that file's full path. The session's path is not consulted. A name found in no folder of the search list is a tool not found (RUN-7). A program found in a folder the owner named is started as it stands there, with no check of the folder or of the program: that is RK11, which the owner accepted (A48; RISK-1) |
+| command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line, but for one command named here. The check that a shortcut's name is free starts his shell, zsh, which the runner finds in the system folders of the search list, the way a terminal window starts it by default: as a login and interactive shell, with an environment built as the next row says. It hands the shell one fixed line written in the tool, which asks whether a command of that name exists, and passes the name as a separate argument, never written into the line. The declaration maps the shell's exit number to taken or free, and nothing the shell prints is read. Each time the check is made, the system's startup files and his own run as a child of the tool: that is RK12, which the owner accepted (the owner's ruling, A55; RISK-1). A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2). The program is found by the runner itself: it looks for the program's declared name in the folders of the tool's search list, in the list's order (the environment row), and starts the first file of that name it finds, by that file's full path. The session's path is not consulted. A name found in no folder of the search list is a tool not found (RUN-7). A program found in a folder the owner named is started as it stands there, with no check of the folder or of the program: that is RK11, which the owner accepted (A48; RISK-1) |
 | environment | built from nothing. It holds the base names: `PATH`, set to the tool's search list and to nothing of the session's path; `HOME`, `USER` and `LOGNAME`, as the tool itself has them; `LANG` and `LC_ALL`, set to one fixed locale; and `TMPDIR`, set to a private folder in the run directory. A child of a start that is no summons is given no `TMPDIR`: that start makes no run directory (SEC-12), and nothing of the session may stand in its place. The search list is the fixed list of system folders written in the tool and then each folder the owner names in his settings file (the owner's ruling, A46). Its order and its fixed folders were decided on the owner's behalf, his to change by a word: first `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, in that order, and then his folders, in the order he writes them there. No other folder is on it, the local folder and the package manager's folder among them, unless he names it there. It also holds the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential, and never for `PATH` or any other name that chooses which program or which code a child runs); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
 | protected input | a slot the declaration names, with the type of protected record it accepts (SEC-6). The frame fills it only with the path of an owner-only file it made from that record, passed in the environment name or the argument position the slot declares. The content is never an argument, never an environment value and never in the CLI's output |
 | refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it. Where the refused command is an operation's, the operation is not started and the run ends `stopped` on that refusal. Where it is a command of a look, which runs through this same runner with no operation, the refusal is a failed read and the look ends as a planning stop does (RUN-7, RUN-12): `refused` before a first go, where there is no open run to stop, and `stopped`, with the manifest in force unchanged, in a re-plan of a run that has its go. Where it is a read that a later invocation makes at its start, the reads RUN-10 (b) compares and OP-9's reads among them, the refusal is no changed context and asks for no re-plan, whose look would meet the same refusal (GOV-1): no effect is applied, and the run ends `stopped` on that refusal, its form naming it. No rule lets a child be started with that check left out |
@@ -1221,7 +1225,12 @@ reads that repository's commit itself and the answer shows it; placed inside ano
 that does not hold it, and in no repository at all, the answer gives the fixed words for no commit,
 and the other repository's commit is in no output. A fake git that answers the commit the tool read
 is shown as the tool's own copy; a fake git that answers another commit makes the answer give the
-fixed fact that it differs, and that other commit is in no output. Four
+fixed fact that it differs, and that other commit is in no output. The shortcut check: the fake
+shell in a system folder of the fixture's list is started as a login and interactive shell, and
+records the line written in the tool and the shortcut's name as separate arguments, the name never
+inside the line; a name that holds shell marks reaches it as that one argument and nothing it marks
+is run; the fake's exit as for a command found reads taken, and as for none, free; and a fake that
+also prints a canary leaves the canary in no output, form or record. Four
 rows,
 whose templates put a held field (a provider's own id) into an argument and into a registered
 environment value, and a secret field into an argument and into a registered environment value,
@@ -2118,39 +2127,40 @@ unanswered or names a row that does not exist.
 
 ## Part 4. The risk that is left
 
-**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted ten
-risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40 and A48):
-RK1;
+**RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted eleven
+risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40, A48 and
+A55): RK1;
 RK2, which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7;
 RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
 before an invocation read its channel (SEC-12); RK7, for a live secret among whatever a run holds as
 safe, across runs (SEC-12); RK8, for a death in the instant a provider hands the tool a secret
 (SEC-12); RK10, for a record of the tool's own that cannot be read (SEC-12); RK11, for a program
-the tool starts from a folder he named (SEC-3); and the run directory's assumption (RUN-4). RK10 and
-RK11 are the ninth and the tenth: no risk bears the number nine, RK9 being merged into RK7. Their
+the tool starts from a folder he named (SEC-3); RK12, for his shell's startup files run by the
+shortcut check (SEC-3); and the run directory's assumption (RUN-4). RK10, RK11 and RK12 are the
+ninth, the tenth and the eleventh: no risk bears the number nine, RK9 being merged into RK7. Their
 wording is in the catalog's Part 6 and
 is not restated here. This frame removes none of them and accepts none itself. An operation carried
 under RK2, RK3, RK4 or RK5 is marked so in the journal, once for each of those risks it is carried
-under. RK1, RK6, RK7, RK8, RK10 and RK11 belong to no one operation, and no mark is recorded for any
-of them.
+under. RK1, RK6, RK7, RK8, RK10, RK11 and RK12 belong to no one operation, and no mark is recorded
+for any of them.
 Where RK8's instant has passed, the journal already shows a receipt due and not given (SEC-12); that
 is the record of what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark beside RK2's; each mark is recorded exactly once for its operation
 and its risk, also after a kill and a resume; no other operation carries a mark, and no record
-carries a mark for RK1, RK6, RK7, RK8, RK10 or RK11, an operation with a receipt due and not given,
-a run that holds a disproof record and an operation whose program stands in a folder the fixture's
-settings name among them. What a start does where a record of the tool's own
-cannot be read is tested by that case in SEC-12's test line; it is a test of what the tool does, and
-how far RK10 reaches is Part 6's to say. What the run that died does after RK8's instant is tested
-by that case in SEC-12's test line: after a death between a provider's handing over a secret and the
-tool's first record of it, the receipt is due and not given, the status form of that run says a
-secret may have been received and lost, and the run goes on; a value that run does not hold as safe
-is in no output; and with the protected record written before the death, the content the secret
-equals is withheld. That is a test of what one run does. How far RK8 reaches is Part 6's to say, and
-this test line does not narrow it.
+carries a mark for RK1, RK6, RK7, RK8, RK10, RK11 or RK12, an operation with a receipt due and not
+given, a run that holds a disproof record, an operation whose program stands in a folder the
+fixture's settings name, and a look that made the shortcut check among them. What a start does
+where a record of the tool's own cannot be read is tested by that case in SEC-12's test line; it is
+a test of what the tool does, and how far RK10 reaches is Part 6's to say. What the run that died
+does after RK8's instant is tested by that case in SEC-12's test line: after a death between a
+provider's handing over a secret and the tool's first record of it, the receipt is due and not
+given, the status form of that run says a secret may have been received and lost, and the run goes
+on; a value that run does not hold as safe is in no output; and with the protected record written
+before the death, the content the secret equals is withheld. That is a test of what one run does.
+How far RK8 reaches is Part 6's to say, and this test line does not narrow it.
 
 **RISK-2. A window nobody accepted is not the tool's to take.** A row whose effect has a window that
 no accepted risk names is written as an owner step (OP-9), and a manifest that holds it as a tool's
