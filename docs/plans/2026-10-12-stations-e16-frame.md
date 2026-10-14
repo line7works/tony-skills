@@ -1012,7 +1012,13 @@ stays the key's latest until a later sunset: a later restore reads its journal a
 offers its reverses again. RUN-7 plans each against the thing as it now stands: a change or a move
 an earlier restore put back is `already so`; a reverse that would make a thing where an earlier
 restore made one finds its place taken, which is a planning stop; an owner step's reverse is
-offered again as EV-5 offers it.
+offered again as EV-5 offers it. A restore whose every reverse is `already so` has a manifest that
+holds no reverse. It is previewed and takes a go like any other (RUN-8, RUN-9), and its go closes
+an open retirement as above. Where the lane has a restore write its own entry, that entry is the
+one operation its manifest holds; with no other operation to wait on, it runs at once and is
+published once (KEEP-5), so the project's record gains an entry for a restore that put nothing
+back. Where the lane has none, the run holds no operation and ends `complete` with no effect call
+(RUN-12).
 
 Where the look finds no retiring run among the key's earlier runs, the key having no earlier run or
 none of its earlier runs being a retirement, it is one case: a restore builds its manifest from the
@@ -1057,8 +1063,11 @@ retirement a restore
 closed: a restore over a sunset that moved a folder and changed a file has its go and ends
 `complete`; a second restore under the same name reads that sunset's journal again, its preview
 lists the move and the change `already so` and holds no reverse to run, and no fake records an
-effect call in its look; with the sunset having also removed a file that the first restore put
-back, the second restore's look ends as a planning stop that names that place as taken.
+effect call in its look; given his go, it publishes its own entry once where the fixture's lane
+has one, the first restore's entry staying byte-equal, and ends `complete` with no other effect
+call; where the fixture's lane has no entry, it ends `complete` with no effect call at all; with
+the sunset having also removed a file that the first restore put back, the second restore's look
+ends as a planning stop that names that place as taken.
 
 ### 3.5 Order
 
