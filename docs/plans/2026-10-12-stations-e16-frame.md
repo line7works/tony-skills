@@ -1215,7 +1215,13 @@ by the identity read of a resume on his current word, it ends that resume with n
 the run `stopped`, the form naming the refusal and asking for no re-plan. A start that is no
 summons and starts a child, as the identity command does where it reads the commit through a fake
 git, starts it with no `TMPDIR` among the names of its environment, and the fixture home is
-byte-equal after it. Four
+byte-equal after it. The identity answer's commit, in four places of the fixture copy: at the top of
+a repository of its own, and as a folder that a larger repository holds in its commit, the tool
+reads that repository's commit itself and the answer shows it; placed inside another repository
+that does not hold it, and in no repository at all, the answer gives the fixed words for no commit,
+and the other repository's commit is in no output. A fake git that answers the commit the tool read
+is shown as the tool's own copy; a fake git that answers another commit makes the answer give the
+fixed fact that it differs, and that other commit is in no output. Four
 rows,
 whose templates put a held field (a provider's own id) into an argument and into a registered
 environment value, and a secret field into an argument and into a registered environment value,
@@ -1643,8 +1649,18 @@ check the tool ships, such as the check of its examples; a usage error; an unkno
 failure to find what the tool depends on. A start that is no summons passes no gate, takes no lock,
 continues no run and makes no run directory. It makes the withheld read as its first act, which is
 all that it reads in any run directory, and passes every line it prints against those values, as an
-early path does. No output of the shipped tool stands outside this paragraph, and a start that
-cannot run the tool's own code prints nothing (the owner's ruling, A50). The tool's own first code
+early path does. The commit an identity answer shows is the commit of the tool's own files as the
+tool reads it itself, in its own process, on this machine: SEC-4's hash row, "a commit it made or
+read on this machine". It is read from the nearest repository at or above the folder of the tool's
+own files, and only where that repository holds those files in its commit. A repository that does
+not hold them, as one that a copy of the tool merely sits inside, is not theirs, and its commit is
+in no output. Where no repository holds them, the answer gives the tool's own fixed words for no
+commit. A git child's answer of it is shown only where
+it equals that read, as the tool's own copy; where it differs, the answer gives the fixed fact that
+it differs (SEC-4). A child's answer alone is held, and a start that is no summons has no protected
+record to name it by (SEC-6), so it is in no output. No output of the shipped tool stands outside
+this paragraph, and a start that cannot run the tool's own code prints nothing (the owner's ruling,
+A50). The tool's own first code
 is the code that runs up to the withheld read and makes it: the file the start hands to the
 interpreter, and the modules of the tool that the read uses, whether one or several; no other
 module of the tool is part of it. That code is carried once, in those files, and in no second copy.
