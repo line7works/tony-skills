@@ -227,7 +227,7 @@ withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
 (A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40), and
-RK11 on 2026-10-14 (A48).**
+RK11 on 2026-10-14 (A48), and RK12 the same day (A55).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -342,6 +342,19 @@ How likely each is was never measured.
   and that this is the first acceptance on this case; the card he answered carried a false fact, a
   second account, corrected and told to him after his answer. Under this entry and every other, the
   tool's own installed files stand in his home and his account can write them. Not measured.
+- **RK12, his shell's startup files run by the shortcut check** (accepted by the owner, A55). Before
+  the tool adds a shortcut's line, RK5's check asks his shell whether a command already has that
+  name: it starts zsh from the system folder the way a terminal window starts it by default, as a
+  login and interactive shell with the session cleared, and reads only the exit number, taken or
+  free. Each time the check is made, the system's startup files and his own run as a child of the
+  tool (on the machine checked, `/etc/zprofile`, `/etc/zshrc` and his `.zshrc`). They may write the
+  shell's own files, such as its history and completion cache, and start programs of their own. A
+  startup file that waits or fails ends the check at its time limit, and the look stops. Nothing the
+  shell prints is read, so RK1 is not stretched. A program in a folder that no startup file puts on
+  that shell's path reads as free, as it would by name in such a window. He was told that options 2
+  and 3 let RK5 reach further than its entry and this one does not, and that it accepts something
+  none of the ten accepted risks named. His terminal's own settings and the laptop are not checked.
+  Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
