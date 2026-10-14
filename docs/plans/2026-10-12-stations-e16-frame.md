@@ -422,7 +422,7 @@ present paths and probed at the moved path.
 
 | Planning outcome | When | What follows |
 |---|---|---|
-| `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias or shell function of that name, as his login zsh finds them (SEC-3) | the operation is in the manifest |
+| `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias or shell function of that name, as his login zsh finds them (SEC-3). Each counts where it exists for that shell, whatever that shell would run first for the name: a program wherever it stands in a folder of that shell's path, an alias or a function wherever that shell holds one, though a builtin, a reserved word or another command of the name comes before it | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
 | planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file; a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
@@ -430,7 +430,10 @@ present paths and probed at the moved path.
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
 at the host, a shortcut whose name a program, an alias or a shell function already has, as the
-fixture's login zsh finds them) ends the look with the condition named and no manifest; so does
+fixture's login zsh finds them) ends the look with the condition named and no manifest; and so does
+a name that the fixture's login zsh would run first as a builtin, and in a second pass as a reserved
+word, and that also names a program in a folder of that shell's path, and in a third pass a reserved
+word that is also the name of a shell function there, each with the name taken; so does
 each of a failed read, a partial read, a read made as the wrong account and a read that ran out of
 time, each named; so does a program a candidate needs that is in no folder of the
 search list, with the program named and the settings file named as where a folder is put on the
