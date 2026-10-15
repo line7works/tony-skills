@@ -1421,10 +1421,12 @@ Between the publish and its completion record the entry is at its place and not 
 publish and the journal are two writes, and the frame does not pretend they are one. On resume the
 operation is probed like any other (OP-5): a `landed` entry is confirmed by its after-check and
 completed (OP-6); an entry that cannot be confirmed leaves the run `stopped`, the form saying that
-the entry is at its place and unconfirmed, and the ways on are resume and close. No run rewrites or
-removes an entry once it is published, its own included. The project's record is a history: each
-run adds its own entry and never rewrites, refreshes or removes an entry an earlier run wrote, and
-an earlier run's entry at the place is not a collision.
+the entry is at its place and unconfirmed, and the ways on are resume and close. An after-check of
+the entry that the runner refuses is one that cannot confirm it: the form says both, the refusal by
+name (SEC-3) beside the entry at its place and unconfirmed, and the ways on stay resume and close.
+No run rewrites or removes an entry once it is published, its own included. The project's record is
+a history: each run adds its own entry and never rewrites, refreshes or removes an entry an earlier
+run wrote, and an earlier run's entry at the place is not a collision.
 
 Test on fakes: with the database step waiting, no tombstone exists anywhere; once the step is read
 back the tombstone is written once and shows the final state, and with every fake but the file
@@ -1432,7 +1434,12 @@ system removed before it is rendered it is the same, byte for byte; a kill betwe
 the completion record is followed by a resume that confirms the one entry and ends the run
 `complete`, with no second publish; an entry damaged after its publish leaves the run `stopped`
 with the entry untouched and named as unconfirmed; a second sunset after a restore adds an entry and
-leaves the first byte-equal.
+leaves the first byte-equal. A refused after-check: the kill falls between the publish and the
+completion record, and the resume's probe finds the entry `landed`; its after-check reads through
+the runner, and a value that only that invocation's register holds makes the runner refuse it; the
+run ends `stopped` with no completion recorded and no second publish, its form naming the refusal
+and the entry at its place and unconfirmed, the ways on resume and close and no re-plan; the next
+resume, its register without that value, confirms the one entry and ends the run `complete`.
 
 ### 3.7 Secrets
 
