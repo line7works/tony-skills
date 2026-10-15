@@ -509,9 +509,14 @@ taken. A name that is only a builtin there, with no program, alias or function o
 second pass only a reserved word, each ends the look with the name taken; so does a name that is a
 builtin only because the fixture's startup file loads a zsh module (the owner's ruling, A63); so
 does each of a failed read, a partial read, a read made as the wrong account and a read that ran out
-of time, each named; so does a program a candidate needs that is in no folder of the search list,
-with the program named and the settings file named as where a folder is put on the list; so do a
-run directory whose first journal record cannot be read and a folder of run
+of time, each named; and a failed read in two more forms: a file on this machine that a row's local
+mark names, made unreadable to the fixture's owner, of which nothing is safe by SEC-1 since no
+validator could pass on content that was not read, and a request of the frame's own (SEC-2)
+answered by a redirect, which is not followed and keeps nothing (SEC-4); each ends the look as that
+planning stop with the read named, and each met at an operation's probe instead gives `unreadable`
+(OP-5) with no effect call; so does a program a candidate needs that is in no folder of the search
+list, with the program named and the settings file named as where a folder is put on the list; so
+do a run directory whose first journal record cannot be read and a folder of run
 directories that cannot be listed, each with the fixed words and no directory named, as RUN-5's test
 line drives them; a provider resource that is already retired yields a preview line and no
 operation.
