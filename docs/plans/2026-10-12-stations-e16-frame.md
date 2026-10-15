@@ -1087,7 +1087,12 @@ after-image occurs in the file exactly once; the recorded before-image then take
 nothing else in the file moves. A span the retiring run removed is put back by the placement its row
 declares. `in place`: the recorded lines on each side are found next to each other exactly once and,
 for a file the row marks as ordered (one where a line's meaning depends on what stands before it),
-everything before that point is as recorded. `at the end`: allowed only for a file the row marks as
+everything before that point is as recorded. For a span that stood at its file's start or at its
+end, the file's start, or its end, stands as the recorded line on that side, and the sunset's save
+records it so: the span goes back only where the recorded line on the other side stands at that
+edge of the file and the pair is found exactly once, and, for an ordered file, everything before
+that point is as recorded (the owner's ruling, A83, given of one line; a span of more lines rests
+on A83). `at the end`: allowed only for a file the row marks as
 unordered, where the span is absent and nothing else already does what it does. Where the declared
 placement cannot be met the probe answers `foreign`; the form names the file, the place and the
 protected records, and shows no text of the file or of a record.
@@ -1095,7 +1100,12 @@ protected records, and shows no text of the file or of a record.
 Test on fakes: a status line the owner edited after the sunset stops the restore with nothing
 changed and no file text in any output; so does an after-image that occurs twice, and so do recorded
 neighbours that occur next to each other twice; a removed line between two different lines returns
-between them, and with a line inserted above it in an ordered file the restore stops; a row that
+between them, and with a line inserted above it in an ordered file the restore stops; a removed
+first line returns at the file's start, before the line that followed it, and a removed last line
+returns at the file's end, after the line that stood before it (the owner's ruling, A83); with a
+line added at the file's start before the first of those restores, and a line added at its end
+before the second, each restore stops, its probe answering `foreign` (OP-5), with nothing changed
+and no file text in any output; a row that
 declares `at the end` for a file it marks as ordered fails the manifest build; an alias line returns
 at the end of the shortcut file only when its name is free: a program of that name in the
 package manager's folder, an alias of that name, a shell function of that name, a builtin of that
