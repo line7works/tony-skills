@@ -1820,9 +1820,19 @@ env file or of the hosting link file of that working tree (SEC-7), which the che
 at the check, uses for this match and for nothing else, enters in no register, and drops after it;
 each is matched whole, by each component its source declares, and in the percent-encoded and base64
 forms of both, as SEC-12 names the forms (the owner's ruling, A87). A value of either file that has
-no length is no hit, as SEC-12 says of an entry; that rests on A87 and SEC-12's words. A hit stops
-the run, names the file and shows nothing. Nothing else is a hit: a secret from a source the tool
-never read, such as a key file of the owner's, is not checked here, as SEC-12 says.
+no length is no hit, as SEC-12 says of an entry; that rests on A87 and SEC-12's words. A value of
+the pulled env file is no hit, in any of those forms, where it is under SEC-4's least length of
+eight bytes, counted as SEC-4 counts, in UTF-8 on the value without the marks that enclose it in the
+file and with white space at either end left out; and no hit where it is the value of one of the
+hosting module's own variables, which its pull writes beside the owner's, and stands on the list of
+fixed words the module declares for that variable before the run, as SEC-4's ground A has a fixed
+field's list written in the declaration (an environment's name, or `1`). The lane's rows hold that
+declaration, one list for each such variable, and the same word under a variable of the owner's own
+is no fixed word. No other ground of SEC-4 makes a value of that file no hit, and every other value
+of it stays a hit (the owner's ruling, A89). A secret of the env file under eight bytes, copied into
+a tracked file, is so committed and pushed: that is RK15, which the owner accepted (A89; RISK-1). A
+hit stops the run, names the file and shows nothing. Nothing else is a hit: a secret from a source
+the tool never read, such as a key file of the owner's, is not checked here, as SEC-12 says.
 
 Test on fakes: a canary in the content about to be committed stops the run before the commit, also
 where the working-tree file has since been cleaned; a canary in a working-tree file that is not part
@@ -1837,7 +1847,14 @@ commit made earlier by hand and about to be pushed, each stop the run before the
 of no length stops nothing; a text that is in no entry of the register and in neither file, planted
 in a tracked file, stops nothing; and the fixture file system records the check's read of the two
 files, no new copy of their values in any file of the fixture home, and none of them in the register
-after the check.
+after the check. What is no hit (the owner's ruling, A89; RK15): the fixture's hosting module
+declares, for one variable of its own, the list `1`, `development`; that variable's value
+`development`, and a value of seven bytes under a variable of the fixture owner's, and a value of
+seven bytes with a space at each end, each planted in a tracked file in each of the four forms, stop
+nothing, and the commit and the push are made; a value of exactly eight bytes under a variable of
+the fixture owner's, the value `development` under a variable of the fixture owner's, and the value
+of the module's own variable once its list no longer holds it, each planted the same way, stop the
+run before the commit, the output naming the file and holding none of them.
 
 **SEC-11. How the secret rules are tested.** A marked canary, built at run time, is planted in every
 source SEC-1 names, and every value a fake returns during a run in a held or a secret field, of
@@ -2166,7 +2183,8 @@ invocation read that channel (a token since replaced); and the death of an invoc
 instant between a provider's handing it a secret and its first record of that secret. The first is
 narrowed for two files and for one check: SEC-10's check before a commit and before a push reads
 the values of the pulled env file and of the hosting link file in-process and counts each as a hit
-(the owner's ruling, A87). A value inside any other file a tool wrote, and a secret from a source
+but for those SEC-10 names (the owner's rulings, A87 and A89; RK15). A value inside any other file a
+tool wrote, and a secret from a source
 the tool never read, such as a key file of the owner's, stay as the first says. The second is
 RK6, which the owner accepted (A18; RISK-1), and by his word the tool keeps no copy of a channel
 secret to close it. Such a value repeated in a provider's answer is held by SEC-4 like any other;
@@ -2482,8 +2500,8 @@ unanswered or names a row that does not exist.
 ## Part 4. The risk that is left
 
 **RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted
-thirteen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
-A48, A55, A63 and A68): RK1;
+fourteen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
+A48, A55, A63, A68 and A89): RK1;
 RK2, which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7;
 RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
@@ -2492,25 +2510,27 @@ safe, across runs (SEC-12); RK8, for a death in the instant a provider hands the
 (SEC-12); RK10, for a record of the tool's own that cannot be read (SEC-12); RK11, for a program
 the tool starts from a folder he named (SEC-3); RK12, for his shell's startup files run by the
 shortcut check (SEC-3); RK13, for a builtin of a shortcut's name coming into being in the instant it
-is added (RUN-7); RK14, for a project's runs misordered by a clock set back (EV-7); and the run
-directory's assumption (RUN-4). RK10, RK11, RK12, RK13 and RK14 are the ninth, the tenth, the
-eleventh, the twelfth and the thirteenth: no risk bears the number nine, RK9 being merged into
-RK7. Their wording is in the catalog's Part 6 and
+is added (RUN-7); RK14, for a project's runs misordered by a clock set back (EV-7); RK15, for a
+secret of the pulled env file under eight bytes committed and pushed (SEC-10); and the run
+directory's assumption (RUN-4). RK10, RK11, RK12, RK13, RK14 and RK15 are the ninth, the tenth, the
+eleventh, the twelfth, the thirteenth and the fourteenth: no risk bears the number nine, RK9 being
+merged into RK7. Their wording is in the catalog's Part 6 and
 is not restated here. This frame removes none of them and accepts none itself. An operation carried
 under RK2, RK3, RK4, RK5 or RK13 is marked so in the journal, once for each of those risks it is
 carried under. RK13's window is the one RK5's is, between the check and the add, so a shortcut's add
-and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11, RK12 and RK14 belong to
-no one operation, and no mark is recorded for any of them.
+and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14 and RK15
+belong to no one operation, and no mark is recorded for any of them.
 Where RK8's instant has passed, the journal already shows a receipt due and not given (SEC-12); that
 is the record of what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark and RK13's beside RK2's; each mark is recorded exactly once for
 its operation and its risk, also after a kill and a resume; no other operation carries a mark, and
-no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11, RK12 or RK14, an operation with a
-receipt due and not given, a restore that read the later of two sunsets by their times, a run that
+no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14 or RK15, an operation with
+a receipt due and not given, a restore that read the later of two sunsets by their times, a run that
 holds a disproof record, an operation whose program stands in a folder the fixture's settings name,
-and a look that made the shortcut check among them. What a start does
+a look that made the shortcut check, and a commit made past a value of the env file under eight
+bytes among them. What a start does
 where a record of the tool's own cannot be read is tested by that case in SEC-12's test line; it is
 a test of what the tool does, and how far RK10 reaches is Part 6's to say. What the run that died
 does after RK8's instant is tested by that case in SEC-12's test line: after a death between a
