@@ -722,14 +722,19 @@ of a span, the lines on each side of it, the whole definition of a thing to be c
 a provider reported. For an effect built in staging, a step record with the staged object's identity
 and, for a file, its fingerprint, is durable before the publish. For a create, the provider's answer
 is recorded before anything else is done with it: the id goes to a protected record as a held value
-(SEC-4), and an answer record in the journal refers to it. A completion record adds only what was
-observed.
+(SEC-4), and an answer record in the journal refers to it. Where the runner refuses a create's send
+before any child is created (SEC-3), a step record of that refusal, naming the create and saying
+that no child was created, is written and synced before the run stops; it is written in that case
+and in no other, so it stands only where no request left the tool (the owner's ruling, A99). A
+completion record adds only what was observed.
 
 Test on fakes: killed immediately after any effect call, every input the row's reverse names is
 readable from the run directory alone, without reading the changed thing; the after-state in the
 start record is the one computed before the call, so a fake that leaves a different state yields a
 failed after-check and an unchanged start record; for a staged effect the step record precedes the
-publish call in the fakes' sequence.
+publish call in the fakes' sequence. A refused send: a create whose send the runner refuses leaves
+in the journal its start record and then the step record of that refusal, and the fake records no
+call; a fake that answers no request, or is killed after the child starts, leaves no such record.
 
 **LOG-3. The run removes only what is its own.** The only objects a run may remove are ones it made
 inside its run directory or a staging folder: the private password file; the file it made in its
@@ -837,18 +842,20 @@ What "the same thing" means is decided by the construction, and by nothing else:
 | Construction | It is the same thing when |
 |---|---|
 | C1 | the object at the place has the staged identity in the step record; an object there with any other identity is `foreign`, and an empty place is the before-state |
-| C2 | the id read is the id the answer record refers to (LOG-2), the two compared in memory; with no answer record the create is outstanding whatever is read (OP-7) |
+| C2 | the id read is the id the answer record refers to (LOG-2), the two compared in memory; with no answer record the create is outstanding whatever is read (OP-7), but where the step record of the runner's refusal of its send follows its start record (LOG-2): no request left the tool, so nothing under the create's name is the before-state, `not landed`, and a thing under that name is `foreign` (the owner's ruling, A99) |
 | C3 | it is the file at the recorded path. The object's own identity is not asked here, because a swap and an editor both replace it; whether the object in place is the staged one is asked by OP-6 |
 | C4 | it is the same named branch or tag of the same repository |
 | C5, C6 | it has the provider id that the start record refers to (LOG-2), the two compared in memory, or is the named thing of this machine that the start record holds |
 | C7 | the object has the identity read at the source into the start record. The before-state is that object at the source with nothing at the target; the after-state is nothing at the source with that object at the target; any other pairing of the two places is `foreign` |
 
 Test on fakes: for each kind that has an effect, a fixture for each answer that kind can give yields
-that answer and no state-changing call: all six for a build, a keep, a change and a move, and five
-for a create, which never answers `not landed` (OP-6, OP-7), its fixture with a start record and no
-answer record being outstanding whatever the world shows; a create with its answer record whose read
-by the recorded id finds nothing yields `foreign`, never `not landed`, the run stops, and the fake
-records no second send (OP-6; Part 5's third example); a fixture with no record in which both
+that answer and no state-changing call: all six for a build, a keep, a change, a move and a create,
+a create answering `not landed` only where the step record of its send's refusal follows its start
+record (OP-6, OP-7; the owner's ruling, A99), its fixture with a start record and no other record
+being outstanding whatever the world shows; a create whose send was refused yields `not landed` with
+nothing under its name and `foreign` with a thing under it; a create with its answer record whose
+read by the recorded id finds nothing yields `foreign`, never `not landed`, the run stops, and the
+fake records no second send (OP-6; Part 5's third example); a fixture with no record in which both
 tests hold yields `already so`,
 and one with a start record in which both states hold yields `landed`; for a swap, a file replaced
 by another actor with the after-content yields `landed`, and one with any other content `foreign`;
@@ -865,14 +872,17 @@ what ground a completion record may be written is EV-1's to say; this table says
 |---|---|---|---|---|
 | `ready` | start record; build in staging; step record; publish; after-check; completion | start record; send; then by the answer, below | start record; effect; after-check; completion | start record; rename; after-check; completion |
 | `already so` | stop: something is at the place | stop: something has the name | record `already so`; go on | record `already so`; go on |
-| `not landed` | remove the staged object if there is one; start again | does not arise: outstanding (OP-7) | a new start record; the effect again | a new start record; the rename again |
+| `not landed` | remove the staged object if there is one; start again | only where the step record of the runner's refusal of its send follows the start record (LOG-2): a new start record; the send, on his word to go on (RUN-10; the owner's ruling, A99). Otherwise it does not arise: outstanding (OP-7) | a new start record; the effect again | a new start record; the rename again |
 | `landed` | the after-check, then completion on EV-1 (b); if the after-check fails, stop | the after-check by the recorded id, then completion on EV-1 (c); if it fails, stop | a swap whose file in place has the staged identity on record: the after-check, then completion on EV-1 (b). Any other: record `not proven`; go on | record `not proven`; go on |
 | `foreign`, `unreadable` | stop | stop | stop | stop |
 
 A create's answer: a definite success is written as the answer record (LOG-2) and the create is then
 `landed`; a definite refusal that the row names as an alternative result is recorded `refused` with
 its kind (ORD-3); any other definite refusal stops; an indefinite answer (none, a timeout, a
-`malformed` result, a killed child) leaves the create outstanding (OP-7). For every other kind, an
+`malformed` result, a killed child) leaves the create outstanding (OP-7). A send the runner refuses
+before any child is created is no send and no answer: its step record is written (LOG-2), the run
+stops on that refusal (SEC-3), and the create is `not landed` at its next probe (OP-5; the owner's
+ruling, A99). For every other kind, an
 effect call that fails, or an after-check that does not show the after-state, stops the run with no
 completion recorded, and the next probe reads the world again.
 
@@ -880,11 +890,17 @@ Test on fakes: in the kill sweep, a kill at every boundary of every operation of
 followed by a resume, ends in the cell this table names for it; and in every run the fakes' sequence
 and the journal show, for each operation, the start record before the effect call, the step record
 before a publish, the after-check's read after the effect call, and the completion record after the
-after-check.
+after-check. A refused send: a create whose send the runner refuses ends that invocation `stopped`
+on the refusal with no call recorded by the fake; the next resume, on his word to go on, writes a
+new start record and sends once, and the fake holds one thing.
 
 **OP-7. A create whose answer was lost.** A create with a start record and no recorded answer is
-outstanding, whatever the world shows, and the run stops. It stays in the journal, is read by every
-later look for the project key, and is resolved only in one of three ways.
+outstanding, whatever the world shows, and the run stops, but for one case: where the start record
+is followed by the step record of the runner's refusal of its send (LOG-2), no request left the
+tool, and the create is not outstanding (OP-5, OP-6; the owner's ruling, A99). Where a kill falls
+between the start record and that step record, the create is outstanding, since the tool cannot
+then tell. An outstanding create stays in the journal, is read by every later look for the project
+key, and is resolved only in one of three ways.
 
 | Way | It requires | Then |
 |---|---|---|
@@ -900,7 +916,10 @@ it; a re-plan offers the create again only for a fake that declares a guarantee 
 for that request answers "made nothing and will make nothing", and sends it only after that
 re-plan's own go; a status read that answers "made, with this id" completes the create on EV-1 (c)
 with no second send; dropping the layer yields a manifest without it and no send; across every such
-fixture the fake's state never holds two things.
+fixture the fake's state never holds two things. A refused send: with the step record of the
+refusal after its start record, the create is not outstanding and the next resume sends it once; a
+kill after the start record and before that step record leaves it outstanding, and no later
+invocation under the same manifest sends it (the owner's ruling, A99).
 
 **OP-8. Checks.** A check has no before-state and no after-state. Each time it is made is an
 attempt, recorded on its own with the invocation that made it, the tracked state of the subject it
@@ -1511,7 +1530,7 @@ parsed by SEC-4.
 | command | an argument list built from the row's declared template, filled with validated inputs and with output fields that are safe (SEC-1); never a shell line, but for one command named here. The check that a shortcut's name is free starts his shell, zsh, which the runner finds in the system folders of the search list, and in no folder he names, the way a terminal window starts it by default: as a login and interactive shell, with an environment built as the next row says. It hands the shell one fixed line written in the tool, which asks whether a command of that name exists, and passes the name as a separate argument, never written into the line. The declaration maps the shell's exit number to taken or free, and nothing the shell prints is read. Each time the check is made, the system's startup files and his own run as a child of the tool: that is RK12, which the owner accepted (the owner's ruling, A55; RISK-1). Where no system folder of the search list holds zsh, the check cannot be made: it is a failed read, and the look ends as RUN-7's planning stop for a read that failed, naming the check. It is not RUN-7's line for a program in no folder of the search list, whose form points him at his settings file, since no folder he names is searched for this shell. A template that puts a held or a secret field (SEC-4) into an argument or an environment value fails when its manifest is built; the lane then reports that tool (ROW-2). The program is found by the runner itself: it looks for the program's declared name in the folders of the tool's search list, in the list's order (the environment row), and starts the first file of that name it finds, by that file's full path. The session's path is not consulted. A name found in no folder of the search list is a tool not found (RUN-7). A program found in a folder the owner named is started as it stands there, with no check of the folder or of the program: that is RK11, which the owner accepted (A48; RISK-1) |
 | environment | built from nothing. It holds the base names: `PATH`, set to the tool's search list and to nothing of the session's path; `HOME`, `USER` and `LOGNAME`, as the tool itself has them; `LANG` and `LC_ALL`, set to one fixed locale; and `TMPDIR`, set to a private folder in the run directory. One child is the exception: the shell that the check of a shortcut's name starts (the command row) is given as its `TMPDIR` his account's own temporary folder, the one a terminal window uses by default, which the tool reads from the system and not from the session, so that the shell starts as RK12 describes, the way a terminal window starts it (the owner's ruling, A58). Where the system gives no such folder, or gives one that is not an owner-only folder of his account, that shell is not started: the check is a failed read, and the look ends as RUN-7's planning stop, naming the check. No rule gives that shell another folder, and the tool never picks one (GOV-1); his own folder, as A58 put it to him, is an owner-only one, and a folder others share is the option he did not take. Every other child keeps the run directory's folder. A child of a start that is no summons is given no `TMPDIR`: that start makes no run directory (SEC-12), and nothing of the session may stand in its place. The search list is the fixed list of system folders written in the tool and then each folder the owner names in his settings file (the owner's ruling, A46). Its order and its fixed folders were decided on the owner's behalf, his to change by a word: first `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`, in that order, and then his folders, in the order he writes them there. No other folder is on it, the local folder and the package manager's folder among them, unless he names it there. It also holds the names the provider module registered for that command, each of one class: fixed (a safe literal); passed (copied from the session, only for a name registered with its reason, never for a name the module lists as carrying a credential, and never for `PATH` or any other name that chooses which program or which code a child runs); private path (the path of an owner-only file the frame made). Nothing else of the session reaches a child |
 | protected input | a slot the declaration names, with the type of protected record it accepts (SEC-6). The frame fills it only with the path of an owner-only file it made from that record, passed in the environment name or the argument position the slot declares. That file is made in the run directory's protected folder, the place SEC-7 gives the record it is made from, so that one a kill leaves rests where its record may rest; the run may remove it once its child has ended (LOG-3). The content is never an argument, never an environment value and never in the CLI's output |
-| refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it. Where the refused command is an operation's, the operation is not started and the run ends `stopped` on that refusal. A refused command met after the operation's start record, at its effect call or at its after-check, leaves the operation as that record left it: no completion is recorded, the run ends `stopped` on that refusal, its form naming it, and the next invocation's probe reads the world again, as OP-6 has it for an effect call that fails and an after-check that does not show the after-state. An owner step's read, made when the step is first reached, is a command of that operation: where it is refused, the step is not shown, no `waiting` record is written, and the run ends `stopped` on that refusal (OP-9). Where it is a command of a look, which runs through this same runner with no operation, the refusal is a failed read and the look ends as a planning stop does (RUN-7, RUN-12): `refused` before a first go, where there is no open run to stop, and `stopped`, with the manifest in force unchanged, in a re-plan of a run that has its go. Where it is a read that a later invocation makes at its start, the reads RUN-10 (b) compares and OP-9's reads among them, the refusal is no changed context and asks for no re-plan, whose look would meet the same refusal (GOV-1): no effect is applied, and the run ends `stopped` on that refusal, its form naming it. That holds for a summons with no word too, whose OP-9 reads are among them: a run left `waiting` then ends `stopped` on that refusal, since it is the refusal that ends the invocation and not RUN-10's own ending, which RUN-12 has end in the way the run already stood. No rule lets a child be started with that check left out |
+| refusals | the runner refuses: a command with no declaration; an argument on the tool's registered list of debug, verbose and trace flags; any argument or environment value that holds an entry of the secret register in any form SEC-12 names. That check is made on every argument and every environment value of the child as it would be started, the values of the base names and the path of the temporary folder among them: the environment row lets those names through, and lets no value past this check. Where an entry is held in one of those values, every command is refused, since every child would carry it. Where the refused command is an operation's, the operation is not started and the run ends `stopped` on that refusal. A refused command met after the operation's start record, at its effect call or at its after-check, leaves the operation as that record left it: no completion is recorded, the run ends `stopped` on that refusal, its form naming it, and the next invocation's probe reads the world again, as OP-6 has it for an effect call that fails and an after-check that does not show the after-state. For a create, whose effect call is its send, the refusal is first written as a step record of that create (LOG-2): with it no request left the tool, the create is not outstanding, and its next probe reads the world again, `not landed` with nothing under its name (OP-5, OP-6, OP-7; the owner's ruling, A99); a create with no such record after its start record stays outstanding (OP-7). An owner step's read, made when the step is first reached, is a command of that operation: where it is refused, the step is not shown, no `waiting` record is written, and the run ends `stopped` on that refusal (OP-9). Where it is a command of a look, which runs through this same runner with no operation, the refusal is a failed read and the look ends as a planning stop does (RUN-7, RUN-12): `refused` before a first go, where there is no open run to stop, and `stopped`, with the manifest in force unchanged, in a re-plan of a run that has its go. Where it is a read that a later invocation makes at its start, the reads RUN-10 (b) compares and OP-9's reads among them, the refusal is no changed context and asks for no re-plan, whose look would meet the same refusal (GOV-1): no effect is applied, and the run ends `stopped` on that refusal, its form naming it. That holds for a summons with no word too, whose OP-9 reads are among them: a run left `waiting` then ends `stopped` on that refusal, since it is the refusal that ends the invocation and not RUN-10's own ending, which RUN-12 has end in the way the run already stood. No rule lets a child be started with that check left out |
 | files it makes | a file-creation mask that gives every new file to the owner only; the working directory the row declares |
 | input and output | standard input empty; both output streams captured in memory up to a fixed size and handed only to the parser of SEC-4; output over that size is discarded and the result is `malformed` |
 | lifetime | its own process group; a time limit from the declaration; at the limit, or when the invocation is ending, the runner ends the group it started, every descendant in it included, and nothing else |
@@ -1549,16 +1568,21 @@ probe, its register without that entry, answers `landed`; at the read-back read 
 owner step the run first reaches, the step is in no form, no `waiting` record is written and the
 run ends `stopped` on that refusal; and at the read-back read of a step left `waiting`, made at the
 start of a resume on his current word and in a second pass of a summons with no word, each ends
-with no effect call and the run `stopped` on that refusal, its form naming it. A start that is no
-summons and starts a child, as the identity command does where it reads the commit through a fake
-git, starts it with no `TMPDIR` among the names of its environment, and the fixture home is
-byte-equal after it. The identity answer's commit, in four places of the fixture copy: at the top of
-a repository of its own, and as a folder that a larger repository holds in its commit, the tool
-reads that repository's commit itself and the answer shows it; placed inside another repository
-that does not hold it, and in no repository at all, the answer gives the fixed words for no commit,
-and the other repository's commit is in no output. A fake git that answers the commit the tool read
-is shown as the tool's own copy; a fake git that answers another commit makes the answer give the
-fixed fact that it differs, and that other commit is in no output. The shortcut check: the fake
+with no effect call and the run `stopped` on that refusal, its form naming it. At a create's send,
+by a value that only that invocation's register holds, the runner refuses before any child is
+created: the journal holds the start record and then the step record of the refusal, the run ends
+`stopped` on that refusal with no call recorded by the fake, and the next resume, its register
+without that value, probes the create `not landed` and sends it once on his word (the owner's
+ruling, A99). A start that is no summons and starts a child, as the identity command does where it
+reads the commit through a fake git, starts it with no `TMPDIR` among the names of its environment,
+and the fixture home is byte-equal after it. The identity answer's commit, in four places of the
+fixture copy: at the top of a repository of its own, and as a folder that a larger repository holds
+in its commit, the tool reads that repository's commit itself and the answer shows it; placed
+inside another repository that does not hold it, and in no repository at all, the answer gives the
+fixed words for no commit, and the other repository's commit is in no output. A fake git that
+answers the commit the tool read is shown as the tool's own copy; a fake git that answers another
+commit makes the answer give the fixed fact that it differs, and that other commit is in no output.
+The shortcut check: the fake
 shell in a system folder of the fixture's list is started as a login and interactive shell, and
 records the line written in the tool and the shortcut's name as separate arguments, the name never
 inside the line; a name that holds shell marks reaches it as that one argument and nothing it marks
