@@ -175,7 +175,7 @@ RUN-1's second step runs in this order, all of it before a run directory is open
 | (b) the first locks | the lock of the key of each of those names, in sorted order. Where the machine has no keying value yet, it is made now, by a create that fails if another invocation made it first | each lock's own record |
 | (c) the early look for an open run | under the keys of (b). A new summons that finds one is refused here (RUN-3). A summons that continues a run takes from the record the other keys that run is open under, and their locks, in sorted order; one that carries a name whose key that run is not open under is turned away here, as the paragraph below says | the record of open runs; nothing of the project |
 | (d) the alias reads | for a new summons, which is one that continues no open run, and for a re-plan, and for no other: the reads of this machine's own files that the lane's rows declare as showing another name form of the project, made in-process, with no runner and no provider | those files, and no other thing of the project |
-| (e) the later locks, and the second look for an open run | the lock of the key of each name form (d) showed, in sorted order; then the look for an open run under those keys, which refuses a new summons as (c) does. In a re-plan, a name form whose key the run does not hold takes no lock, and the re-plan ends as the paragraph below says (the owner's ruling, A72). At the go of a first look that an earlier invocation made, a name form whose key that look did not hold takes no lock, and the go ends as the paragraph below says (the owner's ruling, A76); where the go then holds fewer keys than its manifest records, a name form that look held being gone, it ends the same way (the owner's ruling, A79) | each lock's own record; the record of open runs |
+| (e) the later locks, and the second look for an open run | the lock of the key of each name form (d) showed, in sorted order; then the look for an open run under those keys, which refuses a new summons as (c) does. In a re-plan, a name form whose key the run does not hold takes no lock, and the re-plan ends as the paragraph below says (the owner's ruling, A72). At the go of a first look that an earlier invocation made, the lock of each name form (d) showed is taken here as for every new summons, and nothing of the run directory is read: the go learns which keys that look held only from its manifest, once its startup checks have passed, and where the keys it holds are not exactly those, it ends as the paragraph below says (the owner's rulings, A76 and A79) | each lock's own record; the record of open runs |
 
 Where a provider's answer later shows the project under a name whose key the invocation does not
 hold, no lock is taken under that name. The look ends as a planning stop does (RUN-7, RUN-12):
@@ -188,24 +188,30 @@ no key is added: the re-plan's look ends at once as a planning stop (RUN-7), `st
 manifest in force unchanged, its form saying in the tool's fixed words that the project now shows
 another name and, as for a name a provider shows, naming the private file that holds it. The ways
 on are a close of the run (RUN-13) and a new summons that gives all the names. It is a stop the
-owner ruled on its own (A72). A summons that continues a run, a resume, a re-plan or the go of a
-re-plan, and carries a name whose key that run is not open under, is turned away at part (c) as
+owner ruled on its own (A72). A summons that continues a run, a resume with his word or with none
+(a status), a re-plan, the go of a re-plan or a close (SEC-12), and carries a name whose key that
+run is not open under, is turned away at part (c) as
 RUN-3 turns a summons away: `refused`, the run unchanged (RUN-12), the output the tool's fixed text
 that the run is not open under a name the summons gave. No key is added for it. He summons again
 with the run's own names, or closes the run and summons anew under all the names. That stop rests
 on A72; the owner was not asked of it apart. The go of a first look that an earlier invocation made
-is a new summons and makes its alias reads again. Where they show a name form whose key that look
-did not hold, by the keys its manifest records (RUN-8), no lock is taken under it, no go is recorded
-and no run is opened: once its startup checks have passed, the go ends `refused` (RUN-12), its form
-saying in the tool's fixed words that the project now shows another name and naming the private
-file that holds it, and his next summons starts a new look that reads that name. It is a stop the
-owner ruled on its own (A76). A go summons that carries a name whose key that look did not hold
-ends the same way; that case rests on A76, and the owner was not asked of it apart. Where the go's
-alias reads show fewer name forms than that look's did, so that the go holds fewer keys than its
-manifest records, no go is recorded and no run is opened: once its startup checks have passed, the
-go ends `refused` (RUN-12), its form saying in the tool's fixed words that the project no longer
-shows a name its look showed and naming the private file that holds it, and his next summons starts
-a new look under the names the project now shows. It is a stop the owner ruled on its own (A79). A
+is a new summons and makes its alias reads again, and takes at part (e) the lock of each name form
+they show, as every new summons does. Which keys that look held it learns from the keys its
+manifest records (RUN-8), and from nothing else; the manifest is in the run directory, so the go
+reads those keys only once its startup checks have passed, RUN-4's checks on that run directory and
+its disproof read among them (SEC-12), and compares them in memory with the keys it holds. Where
+its alias reads show a name form whose key that look did not hold, no go is recorded and no run is
+opened: the go ends `refused` (RUN-12), its locks released as it ends, that name's among them, and
+no lock's file of its own left, its form saying in the tool's fixed words that the project now shows
+another name and naming the private file that holds it, and his next summons starts a new look that
+reads that name. It is a stop the owner ruled on its own (A76). A go summons that carries a name
+whose key that look did not hold ends the same way; that case rests on A76, and the owner was not
+asked of it apart. Where the go's alias reads show fewer name forms than that look's did, so that
+the go holds fewer keys than its manifest records, no go is recorded and no run is opened: found in
+the same way, once its startup checks have passed, the go ends `refused` (RUN-12), its form saying
+in the tool's fixed words that the project no longer shows a name its look showed and naming the
+private file that holds it, and his next summons starts a new look under the names the project now
+shows. It is a stop the owner ruled on its own (A79). A
 go summons that leaves off a name the owner gave that look, which no alias read shows, so that the
 go holds fewer keys than its manifest records, ends the same way; that case rests on A79, and the
 owner was not asked of it apart. So a run is opened under exactly the keys its look held, no fewer
@@ -249,13 +255,16 @@ both names, it meets the first's lock or its open run and is refused naming that
 answer met in the look of a re-plan of a run that has its go ends that invocation `stopped`, with
 the manifest in force byte-equal and the same form line; the alias reads of a re-plan that show a
 name form whose key the run does not hold take no lock under it, the lock fake recording none, and
-end that re-plan `stopped` as RUN-3's test line has it; a resume, and in a second pass a re-plan, of
-a fixture run, summoned with the run's own name and a further name whose key the run is not open
-under, is refused at the early look with the tool's fixed text, the run's journal and the record of
-open runs byte-equal and no lock's file of that summons left; the alias reads of a first look's go,
-made in a later invocation, that show a further name take no lock under it and end the go as
-RUN-9's test line has it, and so do those that no longer show a name that look's alias reads
-showed; after the first is killed a third
+end that re-plan `stopped` as RUN-3's test line has it; a resume, and in further passes a status
+summons, a re-plan and a close, of a fixture run, summoned with the run's own name and a further
+name whose key the run is not open under, is refused at the early look with the tool's fixed text,
+the run's journal and the record of open runs byte-equal, no status form and no close record
+written, and no lock's file of that summons left; the alias reads of a first look's go, made in a
+later invocation, that show a further name end the go as RUN-9's test line has it, the lock fake
+recording that name's lock taken at part (e) and released as the go ends, and the fixture file
+system recording no read in the run directory before RUN-4's checks on it, the manifest read after
+them; and so do those that no longer show a name that look's alias reads showed; after the first is
+killed a third
 takes the locks and goes on; two runs of different projects that change one shared file both land
 their change. The names: a summons whose name is a canary equal to the fixture's hosting token, and
 one that carries that canary as a further name, each end refused with fixed text, and the fixture
@@ -539,9 +548,10 @@ Test on fakes: a manifest altered after the go is refused before any operation; 
 injected outside the manifest is refused; with no go on record no effect call is made; with a go on
 record for an unaltered manifest the operations it holds run. A name between the look and the go:
 a first look ends with its preview; the fixture's alias reads then show a further name; the go,
-summoned in a later invocation, takes no lock under that name, records no go, writes no journal,
-opens no run and ends `refused`, its refusal form saying in fixed words that the project now shows
-another name and naming the private file that holds it, and no fake records an effect call; a go
+summoned in a later invocation, takes that name's lock and releases it as it ends, leaving no lock's
+file, records no go, writes no journal, opens no run and ends `refused`, its refusal form saying in
+fixed words that the project now shows another name and naming the private file that holds it, and
+no fake records an effect call; a go
 summons that carries a further name of its own ends the same way; a new summons under all the
 names then makes a new look, and its go is recorded with every key (the owner's ruling, A76). A
 name gone between the look and the go: a first look whose alias reads showed a second name ends
@@ -1019,7 +1029,14 @@ manifest hold it: by its role in the row, and by its safe name where it has one;
 is a held value (SEC-4), by its role, its kind and the reference of the protected record that holds
 that identity, as SEC-6 has a form refer to one, and never by the held value. That last is run with
 a thing whose only identity is an id a fake provider made: the stop's form names the role, the kind
-and the record's reference, and the id is in no output, form or journal record.
+and the record's reference, and the id is in no output, form or journal record. The target's own
+state, asked at every operation of every run: in a sunset fixture whose change of a tracked file
+has no record in the journal, the target at its turn in the state the manifest recorded at the look
+gives `ready` (OP-5) and the change runs; with the file put in the row's after-state by another
+actor before its turn, it gives `already so`, which is recorded and the run goes on (OP-6), with no
+stop for the difference from the state recorded at the look; and with the file put by another actor
+in a state that is neither, it gives `foreign`, the run stops, and the form names the file as the
+operation's target by its role and its safe name.
 
 **EV-4. When a way back may be recorded.** A way back is recorded for an operation when all four
 hold, and only then: its row declares one (ROW-1); the operation is `done`; every input the reverse
