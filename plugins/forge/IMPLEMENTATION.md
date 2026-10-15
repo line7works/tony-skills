@@ -7,6 +7,12 @@
 > **What this is:** the blueprint and permit set for `forge`, a Claude-driven,
 > model-agnostic image-generation jig built on Fal.ai. Review and redline before any
 > code gets framed.
+>
+> **Roster change, 2026-10-12:** the roster is now `sunburst` (GPT Image 2.5 Sunburst, the
+> default) and `nano-pro`. `nano`, `gpt`, and `flux` were removed. Sections 2 through 7 and the
+> decisions table describe the current roster. The sample run in section 5, the manifest example
+> in section 8, and the milestone and review record (section 12 on) are left as written; they
+> describe the build as it shipped on the original four models.
 
 ---
 
@@ -26,16 +32,16 @@ This is the general contractor pattern, not a single-shot prompt:
 - **The skill** is the foreman. Claude reads the blueprint (your request plus references),
   writes the work orders (prompts), walks the site and inspects with vision, issues
   punch-list fixes, and manages the batch.
-- **Fal** is the supply house. One account, one key, every image crew (Nano Banana, GPT Image,
-  FLUX) available through a single door, swappable per job.
+- **Fal** is the supply house. One account, one key, every image crew (GPT Image 2.5 Sunburst,
+  Nano Banana Pro) available through a single door, swappable per job.
 
 ---
 
 ## 2. Design principles
 
-1. **Model choice is yours, per run.** Forge is not wired to one model. Nano Banana, GPT Image
-   2, and FLUX are peers behind one Fal key. Pick per job with `--model`, or run `forge compare`
-   to see them side by side and choose empirically. Adding a new model is a one-line registry edit.
+1. **Model choice is yours, per run.** Forge is not wired to one model. GPT Image 2.5 Sunburst
+   and Nano Banana Pro are peers behind one Fal key. Pick per job with `--model`, or run `forge compare`
+   to see them side by side and choose empirically. Adding a new model is one registry entry.
 2. **Deterministic spine.** All side effects (API calls, file I/O, naming, cost math) live in
    the CLI and are logged to a manifest. The LLM only writes prompts and judges images. A run
    is reproducible from its manifest. This is the jig philosophy: build the deterministic tool
@@ -74,7 +80,7 @@ This is the general contractor pattern, not a single-shot prompt:
                                            +----------------------------+
                                            |  Fal = supply house         |
                                            |  swappable crews:           |
-                                           |  nano / nano-pro / gpt /flux|
+                                           |  sunburst / nano-pro        |
                                            +----------------------------+
 ```
 
@@ -105,16 +111,16 @@ Common flags:
 
 | Flag | Meaning |
 | --- | --- |
-| `--model <alias>` | Pick the model (`nano`, `nano-pro`, `gpt`, `flux`, ...). |
+| `--model <alias>` | Pick the model (`sunburst`, `nano-pro`). Defaults to `sunburst`. |
 | `--models a,b,c` | For `compare`: the set to race against each other. |
-| `--size <WxH or preset>` | Output size (`1024`, `1080x1080`, `4k`). |
-| `--quality <auto\|low\|medium\|high>` | For models that price by quality (GPT Image 2). |
+| `--size <WxH or preset>` | Output size (`1024`, `1920x1088`, `2k`). `sunburst` takes exact pixels within its limits (section 6); `nano-pro` maps to an aspect ratio and a 1K/2K/4K bucket. |
+| `--quality <auto\|low\|medium\|high\|xhigh\|max>` | For models that price by quality (`sunburst`). Omitted, forge sends the registry's `default_quality` (medium); `finish` sends high. |
 | `--transparent` | Return a cut-out on a transparent background (runs a Fal bg-removal pass after generation). |
 | `-n, --num <n>` | Images per prompt. |
 | `--concurrency <n>` | How many images run at once against the Fal queue (default 4). |
 | `--negative "<text>"` | Reserved negative-prompt flag; no model in the current registry consumes it, so it is silently ignored (kept for a future model that supports it). |
 | `--brand <path>` | Use a specific brand profile instead of the auto-detected `.forge/brand.json`. |
-| `--seed <n>` | Fix the seed for reproducibility. |
+| `--seed <n>` | Reserved seed flag; no model in the current registry consumes it, so it is silently ignored (kept for a future model that supports it). |
 | `--refs <dir>` | Reference images to condition on (used by `style`). |
 | `--cap <usd>` | Spend circuit-breaker. Tracks actual cost per image and halts before the next would cross it. |
 | `--out <dir>` | Output folder. Defaults to `./generated-assets/`. |
@@ -131,7 +137,7 @@ Invoked as `/forge`. Its job is the judgment work the CLI cannot do:
 1. **Interpret.** Read your natural request, the shot list, and the mood board images.
 2. **Write work orders.** Turn each shot into a precise prompt, folding in style cues read from
    the references.
-3. **Rough-in.** Call `forge batch --model nano --json` and pull the draft image paths back.
+3. **Rough-in.** Call `forge batch --quality medium --json` and pull the draft image paths back.
 4. **Inspect (vision QA).** Look at each draft and flag misspelled text, warped anatomy or
    objects, wrong count, off-brand color, artifacts.
 5. **Fix.** Re-prompt the failures (preferred) or call `forge edit` for a surgical change.
@@ -171,7 +177,7 @@ Example (`~/Developer/commish/.forge/brand.json`):
   "palette": ["#FF8400"],
   "style": "flat modern vector, soft shadows, friendly, no baked-in text",
   "refs": "./brand/commish",
-  "default_model": "gpt",
+  "default_model": "sunburst",
   "default_size": "1024x1024",
   "avoid": "photorealism, stock-photo look"
 }
@@ -190,20 +196,20 @@ Example (`~/Developer/commish/.forge/brand.json`):
 
 **Generate on a chosen model**
 ```
-forge gen "isometric trophy on an orange podium, soft studio light" --model gpt --quality high --size 1024
+forge gen "isometric trophy on an orange podium, soft studio light" --model sunburst --quality high --size 1024
 ```
 
 **Compare models on one prompt** (the model-changer feature)
 ```
 forge compare "a friendly league-commissioner mascot, flat vector, brand orange #FF8400" \
-  --models nano,gpt,flux -n 1
+  --models sunburst,nano-pro -n 1
 ```
 Returns one contact sheet with each model's output labeled by name and cost, so picking the
 right crew for this look is data, not a guess.
 
 **Batch from a shot list + mood board** (the headline workflow)
 ```
-forge batch ./shotlists/commish-landing.md --model nano --cap 3
+forge batch ./shotlists/commish-landing.md --quality medium --size 1024 --cap 3
 ```
 
 A shot list is one shot per row. The simplest form is a Markdown or text list, one brief per line:
@@ -212,7 +218,7 @@ A shot list is one shot per row. The simplest form is a Markdown or text list, o
 - schedule icon: a calendar with a whistle
 - payments icon: a coin stack with a checkmark
 ```
-For per-shot control, use CSV or JSON rows with optional `id, model, size, seed` columns. The
+For per-shot control, use CSV or JSON rows with optional `id, model, size` columns. The
 foreman expands each brief into a full prompt (folding in the brand profile) before the CLI runs it.
 
 **Edit** (use sparingly, watch for drift)
@@ -222,19 +228,19 @@ forge edit ./generated-assets/<run>/raw/feature-02.png "warm the orange to #FF84
 
 **Style / consistency from a reference folder**
 ```
-forge style "the four landing-page feature icons as a matching set" --refs ./brand/commish --model nano -n 4
+forge style "the four landing-page feature icons as a matching set" --refs ./brand/commish --size 1024 -n 4
 ```
-Nano Banana 2 accepts up to 14 reference images, which is what makes "generate in this folder's
-style" hold together across a set.
+Sunburst accepts up to 16 reference images (Nano Banana Pro 14), which is what makes "generate in
+this folder's style" hold together across a set.
 
 **Finish the keepers**
 ```
-forge finish <run-id> feature-01 feature-03 --model gpt --quality high --size 2048
+forge finish <run-id> feature-01 feature-03 --quality high --size 2048
 ```
 
 **Transparent cut-out** (an icon or mascot meant to sit on a colored section)
 ```
-forge gen "friendly league-commissioner mascot, flat vector" --model gpt --transparent
+forge gen "friendly league-commissioner mascot, flat vector" --size 1024 --transparent
 ```
 
 **Export one master to every size you need** (local, no API cost)
@@ -272,34 +278,46 @@ is one new entry. `forge models` prints the registry; `forge compare` races a se
 Registry shape (illustrative):
 ```json
 {
-  "nano":     { "id": "fal-ai/nano-banana-2",   "edit": "fal-ai/nano-banana-2/edit",   "preset": "rough",  "max_refs": 14 },
-  "nano-pro": { "id": "fal-ai/nano-banana-pro",  "edit": "fal-ai/nano-banana-pro/edit", "preset": "finish" },
-  "gpt":      { "id": "openai/gpt-image-2",       "edit": "openai/gpt-image-2/edit",     "preset": "either", "by_quality": true },
-  "flux":     { "id": "fal-ai/flux-1/dev",        "preset": "rough" }
+  "sunburst": { "id": "openai/gpt-image-2.5/sunburst/text-to-image", "edit": "openai/gpt-image-2.5/sunburst/edit", "preset": "either", "price_by": "quality", "max_refs": 16 },
+  "nano-pro": { "id": "fal-ai/nano-banana-pro", "edit": "fal-ai/nano-banana-pro/edit", "preset": "finish", "price_by": "resolution", "max_refs": 14 }
 }
 ```
 
-**Verified catalog (against Fal, 2026-06-25):**
+**Verified catalog (against Fal, 2026-10-12):**
 
 | Alias | Fal id (gen / edit) | Role | Price each | Edit | Multi-ref |
 | --- | --- | --- | --- | --- | --- |
-| `nano` | `fal-ai/nano-banana-2` (+`/edit`) | cheap workhorse, style refs | $0.06 @512, $0.08 @1K | yes | up to 14 imgs |
-| `nano-pro` | `fal-ai/nano-banana-pro` (+`/edit`) | finish-grade, reasoning edits | $0.15, $0.30 @4K | yes | yes |
-| `gpt` | `openai/gpt-image-2` (+`/edit`) | rough to premium by quality | $0.01 (low,1K) to $0.41 (high,4K) | yes | yes |
-| `flux` | `fal-ai/flux-1/dev` | cheapest rough-in | ~$0.025 | i2i variants | no |
+| `sunburst` | `openai/gpt-image-2.5/sunburst/text-to-image` (edit: `.../sunburst/edit`) | default; draft to premium by quality | $0.006 (low, 1024) to $0.401 (max, 4K) | yes | up to 16 imgs |
+| `nano-pro` | `fal-ai/nano-banana-pro` (+`/edit`) | alternate finisher, reasoning edits | $0.15, $0.30 @4K | yes | up to 14 imgs |
+
+Sunburst rate card (Fal's published per-image prices, which `models.json` rounds up):
+
+| Quality | 1024x1024 | 3840x2160 |
+| --- | --- | --- |
+| low | $0.00588 | $0.01113 |
+| medium | $0.01317 | $0.02595 |
+| high | $0.05268 | $0.10008 |
+| xhigh | $0.09366 | $0.17790 |
+| max | $0.21072 | $0.40026 |
+
+Sunburst size limits: both edges a multiple of 16, longest edge 3840 at most, aspect no wider than
+3:1, total pixels between 655,360 and 8,294,400 (so 2880 is the largest square).
 
 Notes:
-- Two finish-grade peers: `nano-pro` and `gpt` at high quality. You are not locked to either.
+- Two finish-grade peers: `nano-pro` and `sunburst` at high quality. You are not locked to either.
 - Auto-fallback between models (retry a flaky Preview model on a peer) was specced but **deferred to
   v2**: v1 has no `fallback` field and instead surfaces a model error to the foreman, who re-runs on
   another `--model`. `nano-pro` is a Preview alias of `gemini-3-pro-image-preview`.
-- GPT Image 2 prices by quality and size, so its `gen` cost spans rough to premium. In v1, `edit`
+- Sunburst is token-billed, so its price moves with quality and size and its `gen` cost spans
+  rough to premium. The estimator gives a size of 1024x1024 or smaller the 1024x1024 rate and
+  prices anything larger, or a run with no `--size`, at the 3840x2160 rate. Fal publishes no rate
+  for large squares (2048x2048, 2880x2880), so that ceiling is unverified there. In v1, `edit`
   and `style` reuse the model's generation price as the estimate (see the `models.json` note);
-  token-accurate edit pricing is deferred.
+  reference images bill extra image-input tokens that the estimate leaves out, and token-accurate
+  edit pricing is deferred.
 - `nano-pro` is also reachable as `fal-ai/gemini-3-pro-image-preview`.
 - Exact input parameter names AND prices per model get locked against each model's `/api` page
-  during M1 (a few catalog numbers above are approximate, e.g. nano-banana-2 is ~$0.08 at 1K and
-  GPT low lands near $0.005). The registry `models.json` is the single source the estimator reads.
+  during M1. The registry `models.json` is the single source the estimator reads.
 
 ---
 
@@ -311,15 +329,15 @@ Presets are convenience starting points over the roster, not a cage:
 
 | Preset | Typical pick | ~Each | Use |
 | --- | --- | --- | --- |
-| `rough` | `flux`, `nano` @1K, or `gpt` low | $0.01 to $0.08 | drafts, exploration, all batches |
-| `finish` | `gpt` high or `nano-pro` | $0.15 to $0.41 | keepers only |
+| `rough` | `sunburst` low or medium @1024 | $0.006 to $0.014 | drafts, exploration, all batches |
+| `finish` | `sunburst` high and up, or `nano-pro` | $0.053 to $0.401 | keepers only |
 
 Guardrails:
-- **Batches default to `rough`.** A 50-image batch is roughly 50 x $0.05 = ~$2.50, not $15.
+- **Batches default to `rough`.** With no `--quality`, sunburst runs at medium, so a 50-image batch at 1024 is roughly 50 x $0.014 = ~$0.70.
 - **`--cap <usd>` is a circuit-breaker on actuals, not just a start-time guess.** The CLI logs the
   real cost to the manifest after each image and aborts the rest the moment cumulative spend plus
   the next item's upper-bound estimate would exceed the cap. A single call whose upper-bound estimate
-  clears a threshold asks for confirmation first. This matters because GPT's edit endpoint is
+  clears a threshold asks for confirmation first. This matters because Sunburst's edit endpoint is
   token-priced and not knowable exactly before the call.
 - **`forge estimate` / `--dry-run`** prints a conservative upper-bound projection with zero API calls.
 - **Rough then finish.** You only pay finish-grade on the handful of images that survive
@@ -566,7 +584,7 @@ render (not the build).
 | **Language** | DECIDED: **Python 3**, matching the `sun` plugin's bundled scripts. The CLI is stdlib-only for all Fal work; the contact sheet is HTML and `export` uses macOS `sips`, so no Python packages are required on your Mac. |
 | Name | LOCKED: `forge`. |
 | Home | LOCKED: `tony-skills` plugin, user-level install like your others. |
-| Models | LOCKED: multi-model with easy switching. Roster: `nano`, `nano-pro`, `gpt`, `flux`, easily extended. |
+| Models | LOCKED: multi-model with easy switching. Roster: `sunburst`, `nano-pro` (changed 2026-10-12 from `nano`, `nano-pro`, `gpt`, `flux`), easily extended. |
 | First target | LOCKED: Commish (your most active app work right now). |
 | Key storage | DEFAULT: `FAL_KEY` in shell profile, `.env` override available. No action needed. |
 

@@ -12,10 +12,10 @@ estimate, models.
 
 Usage:
     python3 forge.py models
-    python3 forge.py estimate "a trophy" --model gpt --size 1024 --quality high
-    python3 forge.py gen "a trophy on an orange podium" --model nano --size 1024
+    python3 forge.py estimate "a trophy" --model sunburst --size 1024 --quality high
+    python3 forge.py gen "a trophy on an orange podium" --size 1024 --quality medium
     python3 forge.py batch shots.md --refs ./brand --cap 3 --concurrency 4
-    python3 forge.py compare "a mascot" --models nano,gpt,flux
+    python3 forge.py compare "a mascot" --models sunburst,nano-pro
     python3 forge.py resume 20260626-072444-a-clean-flat-mod
 """
 
@@ -140,6 +140,7 @@ def build_input(cfg, prompt, dims, quality, num, seed, negative):
     if style == "image_size":
         if dims:
             inp["image_size"] = {"width": dims[0], "height": dims[1]}
+        quality = quality or cfg.get("default_quality")
         if cfg.get("supports_quality") and quality:
             inp["quality"] = quality
     elif style == "aspect_resolution":
@@ -206,6 +207,7 @@ def build_op_input(cfg, op, image_uris, prompt, dims, quality, num, seed):
     if osize == "aspect_resolution":
         inp["resolution"] = res_bucket(max(dims)) if dims else "1K"
     elif osize == "image_size":
+        quality = quality or cfg.get("default_quality")
         if cfg.get("supports_quality") and quality:
             inp["quality"] = quality
         if dims:
@@ -216,6 +218,9 @@ def build_op_input(cfg, op, image_uris, prompt, dims, quality, num, seed):
 
 
 # ---------- cost ----------
+
+BASE_PIXELS = 1024 * 1024    # the size a quality-priced model's plain rate is published for
+
 
 def estimate_per_image(cfg, dims, quality):
     """Conservative upper-bound per-image price in USD from the registry."""
@@ -228,9 +233,11 @@ def estimate_per_image(cfg, dims, quality):
         bucket = res_bucket(max(dims)) if dims else "1K"
         return float(price.get(bucket, default))
     if by == "quality":
-        q = quality or "high"
-        if dims and max(dims) >= 4096:
-            for k in (q + "@4k", "high@4k"):   # conservative 4K ceiling for any quality
+        q = quality or cfg.get("default_quality") or "high"
+        # Only a size known to fit the 1024x1024 rate gets the plain price. A larger size, or
+        # no size at all (the model then picks its own), is priced at the 4K ceiling.
+        if not dims or dims[0] * dims[1] > BASE_PIXELS:
+            for k in (q + "@4k", "high@4k"):
                 if k in price:
                     return float(price[k])
         return float(price.get(q, default))
@@ -697,7 +704,7 @@ def run_batch(shots, defaults, reg, run_dir, command, cap, concurrency, key, bra
         cfg = resolve_model(shot.get("model") or defaults.get("model") or brand.get("default_model"), reg)
         size = shot.get("size") or defaults.get("size") or brand.get("default_size")
         dims = parse_dims(size)
-        quality = defaults.get("quality")
+        quality = defaults.get("quality") or cfg.get("default_quality")
         seed = shot.get("seed") if shot.get("seed") is not None else defaults.get("seed")
         negative = shot.get("negative") or defaults.get("negative")
         num = max(1, int(shot.get("num", 1) or 1))
@@ -814,6 +821,11 @@ def _estimate_shots(shots, defaults, reg, brand):
     return total, rows
 
 
+def _models_with(reg, op):
+    """Aliases whose registry entry has an endpoint for `op` ('edit' | 'style'), for error text."""
+    return " or ".join(a for a, c in reg.get("models", {}).items() if c.get(op)) or "(none)"
+
+
 def _summary(manifest, sheet):
     items = manifest["items"]
     by = {}
@@ -835,13 +847,13 @@ def _summary(manifest, sheet):
 
 def cmd_models(args, reg):
     models = reg.get("models", {})
-    print(f"{'alias':<10} {'fal id':<28} {'preset':<8} price (USD/image)")
-    print("-" * 72)
+    print(f"{'alias':<10} {'fal id':<44} {'preset':<8} price (USD/image)")
+    print("-" * 88)
     for alias, cfg in models.items():
         price = cfg.get("price_usd")
         hint = (f"${price}" if not isinstance(price, dict)
                 else " ".join(f"{k}=${v}" for k, v in price.items()))
-        print(f"{alias:<10} {cfg.get('id', ''):<28} {cfg.get('preset', ''):<8} {hint}")
+        print(f"{alias:<10} {cfg.get('id', ''):<44} {cfg.get('preset', ''):<8} {hint}")
     print(f"\ndefault model: {reg.get('default_model')}")
     if reg.get("note"):
         print(f"note: {reg['note']}")
@@ -872,7 +884,8 @@ def cmd_gen(args, reg):
     total = per * args.num
     if args.cap is not None and total > args.cap:
         die(f"estimate ${total:.3f} exceeds --cap ${args.cap:.2f}. "
-            f"Raise the cap or lower --num/--size/--quality.")
+            f"Raise the cap or lower --num/--size/--quality "
+            f"(a quality-priced model with no --size is priced at its 4K ceiling).")
     if args.dry_run:
         inp = build_input(cfg, args.prompt, parse_dims(args.size or brand.get("default_size")),
                           args.quality, args.num, args.seed, args.negative)
@@ -928,7 +941,8 @@ def cmd_batch(args, reg):
 
 def cmd_compare(args, reg):
     brand = load_brand_profile(args.brand)
-    models = [m.strip() for m in (args.models or "nano,gpt,flux").split(",") if m.strip()]
+    models = ([m.strip() for m in args.models.split(",") if m.strip()] if args.models
+              else list(reg.get("models", {})))            # default: race the whole roster
     shots = [{"id": m, "prompt": args.prompt, "model": m} for m in models]
     defaults = _defaults_from_args(args)
     defaults["model"] = None  # per-shot model wins
@@ -955,9 +969,9 @@ def cmd_compare(args, reg):
 
 def cmd_edit(args, reg):
     brand = load_brand_profile(args.brand)
-    cfg = resolve_model(args.model or "nano", reg)
+    cfg = resolve_model(args.model, reg)
     if not cfg.get("edit"):
-        die(f"model '{cfg['alias']}' has no edit endpoint; try --model nano, gpt, or flux")
+        die(f"model '{cfg['alias']}' has no edit endpoint; try --model {_models_with(reg, 'edit')}")
     if not Path(args.image).is_file():
         die(f"image not found: {args.image}")
     size = args.size or brand.get("default_size")
@@ -998,10 +1012,10 @@ def cmd_edit(args, reg):
 
 def cmd_style(args, reg):
     brand = load_brand_profile(args.brand)
-    cfg = resolve_model(args.model or "nano", reg)
+    cfg = resolve_model(args.model, reg)
     if not cfg.get("style"):
-        die(f"model '{cfg['alias']}' has no style/multi-ref endpoint; use --model nano or gpt "
-            f"(flux style needs the pro Kontext endpoint, not wired in v1)")
+        die(f"model '{cfg['alias']}' has no style/multi-ref endpoint; "
+            f"use --model {_models_with(reg, 'style')}")
     refs = args.refs or brand.get("refs")
     if not refs:
         die("style needs --refs <folder> (or a 'refs' path in the brand profile)")
@@ -1150,7 +1164,7 @@ def cmd_finish(args, reg):
         picks = [it for it in src["items"] if it["status"] == "completed"]
     if not picks:
         die("no keepers to finish (nothing completed, or no ids matched)")
-    model = args.model or brand.get("finish_model") or "gpt"
+    model = args.model or brand.get("finish_model") or reg.get("default_model")
     cfg = resolve_model(model, reg)                      # validate the alias up front
     quality = args.quality or ("high" if cfg.get("supports_quality") else None)
     size = args.size or brand.get("default_size") or "2048"
@@ -1262,7 +1276,7 @@ def cmd_init(args, reg):
             die(f"{dest} is a directory, not a file; remove it first.")
         if not args.force:
             die(f"{dest} already exists. Pass --force to overwrite.")
-    profile = _detect_brand(target, reg.get("default_model", "nano"))
+    profile = _detect_brand(target, reg.get("default_model"))
     try:
         forge_dir.mkdir(parents=True, exist_ok=True)
         write_atomic(dest, profile)
@@ -1384,12 +1398,12 @@ def _positive_float(s):
 
 
 def _add_common(sp):
-    sp.add_argument("--model", help="model alias (nano, nano-pro, gpt, flux)")
+    sp.add_argument("--model", help="model alias (sunburst, nano-pro; see `forge models`)")
     sp.add_argument("--size", help="WxH, a number, or a preset (1k/2k/4k)")
-    sp.add_argument("--quality", choices=["auto", "low", "medium", "high"],
-                    help="for models priced by quality (gpt)")
+    sp.add_argument("--quality", choices=["auto", "low", "medium", "high", "xhigh", "max"],
+                    help="for models priced by quality (sunburst)")
     sp.add_argument("-n", "--num", type=_positive_int, default=1, help="images per prompt")
-    sp.add_argument("--seed", type=int, help="fixed seed (only flux; ignored elsewhere)")
+    sp.add_argument("--seed", type=int, help="fixed seed (models that support it)")
     sp.add_argument("--negative", help="negative prompt (models that support it)")
     sp.add_argument("--refs", help="reference image folder (for style)")
     sp.add_argument("--transparent", action="store_true",
@@ -1416,7 +1430,7 @@ def build_parser():
 
     c = sub.add_parser("compare", help="race one prompt across models")
     c.add_argument("prompt")
-    c.add_argument("--models", help="comma list, e.g. nano,gpt,flux")
+    c.add_argument("--models", help="comma list, e.g. sunburst,nano-pro (default: every model)")
     _add_common(c)
 
     ed = sub.add_parser("edit", help="edit an existing image with a text instruction")
