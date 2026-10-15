@@ -227,7 +227,7 @@ withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
 (A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40), and
-RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68), and RK15 the same day (A89).**
+RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68), and RK15 the same day (A89), and RK16 on 2026-10-15 (A103).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -380,6 +380,16 @@ How likely each is was never measured.
   value of eight bytes or more stays a hit. He was told that this option accepts something none of
   the thirteen accepted risks named, and that the hosting tool's own short values were the author's
   account, not checked on the machine. The laptop is not checked. Not measured.
+- **RK16, a create the tool's own request never sent, lost to the run** (accepted by the owner,
+  A103). Where a create's send is a request the frame makes itself (SEC-2) and the frame refuses it
+  before any connection to the host is opened, nothing is sent, but no record says so: the create is
+  outstanding by OP-7, as for a send whose answer was lost, and is cleared only by a status read the
+  provider documents for that very request, a guarantee and a re-plan, or the layer dropped. Where
+  the provider gives neither a status read nor a guarantee, he drops the layer and the tool never
+  makes that thing, though nothing was ever sent. A send that a program the runner starts would
+  make, refused before any child starts, is not so (A99). He was told that this option accepts
+  something none of the fourteen accepted risks named. No step shipped today sends anything as the
+  tool's own request, read in the code. Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
