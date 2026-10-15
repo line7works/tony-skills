@@ -1999,7 +1999,12 @@ each secret field for itself. Before the child starts, the journal holds a step 
 receipt is due for each secret field of the declaration, naming the operation, the number of this
 execution and, field by field, the id under which that field's value will be kept. A command the
 runner refuses (SEC-3) has no execution and starts no child: the runner's check is made before that
-step record, and where it refuses, no receipt is due. After the result is parsed, the secret fields
+step record, and where it refuses, no receipt is due. A request of the frame's own (SEC-2) that
+has a secret field is not so: its step record that a receipt is due is written before the frame's
+own checks of that request, and where the frame refuses it before any connection to the host is
+opened, the receipt stays due and is never given: every status form of that run says that a secret
+may have been received and lost, though nothing was sent. That is RK17, which the owner accepted
+(A107; RISK-1). After the result is parsed, the secret fields
 are taken in the declaration's order, all of them before any other field, and in three passes.
 First each value that is kept is written to its own protected record.
 Then the search for each is made (the next paragraph), and each disproof record owed is written.
@@ -2298,7 +2303,12 @@ form names that operation and that execution; and the lost value, returned by th
 field of each of SEC-4's ten types and asked for back in an argument, is in no journal record,
 manifest, form, CLI output, error or argument. A refused command with a secret field: the runner
 refuses a create's send whose declaration has one; the journal holds no receipt-due record for it,
-and no status form says that a secret may have been received and lost. A row that puts a command
+and no status form says that a secret may have been received and lost. A refused request of the
+frame's own with a secret field: the frame refuses it for an entry of the register in a part of its
+path, and in a second pass for a provider with no host; the fake host records no connection, the
+journal holds the receipt-due record and no receipt after it, and the next status form says that a
+secret may have been received and lost, naming the operation, the execution and the field, though
+nothing was sent (A107; RK17). A row that puts a command
 with a secret field into a look fails its manifest build. A sunset fixture with a database and a
 hosting project, and no env file on the machine, ends its first look `refused` before any preview,
 with the lane's one command in the refusal form and no call of a command with a secret field
@@ -2595,8 +2605,8 @@ unanswered or names a row that does not exist.
 ## Part 4. The risk that is left
 
 **RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted
-fifteen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
-A48, A55, A63, A68, A89 and A103): RK1;
+sixteen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
+A48, A55, A63, A68, A89, A103 and A107): RK1;
 RK2, which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7;
 RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
@@ -2608,27 +2618,31 @@ shortcut check (SEC-3); RK13, for a builtin of a shortcut's name coming into bei
 is added (RUN-7); RK14, for a project's runs misordered by a clock set back (EV-7); RK15, for a
 secret of the pulled env file under eight bytes committed and pushed (SEC-10); RK16, for a create
 whose send is a request of the frame's own, refused before any connection to the host is opened,
-left outstanding with no record of the refusal (LOG-2, OP-7); and the run directory's assumption
-(RUN-4). RK10, RK11, RK12, RK13, RK14, RK15 and RK16 are the ninth, the tenth, the eleventh, the
-twelfth, the thirteenth, the fourteenth and the fifteenth: no risk bears the number nine, RK9 being
-merged into RK7. Their wording is in the catalog's Part 6 and
+left outstanding with no record of the refusal (LOG-2, OP-7); RK17, for a false line that a secret
+may have been received and lost, where the frame refuses a request of its own that has a secret
+field before any connection to the host is opened (SEC-12); and the run directory's assumption
+(RUN-4). RK10, RK11, RK12, RK13, RK14, RK15, RK16 and RK17 are the ninth, the tenth, the eleventh,
+the twelfth, the thirteenth, the fourteenth, the fifteenth and the sixteenth: no risk bears the
+number nine, RK9 being merged into RK7. Their wording is in the catalog's Part 6 and
 is not restated here. This frame removes none of them and accepts none itself. An operation carried
 under RK2, RK3, RK4, RK5 or RK13 is marked so in the journal, once for each of those risks it is
 carried under. RK13's window is the one RK5's is, between the check and the add, so a shortcut's add
-and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15 and
-RK16 belong to no one operation, and no mark is recorded for any of them.
+and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15, RK16
+and RK17 belong to no one operation, and no mark is recorded for any of them.
 Where RK8's instant has passed, the journal already shows a receipt due and not given (SEC-12); that
 is the record of what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark and RK13's beside RK2's; each mark is recorded exactly once for
 its operation and its risk, also after a kill and a resume; no other operation carries a mark, and
-no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15 or RK16, an operation
-with a receipt due and not given, a restore that read the later of two sunsets by their times, a run
-that holds a disproof record, an operation whose program stands in a folder the fixture's settings
-name, a look that made the shortcut check, a commit made past a value of the env file under eight
-bytes, and a create left outstanding after its own request was refused before any connection among
-them. What a start does
+no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15, RK16 or RK17, an
+operation with a receipt due and not given, a restore that read the later of two sunsets by their
+times, a run that holds a disproof record, an operation whose program stands in a folder the
+fixture's settings name, a look that made the shortcut check, a commit made past a value of the env
+file under eight bytes, a create left outstanding after its own request was refused before any
+connection, and a
+receipt left due after a request of the frame's own with a secret field was refused before any
+connection, among them. What a start does
 where a record of the tool's own cannot be read is tested by that case in SEC-12's test line; it is
 a test of what the tool does, and how far RK10 reaches is Part 6's to say. What the run that died
 does after RK8's instant is tested by that case in SEC-12's test line: after a death between a
