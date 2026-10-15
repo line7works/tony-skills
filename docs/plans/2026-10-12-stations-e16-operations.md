@@ -227,7 +227,7 @@ withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
 (A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40), and
-RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68), and RK15 the same day (A89), and RK16 on 2026-10-15 (A103).**
+RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68), and RK15 the same day (A89), and RK16 on 2026-10-15 (A103), and RK17 the same day (A107).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -390,6 +390,14 @@ How likely each is was never measured.
   make, refused before any child starts, is not so (A99). He was told that this option accepts
   something none of the fourteen accepted risks named. No step shipped today sends anything as the
   tool's own request, read in the code. Not measured.
+- **RK17, a false lost-secret line for a refused request of the frame's own** (accepted by the
+  owner, A107). Where a request the frame makes itself (SEC-2) has a secret field and the frame
+  refuses it before any connection to the host is opened, the step record that a receipt is due is
+  written before the frame's checks, and the receipt is never given: every status form of that run
+  says that a secret may have been received and lost, naming the operation, the execution and the
+  field, though nothing was sent. No secret leaves the tool. A command the runner refuses is not so
+  (A102, A104). He was told that this option accepts a false alarm as a new risk, and that no secret
+  leaks. No step shipped today makes such a request, read in the code. Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
