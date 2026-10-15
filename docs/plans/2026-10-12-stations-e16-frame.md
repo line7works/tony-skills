@@ -106,13 +106,14 @@ same line as the entry point, which imports the tool's modules and lists the fil
 then loaded, finds each one under the tool's own folder or that Python's own library. No file of the
 tool declares an outside package or a launcher. A schema file of the tool, with a document that
 breaks it, is refused by the tool's own check, and a document that meets it passes. A failed start,
-in three cases, the fixture home holding a run that has caught a word of the tool's help text, each
+in four cases, the fixture home holding a run that has caught a word of the tool's help text, each
 asked for the tool's help: a copy of the tool in the test's temporary folder whose start line points
-the stand-in at a folder that does not exist; a copy in which one file of the first code (SEC-12)
-is cut short so that it cannot be read as code, run once for each of its files in turn, the file
-the start hands to the interpreter among them; and the shipped start, untouched. In the first two,
-both
-output streams are empty, to the byte, and the exit number is the fixed one; in the third, the help
+the stand-in at a folder that does not exist; a copy whose start line points it at a folder that is
+there and holds no developer tools, the nearest a test makes of SEC-12's first cause, the developer
+tools missing; a copy in which one file of the first code (SEC-12) is cut short so that it cannot be
+read as code, run once for each of its files in turn, the file the start hands to the interpreter
+among them; and the shipped start, untouched. In the first three, both
+output streams are empty, to the byte, and the exit number is the fixed one; in the fourth, the help
 is printed with the fixed words of withholding in the caught word's place, and the exit number is
 not the fixed one. A copy in which a module outside the first code is cut short, the first code
 whole, prints the tool's own failure line under the withheld read, the caught word in no output,
@@ -120,7 +121,8 @@ and its exit number is not the fixed one. A probe started by the shipped start's
 tool's files loaded at the moment the withheld read is made: each is a file of the first code, and
 none of the tool's other modules (its runner, its forms, a lane's rows) is among them. No path
 of the tool's own code ends with the fixed number: a search of the tool's exit numbers finds it
-written once.
+written once. The machine's own case, no developer folder chosen and none at its usual places, is
+asked of no test: a test would have to change the machine's own setting or its tools to make it.
 
 **RUN-2. One lock per project key.** The project key is the project's name folded: lowercased, with
 every character that is not a letter or a digit removed. A key is written nowhere as it is. What
@@ -1529,7 +1531,10 @@ first look, ends that look `refused`, with no child created, no manifest and no 
 run open under the key and the entry in no output or form, and met in the look of a re-plan of a
 run that has its go ends that invocation `stopped`, with the manifest in force byte-equal; and, met
 by the identity read of a resume on his current word, it ends that resume with no effect call and
-the run `stopped`, the form naming the refusal and asking for no re-plan. A start that is no
+the run `stopped`, the form naming the refusal and asking for no re-plan; and, met by the shortcut
+check's shell at an operation's probe at run time, the read of that operation's before-test, it
+ends the run `stopped` on that refusal, the operation not started, no start record of it written
+and no effect call made, the form naming the refusal, and no exception reported. A start that is no
 summons and starts a child, as the identity command does where it reads the commit through a fake
 git, starts it with no `TMPDIR` among the names of its environment, and the fixture home is
 byte-equal after it. The identity answer's commit, in four places of the fixture copy: at the top of
@@ -1826,10 +1831,18 @@ the head commit and unchanged is not scanned again at a commit, and the push sca
 that brought it, where that commit is still to be sent. The ignore rule is proven for each of the
 pulled env file and the hosting link file that stands in the working tree: that it is in no stage of
 the index and that git ignores it. Where the check cannot prove that, the attempt is `failed` (OP-8)
-and the run stops as at a hit, naming the file and showing nothing. A hit is any entry of the
-register at the check (SEC-12), or any value of the pulled env file or of the hosting link file of
-that working tree (SEC-7), which the check reads in-process at the check, uses for this match and
-for nothing else, enters in no register, and drops after it;
+and the run stops as at a hit, naming the file and showing nothing. The proof is of the git the
+runner starts, in the environment SEC-3 builds for it: the git and the environment the run's own
+commits and pushes go through. A commit or a push the owner makes by hand, outside a run, is none
+that this check reaches; a file he stages by hand is in a stage of the index at the next run's
+proof, and a commit of his own that carries a hit and is still to be sent stops the next run's push.
+Where the runner refuses a command of this check, the proof's git or a read of the scan, the check
+is not made and no attempt is recorded: as SEC-3's refusals row has it for every operation's
+command, the operation is not started and the run ends `stopped` on that refusal, its form naming
+the refusal. An attempt is `failed` where the check was made and its answer does not prove. A hit
+is any entry of the register at the check (SEC-12), or any value of the pulled env file or of the
+hosting link file of that working tree (SEC-7), which the check reads in-process at the check, uses
+for this match and for nothing else, enters in no register, and drops after it;
 each is matched whole, by each component its source declares, and in the percent-encoded and base64
 forms of both, as SEC-12 names the forms (the owner's ruling, A87). A value of either file that has
 no length is no hit, as SEC-12 says of an entry; that rests on A87 and SEC-12's words. A value of
@@ -1875,7 +1888,14 @@ parent's side that brought it. The ignore rule: the pulled env file staged in th
 second pass standing in the working tree with no pattern that ignores it, each make the attempt
 `failed` and stop the run before the commit, the output naming the file and holding none of its
 values; with the file unstaged and ignored by a plain line of the repository's top ignore file the
-attempt passes and the commit is made.
+attempt passes and the commit is made. The proof's git: with the env file ignored only by an
+excludes file in a folder that the session's `XDG_CONFIG_HOME` names, and by no file the git the
+runner starts reads in its own environment, the attempt is `failed` and the run stops naming the
+file. A refusal: a fake returns, in a secret field of the operation before the check, a value equal
+to a part of the temporary folder's path, as SEC-3's test line plants one; the runner then refuses
+the proof's git before any child is created; no attempt is recorded, the check's operation is not
+started, the run ends `stopped` on that refusal, and the form names the refusal and holds no part of
+that path.
 
 **SEC-11. How the secret rules are tested.** A marked canary, built at run time, is planted in every
 source SEC-1 names, and every value a fake returns during a run in a held or a secret field, of
