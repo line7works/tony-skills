@@ -1767,7 +1767,7 @@ permissions than this table gives is a failure.
 
 | Place | What rests there | How it gets there, and its permissions |
 |---|---|---|
-| the frame's own memory | the hosting token; values on their way to a file; held values in use; the secret register (SEC-12) | read in-process; dropped after use; written nowhere |
+| the frame's own memory | the hosting token; values on their way to a file; held values in use; the secret register (SEC-12); the values of the pulled env file and of the hosting link file while SEC-10's check runs (the owner's ruling, A87) | read in-process; dropped after use; written nowhere |
 | the private password file | the database's connection address, every part of it | a new file built by the frame (SEC-2); owner-only; removed after use |
 | the tool's own folder beside the run directories | the value RUN-2 keys a lock's fingerprint with | made once on a machine by the tool; owner-only; shown nowhere and copied nowhere |
 | the protected folder of the run directory | protected records, held and secret fields among them; review files; the fingerprint key | new files built by the frame; owner-only; kept with the run |
@@ -1815,13 +1815,29 @@ hosting token is refused before a lock exists (RUN-2's test line has the fixture
 
 **SEC-10. Nothing is committed or pushed unscanned.** Before every commit a check scans, by content,
 exactly what will be committed and proves the ignore rule; before a push a check scans every commit
-to be pushed. A hit stops the run, names the file and shows nothing.
+to be pushed. A hit is any entry of the register at the check (SEC-12), or any value of the pulled
+env file or of the hosting link file of that working tree (SEC-7), which the check reads in-process
+at the check, uses for this match and for nothing else, enters in no register, and drops after it;
+each is matched whole, by each component its source declares, and in the percent-encoded and base64
+forms of both, as SEC-12 names the forms (the owner's ruling, A87). A value of either file that has
+no length is no hit, as SEC-12 says of an entry; that rests on A87 and SEC-12's words. A hit stops
+the run, names the file and shows nothing. Nothing else is a hit: a secret from a source the tool
+never read, such as a key file of the owner's, is not checked here, as SEC-12 says.
 
 Test on fakes: a canary in the content about to be committed stops the run before the commit, also
 where the working-tree file has since been cleaned; a canary in a working-tree file that is not part
 of what will be committed does not; a canary in an earlier commit stops the run before the push; in
 each stop the output names the file and holds no canary; with no canary the commit and the push are
-made.
+made. What a hit is (the owner's ruling, A87), in a fixture repository with content: a value of the
+fixture's pulled env file copied into a tracked file, the fixture's hosting token as an entry of the
+register, and an id of the fixture's hosting link file, each planted in a tracked file about to be
+committed, in four passes whole, by component, percent-encoded and in base64, each stop the run
+before the commit, the output naming the file and holding none of the three; the same three, in a
+commit made earlier by hand and about to be pushed, each stop the run before the push; an env value
+of no length stops nothing; a text that is in no entry of the register and in neither file, planted
+in a tracked file, stops nothing; and the fixture file system records the check's read of the two
+files, no new copy of their values in any file of the fixture home, and none of them in the register
+after the check.
 
 **SEC-11. How the secret rules are tested.** A marked canary, built at run time, is planted in every
 source SEC-1 names, and every value a fake returns during a run in a held or a secret field, of
@@ -2147,7 +2163,11 @@ rule does not
 reach, and says so: a secret the frame never reads into memory (a value inside a file a tool wrote
 into staging), which SEC-11's scan is what checks; a secret that had left its channel before this
 invocation read that channel (a token since replaced); and the death of an invocation in the
-instant between a provider's handing it a secret and its first record of that secret. The second is
+instant between a provider's handing it a secret and its first record of that secret. The first is
+narrowed for two files and for one check: SEC-10's check before a commit and before a push reads
+the values of the pulled env file and of the hosting link file in-process and counts each as a hit
+(the owner's ruling, A87). A value inside any other file a tool wrote, and a secret from a source
+the tool never read, such as a key file of the owner's, stay as the first says. The second is
 RK6, which the owner accepted (A18; RISK-1), and by his word the tool keeps no copy of a channel
 secret to close it. Such a value repeated in a provider's answer is held by SEC-4 like any other;
 RK6 now covers only the same value typed by the owner or found in a file on this machine, which the
