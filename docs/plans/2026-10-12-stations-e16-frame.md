@@ -844,7 +844,9 @@ What "the same thing" means is decided by the construction, and by nothing else:
 Test on fakes: for each kind that has an effect, a fixture for each answer that kind can give yields
 that answer and no state-changing call: all six for a build, a keep, a change and a move, and five
 for a create, which never answers `not landed` (OP-6, OP-7), its fixture with a start record and no
-answer record being outstanding whatever the world shows; a fixture with no record in which both
+answer record being outstanding whatever the world shows; a create with its answer record whose read
+by the recorded id finds nothing yields `foreign`, never `not landed`, the run stops, and the fake
+records no second send (OP-6; Part 5's third example); a fixture with no record in which both
 tests hold yields `already so`,
 and one with a start record in which both states hold yields `landed`; for a swap, a file replaced
 by another actor with the after-content yields `landed`, and one with any other content `foreign`;
@@ -1815,9 +1817,19 @@ hosting token is refused before a lock exists (RUN-2's test line has the fixture
 
 **SEC-10. Nothing is committed or pushed unscanned.** Before every commit a check scans, by content,
 exactly what will be committed and proves the ignore rule; before a push a check scans every commit
-to be pushed. A hit is any entry of the register at the check (SEC-12), or any value of the pulled
-env file or of the hosting link file of that working tree (SEC-7), which the check reads in-process
-at the check, uses for this match and for nothing else, enters in no register, and drops after it;
+to be pushed. What will be committed is what the commit changes: each path whose content in the
+index differs from the head commit's, and every path where there is no head commit. Every commit to
+be pushed is each commit the push sends that the base the row names, the remote's branch, does not
+hold, and every commit where the row names none; each is scanned by its own message and by each file
+it changes against its first parent, every file of a commit with no parent. So content already in
+the head commit and unchanged is not scanned again at a commit, and the push scans it in the commit
+that brought it, where that commit is still to be sent. The ignore rule is proven for each of the
+pulled env file and the hosting link file that stands in the working tree: that it is in no stage of
+the index and that git ignores it. Where the check cannot prove that, the attempt is `failed` (OP-8)
+and the run stops as at a hit, naming the file and showing nothing. A hit is any entry of the
+register at the check (SEC-12), or any value of the pulled env file or of the hosting link file of
+that working tree (SEC-7), which the check reads in-process at the check, uses for this match and
+for nothing else, enters in no register, and drops after it;
 each is matched whole, by each component its source declares, and in the percent-encoded and base64
 forms of both, as SEC-12 names the forms (the owner's ruling, A87). A value of either file that has
 no length is no hit, as SEC-12 says of an entry; that rests on A87 and SEC-12's words. A value of
@@ -1854,7 +1866,16 @@ seven bytes with a space at each end, each planted in a tracked file in each of 
 nothing, and the commit and the push are made; a value of exactly eight bytes under a variable of
 the fixture owner's, the value `development` under a variable of the fixture owner's, and the value
 of the module's own variable once its list no longer holds it, each planted the same way, stop the
-run before the commit, the output naming the file and holding none of them.
+run before the commit, the output naming the file and holding none of them. What is scanned: a
+canary already in the head commit, in a file the next commit does not change, does not stop that
+commit, and where the head commit is still to be sent the push stops on it, naming the file; a
+canary in a commit's message, and one in a commit with no parent, each stop the push; a canary that
+a merge commit brings from a second parent still to be sent stops the push in the commit on that
+parent's side that brought it. The ignore rule: the pulled env file staged in the index, and in a
+second pass standing in the working tree with no pattern that ignores it, each make the attempt
+`failed` and stop the run before the commit, the output naming the file and holding none of its
+values; with the file unstaged and ignored by a plain line of the repository's top ignore file the
+attempt passes and the commit is made.
 
 **SEC-11. How the secret rules are tested.** A marked canary, built at run time, is planted in every
 source SEC-1 names, and every value a fake returns during a run in a held or a secret field, of
