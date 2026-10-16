@@ -1016,7 +1016,18 @@ it, and the run ends `stopped`, its form naming the step and the read that faile
 applied. These are two stops that rest on GOV-1: no rule says how a step stands on a read that did
 not answer. At the start of an invocation it is that failed read, and not RUN-10's own ending, that
 ends the invocation, a summons with no word among them (RUN-12). A read the runner refuses is the
-refusals row's of SEC-3.
+refusals row's of SEC-3. Since a step is shown only as a fresh read builds it, a waiting step whose
+read this invocation did not make, or made and got no answer from, is in no form this invocation
+renders, neither from the manifest's text nor from an earlier form's: where the runner refuses
+that read, and the invocation ends `stopped` on the refusal (SEC-3's refusals row); where an
+earlier step's stop ends the invocation before this step is read, and it ends `stopped` on that
+stop; and at a close, which makes no read (SEC-12's table), and ends `closed` (RUN-13). Where the
+identity read of the step's provider, made before the step's read, fails, is partial or runs out of
+time, so that the step's read is not made, the step is in no form and the run ends `stopped`, its
+form naming the identity read that failed, with no effect applied: a stop that rests on GOV-1,
+since no rule says how an invocation stands on an identity read that did not answer, and RUN-12's
+`waiting` ending lists each waiting step "with its exact step". An identity read that shows another
+account is RUN-10 (b)'s. The line such a step has in a form is FORM-2's to place.
 
 Test on fakes: a step in read-back mode completes on the read alone and never on his word alone; a
 step on his word completes on the word and is listed as not checked; an answer the row does not list
@@ -1033,7 +1044,14 @@ wrong account and runs past its time limit, ends the run `stopped` with no effec
 no form and the form naming the step and the read that failed; a waiting step in read-back mode
 whose read fails at the start of a resume on his current word, and in a second pass of a summons
 with no word, ends that invocation `stopped` with no effect call, the step's earlier text in no
-form (GOV-1).
+form (GOV-1). A waiting step with no fresh read: its read refused by the runner at the start of a
+resume on his current word; a later waiting step not reached, an earlier step's read failing
+first; and a close: in each, neither the manifest's text of the step nor an earlier form's is in
+any form the invocation renders, and it ends `stopped`, `stopped` and `closed` in turn. Its
+provider's identity read failing, and in further passes answering part and running past its time
+limit, at the start of a resume on his current word and of a summons with no word: the step's read
+is not made, the step is in no form, and the invocation ends `stopped` with no effect call, the
+form naming the identity read (GOV-1).
 
 **OP-10. Adopt.** Adoption is offered for one output and for no other: the local project folder (the
 owner's ruling, A6). An adopt is in a manifest only because the owner's own input names that folder
@@ -2613,7 +2631,10 @@ build test.
 form, a summary and a last record can each show every line below, and a lane's list of form changes
 includes them. This table does not hold a line for every status, nor every reason, that the rules of
 this frame name. A line it lacks is for the lane's list of form changes to give, and what such a
-line says is not this frame's to say (the owner's ruling, A9; ROW-3). A status that occurs in a run
+line says is not this frame's to say (the owner's ruling, A9; ROW-3). A waiting step that OP-9 does
+not let a form show has no exact step to give, so its line is not this table's `waiting` line,
+which names the exact step: it is a line the table lacks, for the lane's list of form changes to
+give (A9; OP-9). A status that occurs in a run
 and has a line neither in this table nor in the lane's list of form changes fails the build of every
 form that lists operations.
 
@@ -2641,7 +2662,10 @@ line, and each line holds the parts its row names (for `waiting` the step and th
 label and the path); a form template that lacks one of these lines, or renders one without a part
 its row names, fails its build test; a run in which a status occurs that this table has no line for
 renders its forms where the lane's list of form changes gives that status a line, and fails each
-such form's build where neither has one.
+such form's build where neither has one. A waiting step that OP-9 does not let a form show, its
+read having got no answer: the status form renders where the lane's list of form changes gives its
+line, with neither the manifest's text of the step nor an earlier form's in it, and fails its build
+where the lane's list gives none.
 
 **FORM-3. A restore has forms of its own.** A restore has a preview, a status form, a summary, and
 its entry in the project's record (KEEP-5). They are forms under FORM-1 and FORM-2, and are not
