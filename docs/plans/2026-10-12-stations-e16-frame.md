@@ -1027,7 +1027,11 @@ time, so that the step's read is not made, the step is in no form and the run en
 form naming the identity read that failed, with no effect applied: a stop that rests on GOV-1,
 since no rule says how an invocation stands on an identity read that did not answer, and RUN-12's
 `waiting` ending lists each waiting step "with its exact step". An identity read that shows another
-account is RUN-10 (b)'s. The line such a step has in a form is FORM-2's to place.
+account is RUN-10 (b)'s; one whose credentials the provider refuses shows no account at all, and is
+one that fails (OP-5's last row). A step on his word, which has no read, and an owner answer are
+built from the safe content their row gives (ROW-1) and are shown from it each time, a close's form
+among them: the fresh read this rule asks for is the read of a step that has one. The line such a
+step has in a form is FORM-2's to place.
 
 Test on fakes: a step in read-back mode completes on the read alone and never on his word alone; a
 step on his word completes on the word and is listed as not checked; an answer the row does not list
@@ -1051,7 +1055,14 @@ any form the invocation renders, and it ends `stopped`, `stopped` and `closed` i
 provider's identity read failing, and in further passes answering part and running past its time
 limit, at the start of a resume on his current word and of a summons with no word: the step's read
 is not made, the step is in no form, and the invocation ends `stopped` with no effect call, the
-form naming the identity read (GOV-1).
+form naming the identity read (GOV-1). So too where the fixture provider answers the identity read
+by refusing its credentials, at the start of a resume on his current word and of a summons with no
+word. At the start of the invocation that records his go on a re-plan's manifest, the identity read
+failing ends it `stopped` with no effect call and the step in no form; and while a re-plan's
+manifest awaits his go, a summons with no word whose read of a waiting step the runner refuses
+renders that step in neither manifest's text nor an earlier form's. A waiting step on his word and a
+waiting owner answer: a resume, a summons with no word and a close each render it from its row's
+safe content, and no fake records a read of it.
 
 **OP-10. Adopt.** Adoption is offered for one output and for no other: the local project folder (the
 owner's ruling, A6). An adopt is in a manifest only because the owner's own input names that folder
