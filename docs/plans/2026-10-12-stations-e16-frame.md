@@ -215,8 +215,8 @@ in the tool's fixed words that the project no longer shows a name its look showe
 private file that holds it, and his next summons starts a new look under the names the project now
 shows. It is a stop the owner ruled on its own (A79). A
 go summons that leaves off a name the owner gave that look, which no alias read shows, so that the
-go holds fewer keys than its manifest records, ends the same way; that case rests on A79, and the
-owner was not asked of it apart. So a run is opened under exactly the keys its look held, no fewer
+go holds fewer keys than its manifest records, ends the same way (the owner's ruling, A79). So a run
+is opened under exactly the keys its look held, no fewer
 and no other. A lock is of the kind the system releases when its holder dies, and is never broken
 by age. A lock's file is made when the lock is taken and removed
 when the lock is released, by the invocation that took it and however that invocation ends (the
@@ -500,7 +500,7 @@ present paths and probed at the moved path.
 | `in` | build, create, keep: the place is free. change, move: the thing is in the row's before-state. check, owner kinds, adopt: their needs can be met (ORD-2). For a shortcut's line, added or put back, its name is free: no program, alias, shell function, builtin or reserved word of that name, as his login zsh finds them (SEC-3; the owner's ruling, A63). Each counts where it exists for that shell, whatever that shell would run first for the name: a program wherever it stands in a folder of that shell's path, and an alias, a function, a builtin or a reserved word wherever that shell holds one, though another command of the name comes before it. A builtin of the name that a startup file brings in between the check and the add is RK13, which the owner accepted (A63; RISK-1) | the operation is in the manifest |
 | `already so` | change and move only: the thing is in the row's after-state before the run has done anything | no operation; the preview lists it (FORM-2); for its way back see EV-4 and EV-5 |
 | `not applicable` | a flag; the project type; a layer the project does not have; a capability the adapter did not declare, where the row names no other treatment; KEEP-2; ORD-2; EV-7 | no operation; the preview gives the reason |
-| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); the alias reads of a re-plan show a name form whose key the run does not hold (RUN-2; the owner's ruling, A72); the go of a first look, made in a later invocation, whose alias reads show, or whose summons gives, a name whose key that look did not hold (RUN-2, RUN-9; the owner's ruling, A76, for a name its alias reads show; a name its summons gives is the frame's reading, his to change by a word, A124), where no go is recorded and the form says so in fixed words and names the private file that holds that name; the go of a first look, made in a later invocation, that holds fewer keys than its manifest records, a name form that look held being gone from its alias reads (RUN-2, RUN-9; the owner's ruling, A79), or a name the owner gave that look being left off its summons, a stop that rests on A79, where no go is recorded and the form says in fixed words that the project no longer shows a name its look showed and names the private file that holds that name; a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file, which is not the line for the shell the shortcut check starts, found in the system folders alone: where none holds it, that check's read failed (SEC-3); a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words; a restore's look that finds an open retirement of the key that is not its latest sunset by the clock (EV-7), a stop that rests on RUN-3's and EV-7's words, where the form says so in fixed words; a restore's look that finds two latest sunsets carrying the same time (EV-7), and a look whose keys would make the record of its run's opening longer than the most a look reads of a first record (RUN-5), each a stop that rests on GOV-1, where the form says which in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
+| planning stop | the place is taken by a thing this run's journal does not show the run made; the thing is in neither state the row names; the read failed, was partial, was made as the wrong account, or ran out of time; a provider shows the project under a name whose key is not held (RUN-2); the alias reads of a re-plan show a name form whose key the run does not hold (RUN-2; the owner's ruling, A72); the go of a first look, made in a later invocation, whose alias reads show, or whose summons gives, a name whose key that look did not hold (RUN-2, RUN-9; the owner's ruling, A76, for a name its alias reads show; a name its summons gives is the frame's reading, his to change by a word, A124), where no go is recorded and the form says so in fixed words and names the private file that holds that name; the go of a first look, made in a later invocation, that holds fewer keys than its manifest records, a name form that look held being gone from its alias reads (RUN-2, RUN-9; the owner's ruling, A79), or a name the owner gave that look being left off its summons (the owner's ruling, A79), where no go is recorded and the form says in fixed words that the project no longer shows a name its look showed and names the private file that holds that name; a secret the look needs is in no file on this machine (SEC-12); a program a candidate needs is in no folder of the search list (SEC-3), where the form names the program and says that a folder is put on the list only by his naming it in his settings file, which is not the line for the shell the shortcut check starts, found in the system folders alone: where none holds it, that check's read failed (SEC-3); a run directory's first journal record that is there and cannot be read, met as the look finds the key's earlier runs (RUN-5; the owner's ruling, A57), and the folder of run directories that cannot be listed, a stop that rests on A57, where the form says which in fixed words and where the run directories are kept, and names no directory; a restore's look that finds no retiring run among the key's earlier runs (EV-7), a stop that rests on GOV-1, where the form says so in fixed words; a restore's look that finds an open retirement of the key that is not its latest sunset by the clock (EV-7), a stop that rests on RUN-3's and EV-7's words, where the form says so in fixed words; a restore's look that finds two latest sunsets carrying the same time (EV-7), and a look whose keys would make the record of its run's opening longer than the most a look reads of a first record (RUN-5), each a stop that rests on GOV-1, where the form says which in fixed words | the invocation ends before any preview and names each; nothing is approved; RUN-12 names the ending, `refused` before a first go and `stopped` in a re-plan |
 
 Test on fakes: on a clear fixture every candidate is planned `in` and a manifest is written; each
 planted condition of a never-clobber fixture (an existing folder, an existing remote, a taken name
@@ -1019,9 +1019,10 @@ back its after-state, fails, is partial, is made as the wrong account or runs ou
 last row), whether it is made when the step is first reached or when a waiting step is read again
 at the start of an invocation, the step is not shown, since it is shown only as a fresh read builds
 it, and the run ends `stopped`, its form naming the step and the read that failed, with no effect
-applied. These are two stops that rest on GOV-1: no rule says how a step stands on a read that did
-not answer. At the start of an invocation it is that failed read, and not RUN-10's own ending, that
-ends the invocation, a summons with no word among them (RUN-12). A read the runner refuses is the
+applied. These are two stops that rest on GOV-1, each kept by him (the owner's ruling, A127): no
+rule says how a step stands on a read that did not answer. At the start of an invocation it is that
+failed read, and not RUN-10's own ending, that ends the invocation, a summons with no word among
+them (RUN-12). A read the runner refuses is the
 refusals row's of SEC-3. Since a step is shown only as a fresh read builds it, a waiting step whose
 read this invocation did not make, or made and got no answer from, is in no form this invocation
 renders, neither from the manifest's text nor from an earlier form's: where the runner refuses
@@ -1031,8 +1032,9 @@ stop; and at a close, which makes no read (SEC-12's table), and ends `closed` (R
 identity read of the step's provider, made before the step's read, fails, is partial or runs out of
 time, so that the step's read is not made, the step is in no form and the run ends `stopped`, its
 form naming the identity read that failed, with no effect applied: a stop that rests on GOV-1,
-since no rule says how an invocation stands on an identity read that did not answer, and RUN-12's
-`waiting` ending lists each waiting step "with its exact step". An identity read that shows another
+kept by him (the owner's ruling, A127), since no rule says how an invocation stands on an identity
+read that did not answer, and RUN-12's `waiting` ending lists each waiting step "with its exact
+step". An identity read that shows another
 account is RUN-10 (b)'s; one whose credentials the provider refuses shows no account at all, and is
 one that fails (OP-5's last row). A step on his word, which has no read, and an owner answer are
 built from the safe content their row gives (ROW-1) and are shown from it each time, a close's form
@@ -1054,15 +1056,17 @@ wrong account and runs past its time limit, ends the run `stopped` with no effec
 no form and the form naming the step and the read that failed; a waiting step in read-back mode
 whose read fails at the start of a resume on his current word, and in a second pass of a summons
 with no word, ends that invocation `stopped` with no effect call, the step's earlier text in no
-form (GOV-1). A waiting step with no fresh read: its read refused by the runner at the start of a
-resume on his current word; a later waiting step not reached, an earlier step's read failing
+form (GOV-1; the owner's ruling, A127). A waiting step with no fresh read: its read refused by the
+runner at the start of a resume on his current word; a later waiting step not reached, an earlier
+step's read failing
 first; and a close: in each, neither the manifest's text of the step nor an earlier form's is in
 any form the invocation renders, and it ends `stopped`, `stopped` and `closed` in turn. Its
 provider's identity read failing, and in further passes answering part and running past its time
 limit, at the start of a resume on his current word and of a summons with no word: the step's read
 is not made, the step is in no form, and the invocation ends `stopped` with no effect call, the
-form naming the identity read (GOV-1). So too where the fixture provider answers the identity read
-by refusing its credentials, at the start of a resume on his current word and of a summons with no
+form naming the identity read (GOV-1; the owner's ruling, A127). So too where the fixture provider
+answers the identity read by refusing its credentials, at the start of a resume on his current word
+and of a summons with no
 word. At the start of the invocation that records his go on a re-plan's manifest, the identity read
 failing ends it `stopped` with no effect call and the step in no form; and while a re-plan's
 manifest awaits his go, a summons with no word whose read of a waiting step the runner refuses
@@ -1741,6 +1745,11 @@ folder removed after the look, the same fixture row's after-check starts no shel
 naming the refusal, and with the zsh put back the next resume's probe reads the world again; and
 the same fixture owner step starts no shell and ends the run `stopped` on the runner's refusal, the
 step in no form, no `waiting` record written and no effect call made (the owner's ruling, A109).
+With no zsh in a system folder, a fixture owner step left `waiting` whose read makes the shortcut
+check, read at the start of a resume on his current word and in a second pass of a summons with no
+word: no shell is started, no effect call is made, the run ends `stopped` on the runner's refusal
+with its form naming the refusal and asking for no re-plan, and the step is in no form, neither from
+the manifest's text nor from an earlier form's (the owner's ruling, A109; OP-9).
 Its temporary folder: with the
 session's `TMPDIR` set to a decoy folder, the fake shell's `TMPDIR` is the fixture account's own
 temporary folder as the fixture's system gives it, and neither the decoy nor a folder of the run
@@ -2034,7 +2043,8 @@ each is matched whole, by each component its source declares, and in the percent
 forms of both, as SEC-12 names the forms (the owner's ruling, A87; that the values are used for this
 match and for nothing else, enter no register and are dropped after it was decided on his behalf
 and told to him, his to change by a word, A88). A value of either file that has
-no length is no hit, as SEC-12 says of an entry; that rests on A87 and SEC-12's words. A value of
+no length is no hit, as SEC-12 says of an entry; that is a call made on his behalf and told to him,
+resting on A87 and SEC-12's words, his to change by a word (A88). A value of
 the pulled env file is no hit, in any of those forms, where it is under SEC-4's least length of
 eight bytes, counted as SEC-4 counts, in UTF-8 on the value without the marks that enclose it in the
 file and with white space at either end left out; and no hit where it is the value of one of the
@@ -2304,8 +2314,9 @@ lock's record cannot be read, or what is read is no lock's record; the folder of
 listed; the record of open runs cannot be read, or what is read is no such record. One that is not
 there has not failed. No lock's file is no lock, and no record of open runs is no open run. A lock's
 file that was in the listing and is gone when its record is read is a lock released (RUN-2; the
-frame's reading of the owner's ruling, A41, that a lock's file is removed when the lock is released,
-his to change by a word, A124): it is no record that cannot be read, and no stop is made for it.
+owner's ruling, A41, is that a lock's file is removed when the lock is released; that a file found
+gone is a lock released is the frame's reading, his to change by a word, A124): it is no record that
+cannot be read, and no stop is made for it.
 Where one of the three fails, every start stops at the withheld read (the owner's ruling, A40): a
 summons and a start that is no summons alike, the tool's help among them, and at every start again
 until the file is mended. The start prints one fixed sentence and nothing else. It is the same
