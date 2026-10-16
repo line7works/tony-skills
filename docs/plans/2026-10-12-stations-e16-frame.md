@@ -173,7 +173,7 @@ RUN-1's second step runs in this order, all of it before a run directory is open
 
 | Part | What is done | What it reads |
 |---|---|---|
-| (a) the name check | every name the summons carries, the one it was summoned with and each further name the owner gave, is checked in memory: it must hold no entry of the register, into which the invocation first reads each secret SEC-2 lets it read without the project (the hosting token). A name that fails is refused with the tool's fixed text: nothing of it is written, in any form, no lock is taken and nothing is created | the token's channel; nothing of the project |
+| (a) the name check | every name the summons carries, the one it was summoned with and each further name the owner gave, is checked in memory: it must hold no entry of the register, into which the invocation first reads each secret SEC-2 lets it read without the project (the hosting token). It must also hold no slash, be neither "." nor "..", and hold no ".." as a part between slashes (the owner's ruling, A135). A name that fails is refused with the tool's fixed text: nothing of it is written, in any form, no lock is taken and nothing is created | the token's channel; nothing of the project |
 | (b) the first locks | the lock of the key of each of those names, in sorted order. Where the machine has no keying value yet, it is made now, by a create that fails if another invocation made it first | each lock's own record |
 | (c) the early look for an open run | under the keys of (b). A new summons that finds one is refused here (RUN-3). A summons that continues a run takes from the record the other keys that run is open under, and their locks, in sorted order; one that carries a name whose key that run is not open under is turned away here, as the paragraph below says | the record of open runs; nothing of the project |
 | (d) the alias reads | for a new summons, which is one that continues no open run, and for a re-plan, and for no other: the reads of this machine's own files that the lane's rows declare as showing another name form of the project, made in-process, with no runner and no provider | those files, and no other thing of the project |
@@ -272,7 +272,12 @@ takes the locks and goes on; two runs of different projects that change one shar
 their change. The names: a summons whose name is a canary equal to the fixture's hosting token, and
 one that carries that canary as a further name, each end refused with fixed text, and the fixture
 home
-then holds no lock file, no lock record and no new file; a summons whose name is a canary that
+then holds no lock file, no lock record and no new file; a first look summoned with a name that
+holds a slash, and in further passes with the name ".", with the name ".." and with a name that
+holds ".." as a part between slashes, and a go summons and a summons with a further name each
+carrying one of them, each end refused with the tool's fixed text, no lock taken, nothing written
+in the fixture home and no call recorded by any fake, and a name that holds none of them is accepted
+(the owner's ruling, A135); a summons whose name is a canary that
 equals no secret the tool can read before the project takes its locks and, after its go, is recorded
 as open, and the canary and its folded form, whole and in each form SEC-11 names, are in no lock's
 file name, no lock's record and not in the record of open runs, which hold fingerprints and run ids
