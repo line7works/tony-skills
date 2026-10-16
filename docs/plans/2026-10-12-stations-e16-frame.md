@@ -740,10 +740,12 @@ call; a fake that answers no request, or is killed after the child starts, leave
 program not found at the send, removed from the search list after the look, and in a second pass
 its file removed as the runner starts it, so that no child is created: the create leaves its start
 record and then the step record of that refusal, and the fake records no start (the owner's
-ruling, A109). A start the system refuses with the file still there, in three passes after the look
-(the fixture's file made not runnable, its first line made to name a program in no folder, the
-row's working folder removed): the create leaves its start record and then the step record of that
-refusal, and the fake records no start; a start whose failure the runner cannot read as the program
+ruling, A109). A start the system refuses with the file still there, in five passes after the look
+(the fixture's file made not runnable, its first line made to name a program in no folder, its
+bytes replaced by bytes of no format the system can run with no first line naming a program, the
+row's working folder removed, and the fixture's system answering the start that no process can be
+had): the create leaves its start record and then the step record of that refusal, and the fake
+records no start; a start whose failure the runner cannot read as the program
 never having run leaves no such record (the owner's ruling, A113). A
 create whose send is a request of the frame's own, refused before any connection to the fake host is
 opened, leaves its start record alone, with no record of the refusal, and the fake host records no
@@ -909,12 +911,14 @@ new start record and sends once, and the fake holds one thing. So too a create's
 is not found, removed from the search list after the look, and in a second pass its file removed
 as the runner starts it: the invocation ends `stopped` on that refusal with no start recorded by
 the fake, and the next resume, the program put back, on his word writes a new start record and
-sends once, and the fake holds one thing (the owner's ruling, A109). So too in three passes of a
+sends once, and the fake holds one thing (the owner's ruling, A109). So too in five passes of a
 start the system refuses with the file still there (the fixture's file made not runnable after the
-look, its first line made to name a program in no folder, the row's working folder removed): the
-invocation ends `stopped` on that refusal with no start recorded by the fake, and the next resume,
-the cause put right, on his word writes a new start record and sends once, and the fake holds one
-thing (the owner's ruling, A113).
+look, its first line made to name a program in no folder, its bytes replaced by bytes of no format
+the system can run with no first line naming a program, the row's working folder removed, and the
+fixture's system answering the start that no process can be had): the invocation ends `stopped` on
+that refusal with no start recorded by the fake, and the next resume, the cause put right, on his
+word writes a new start record and sends once, and the fake holds one thing (the owner's ruling,
+A113).
 
 **OP-7. A create whose answer was lost.** A create with a start record and no recorded answer is
 outstanding, whatever the world shows, and the run stops, but for one case: where the start record
@@ -949,9 +953,10 @@ record of that refusal after its start record, the create is not outstanding and
 sends it once; a kill after the start record and before that step record leaves it outstanding,
 and no later invocation under the same manifest sends it; and a fake that is started and then
 killed leaves it outstanding (the owner's ruling, A109). A start the system refuses with the file
-still there, in the same three passes: with the step record of that refusal after its start
-record, the create is not outstanding and the next resume sends it once; a kill after the start
-record and before that step record leaves it outstanding; and a start whose failure the runner
+still there, in the same five passes as LOG-2's test line: with the step record of that refusal
+after its start record, the create is not outstanding and the next resume sends it once; a kill
+after the start record and before that step record leaves it outstanding; and a start whose
+failure the runner
 cannot read as the program never having run leaves it outstanding; in both no later invocation
 under the same manifest sends it (the owner's ruling, A113). A refused request of the
 frame's own: a create whose send is such a request, refused before any connection to the fake host
@@ -1619,11 +1624,13 @@ that refusal, its form naming it, and the next resume, the program put back, pro
 file system removes the file as the runner starts it: no child is created, and the journal, the
 ending and the next resume are the same; a fake that is started and then killed instead leaves the
 create outstanding (OP-6, OP-7) (the owner's ruling, A109). A start the system refuses with the
-file still there, in three passes after the look: the fixture's file made not runnable, its first
-line made to name a program in no folder, and the row's working folder removed. At a create's send
-each ends the run `stopped` on the runner's refusal, the fake recording no start, the journal
-holding the start record and then the step record of the refusal, and the next resume, the cause
-put right, probes the create `not landed` and sends it once on his word; a start whose failure the
+file still there, in five passes after the look: the fixture's file made not runnable, its first
+line made to name a program in no folder, its bytes replaced by bytes of no format the system can
+run with no first line naming a program, the row's working folder removed, and the fixture's
+system answering the start that no process can be had. At a create's send each ends the run
+`stopped` on the runner's refusal, the fake recording no start, the journal holding the start
+record and then the step record of the refusal, and the next resume, the cause put right, probes
+the create `not landed` and sends it once on his word; a start whose failure the
 fixture's system answers in words the runner cannot read as the program never having run leaves
 the create outstanding, and no later invocation under the same manifest sends it (OP-6, OP-7) (the
 owner's ruling, A113). A start that is no summons and starts a
@@ -1654,7 +1661,14 @@ fixture's system folder removed after the look, the shortcut check at the probe 
 answers `unreadable`, and the run stops with no start record of the add and no effect call; in a
 second pass the fixture's file system removes that zsh as the runner starts it, no child is created,
 and the run ends `stopped` on the runner's refusal, the add not started, no start record of it
-written and no effect call made, the form naming the refusal (the owner's ruling, A109). Its
+written and no effect call made, the form naming the refusal (the owner's ruling, A109). In five
+more passes, after the look, a start of that zsh the system refuses with the file still there:
+the zsh made not runnable, its first line made to name a program in no folder, its bytes replaced
+by bytes of no format the system can run with no first line naming a program, the working folder
+the shortcut check's declaration names removed, and the fixture's system answering the start that
+no process can be had; in each no child is created, the shortcut check's shell records no start,
+and the run ends `stopped` on the runner's refusal, the add not started, no start record of it
+written and no effect call made, the form naming the refusal (the owner's ruling, A113). Its
 temporary folder: with the
 session's `TMPDIR` set to a decoy folder, the fake shell's `TMPDIR` is the fixture account's own
 temporary folder as the fixture's system gives it, and neither the decoy nor a folder of the run
@@ -2374,8 +2388,10 @@ secret may have been received and lost; in a second pass the fixture's file syst
 as the runner starts it, no child is created, the journal holds the receipt-due record and then each
 field's receipt saying in fixed words that no child was started, and no status form says so either
 (the owner's ruling, A109). A start the system refuses with the file still there, for a command
-with a secret field, in three passes after the look (the fixture's file made not runnable, its
-first line made to name a program in no folder, the row's working folder removed): the fake records
+with a secret field, in five passes after the look (the fixture's file made not runnable, its
+first line made to name a program in no folder, its bytes replaced by bytes of no format the system
+can run with no first line naming a program, the row's working folder removed, and the fixture's
+system answering the start that no process can be had): the fake records
 no start, the journal holds the receipt-due record and then each field's receipt saying in fixed
 words that no child was started, and no status form says that a secret may have been received and
 lost (the owner's ruling, A113). A row that puts a command
