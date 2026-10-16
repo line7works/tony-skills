@@ -2642,10 +2642,11 @@ build test.
 form, a summary and a last record can each show every line below, and a lane's list of form changes
 includes them. This table does not hold a line for every status, nor every reason, that the rules of
 this frame name. A line it lacks is for the lane's list of form changes to give, and what such a
-line says is not this frame's to say (the owner's ruling, A9; ROW-3). A waiting step that OP-9 does
-not let a form show has no exact step to give, so its line is not this table's `waiting` line,
-which names the exact step: it is a line the table lacks, for the lane's list of form changes to
-give (A9; OP-9). A status that occurs in a run
+line says is not this frame's to say (the control room's call, told to the owner, within the one
+fix round he ruled, A9 and A13; ROW-3). A waiting step that OP-9 does not let a form show has no
+exact step to give, so its line is not this table's `waiting` line, which names the exact step: it
+is a line the table lacks, for the lane's list of form changes to give (A9; OP-9). A status that
+occurs in a run
 and has a line neither in this table nor in the lane's list of form changes fails the build of every
 form that lists operations.
 
