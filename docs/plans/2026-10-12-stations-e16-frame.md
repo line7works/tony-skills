@@ -610,7 +610,10 @@ and each ending renders a status form from the manifest and the journal, but for
 checks, which writes only what SEC-12 allows before the startup checks pass. What SEC-12 has
 withheld is rendered in that form as SEC-12 says, never as text. An invocation that RUN-10 has end
 with no effect ends in the way the run already stood, `waiting` or `stopped`, and its status form
-says so. Before a run's first go there is no open run, nothing to resume, and none of the five. An
+says so. So does a resume on his current word while a re-plan's manifest awaits its go, which
+applies nothing and ends as the run stood, `waiting`, its status form saying that a new plan awaits
+his go (the owner's ruling, A130). Before a run's first go there is no open run, nothing to resume,
+and none of the five. An
 invocation that ends then ends in one of two ways: with its preview rendered, awaiting his go; or
 `refused`, where the gate fails (RUN-1), a name fails its check, a lock is held or a run is open
 (RUN-2, RUN-3), a planning stop is met (RUN-7), an input is refused (SEC-9), an answer is lacking
@@ -663,7 +666,9 @@ resume; the same planning stop in a re-plan's look ends `stopped` with the manif
 unchanged; both are run with each cause RUN-7 lists, a provider showing the project under another
 name and a secret that no file on the machine holds among them; a summons with no word on a run
 left `waiting` ends `waiting`, and one on a run left `stopped` ends `stopped`, each with the status
-form rendered and no effect call; a fixture with a `left` step ends
+form rendered and no effect call; a resume on his current word on a run left `waiting` while a
+re-plan's manifest awaits its go ends `waiting`, with no effect call and its status form saying that
+a new plan awaits his go (the owner's ruling, A130); a fixture with a `left` step ends
 `ended with exceptions` with it listed; a closed run ends `closed`; for a run with a go on record no
 ending other than these five is ever recorded. A caught value on each early path: a fixture run has
 caught, with its disproof on record, its own id, and in a second pass a word of the tool's fixed
@@ -1003,7 +1008,9 @@ has one mode, fixed in the manifest and shown in the preview.
 | answer | his typed answer, one of the answers the row allows, is recorded with its value | does not arise | `answered` |
 
 Until it is complete the operation is `waiting`. Every waiting step in read-back mode is read again
-at the start of each invocation but a close, after its provider's identity read (SEC-12's table).
+at the start of each invocation but a close and a resume on his current word while a re-plan's
+manifest awaits its go (the owner's ruling, A130), after its provider's identity read
+(SEC-12's table).
 The step shown to him is built from safe content (SEC-1) by a fresh read each time, never from an
 earlier form and never by repeating an effect. Where he must read
 content before he answers, the row gives a review file (SEC-6). An answer that is not on the row's
@@ -1029,7 +1036,10 @@ read this invocation did not make, or made and got no answer from, is in no form
 renders, neither from the manifest's text nor from an earlier form's: where the runner refuses
 that read, and the invocation ends `stopped` on the refusal (SEC-3's refusals row); where an
 earlier step's stop ends the invocation before this step is read, and it ends `stopped` on that
-stop; and at a close, which makes no read (SEC-12's table), and ends `closed` (RUN-13). Where the
+stop; at a close, which makes no read (SEC-12's table), and ends `closed` (RUN-13); and at a
+resume on his current word while a re-plan's manifest awaits its go, which makes no identity read
+and no read of a waiting step and ends `waiting`, as the run stood (RUN-12; the owner's ruling,
+A130). Where the
 identity read of the step's provider, made before the step's read, fails, is partial or runs out of
 time, so that the step's read is not made, the step is in no form and the run ends `stopped`, its
 form naming the identity read that failed, with no effect applied: a stop that rests on GOV-1,
@@ -1073,7 +1083,10 @@ failing ends it `stopped` with no effect call and the step in no form; and while
 manifest awaits his go, a summons with no word whose read of a waiting step the runner refuses
 renders that step in neither manifest's text nor an earlier form's. A waiting step on his word and a
 waiting owner answer: a resume, a summons with no word and a close each render it from its row's
-safe content, and no fake records a read of it.
+safe content, and no fake records a read of it. A resume on his current word while a re-plan's
+manifest awaits its go, a step left `waiting` in read-back mode: no fake records an identity read or
+a read of that step, no effect call is made, the run ends `waiting` as it stood, the step is in no
+form, and the form says that a new plan awaits his go (the owner's ruling, A130).
 
 **OP-10. Adopt.** Adoption is offered for one output and for no other: the local project folder (the
 owner's ruling, A6). An adopt is in a manifest only because the owner's own input names that folder
@@ -2424,7 +2437,7 @@ fingerprint in a lock, and once the keying value.
 | a first look of a sunrise or a sunset | RUN-1, RUN-5 | the whole look; within it, the journal's record of a run's opening in every run directory, read only as RUN-5 says, and the journals of the key's earlier runs that read finds, each after that run's disproof read; a secret only from a file on this machine, and where none holds it the look ends as a planning stop (A23) | fixed text | its forms, the CLI's output and its manifest; no journal before a go (RUN-12) |
 | a first look of a restore | RUN-1, RUN-5, EV-7 | the whole look; within it, the journal's record of a run's opening in every run directory, read only as RUN-5 says, and the journals of the key's earlier runs that read finds, each after that run's disproof read; of the latest retiring run among them, the records EV-7 needs | fixed text | the same |
 | the invocation that records a go and runs operations | RUN-9 | where the look was made by an earlier invocation, what RUN-10 (b) compares and OP-9's reads; otherwise nothing further | fixed text | the journal, its forms and the CLI's output |
-| a resume on his current word | RUN-10 | what RUN-10 (b) compares (each provider's identity among it) and OP-9's reads | fixed text | the same |
+| a resume on his current word | RUN-10 | what RUN-10 (b) compares (each provider's identity among it) and OP-9's reads; while a re-plan's manifest awaits its go, none of these: no identity read and no read of a waiting step (the owner's ruling, A130), and no other read RUN-10 (b) compares, since (b) bears on applying an effect and this resume applies none (RUN-10) | fixed text | the same |
 | a summons with no word or a stale one, the first after a kill included: it renders status and ends | RUN-10 | for each provider that has a waiting read-back step, its identity read and that step's read (OP-9); no planning read | fixed text | the journal, the status form and the CLI's output |
 | a resume that finds its context changed | RUN-10 (b) | what RUN-10 (b) compares, and then nothing: it ends asking for a re-plan | fixed text | the status form and the CLI's output |
 | a re-plan | RUN-11 | the whole look | fixed text | the journal, its forms, the CLI's output and the new manifest |
@@ -2536,7 +2549,9 @@ locks' records, the record of open runs, its run directory, its disproof records
 points to, and the env file its manifest shows the connection is read from. A refusal at a first
 lock or at the early look records no read of the project; one at a later lock or at the second look
 records the alias reads and no other read of the project; a status-only summons records, beyond the
-common reads, the identity read and the waiting step's read, and no planning read. The go: a look
+common reads, the identity read and the waiting step's read, and no planning read; and a resume on
+his current word while a re-plan's manifest awaits its go records no provider call and no runner use
+(the owner's ruling, A130). The go: a look
 saves a description, and the fixture's hosting token is then set to that same text. The invocation
 given his go finds it in its disproof read, records no go, writes no journal record, opens no run
 and ends `refused`, with the fixed words in its refusal form and the text in no output; the next
