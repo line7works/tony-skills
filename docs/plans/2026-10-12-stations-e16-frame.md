@@ -207,8 +207,9 @@ opened: the go ends `refused` (RUN-12), its locks released as it ends, that name
 no lock's file of its own left, its form saying in the tool's fixed words that the project now shows
 another name and naming the private file that holds it, and his next summons starts a new look that
 reads that name. It is a stop the owner ruled on its own (A76). A go summons that carries a name
-whose key that look did not hold ends the same way; that case rests on A76, and the owner was not
-asked of it apart. Where the go's alias reads show fewer name forms than that look's did, so that
+whose key that look did not hold ends the same way; that case is the frame's reading, his to change
+by a word, his ruling, A76, being for a name the go's alias reads show (A124). Where the go's alias
+reads show fewer name forms than that look's did, so that
 the go holds fewer keys than its manifest records, no go is recorded and no run is opened: found in
 the same way, once its startup checks have passed, the go ends `refused` (RUN-12), its form saying
 in the tool's fixed words that the project no longer shows a name its look showed and naming the
