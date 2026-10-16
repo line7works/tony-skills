@@ -611,8 +611,10 @@ checks, which writes only what SEC-12 allows before the startup checks pass. Wha
 withheld is rendered in that form as SEC-12 says, never as text. An invocation that RUN-10 has end
 with no effect ends in the way the run already stood, `waiting` or `stopped`, and its status form
 says so. So does a resume on his current word while a re-plan's manifest awaits its go, which
-applies nothing and ends as the run stood, `waiting`, its status form saying that a new plan awaits
-his go (the owner's ruling, A130). Before a run's first go there is no open run, nothing to resume,
+applies nothing and ends as the run stood, `waiting` or `stopped`, its status form saying that a new
+plan awaits his go (the owner's ruling, A130; that a run that stood `stopped` ends `stopped` is the
+frame's reading of it, his to change by a word, A131). Before a run's first go there is no open run,
+nothing to resume,
 and none of the five. An
 invocation that ends then ends in one of two ways: with its preview rendered, awaiting his go; or
 `refused`, where the gate fails (RUN-1), a name fails its check, a lock is held or a run is open
@@ -668,7 +670,11 @@ name and a secret that no file on the machine holds among them; a summons with n
 left `waiting` ends `waiting`, and one on a run left `stopped` ends `stopped`, each with the status
 form rendered and no effect call; a resume on his current word on a run left `waiting` while a
 re-plan's manifest awaits its go ends `waiting`, with no effect call and its status form saying that
-a new plan awaits his go (the owner's ruling, A130); a fixture with a `left` step ends
+a new plan awaits his go (the owner's ruling, A130); and one on a run left `stopped`, a step waiting
+on him beside the stop and a re-plan's manifest awaiting its go, records no provider call by any
+fake and no runner use, makes no effect call and ends `stopped`, as it stood, the step in no form
+and its status form saying that a new plan awaits his go (the frame's reading of the owner's
+ruling, A130, his to change by a word, A131); a fixture with a `left` step ends
 `ended with exceptions` with it listed; a closed run ends `closed`; for a run with a go on record no
 ending other than these five is ever recorded. A caught value on each early path: a fixture run has
 caught, with its disproof on record, its own id, and in a second pass a word of the tool's fixed
@@ -1038,8 +1044,9 @@ that read, and the invocation ends `stopped` on the refusal (SEC-3's refusals ro
 earlier step's stop ends the invocation before this step is read, and it ends `stopped` on that
 stop; at a close, which makes no read (SEC-12's table), and ends `closed` (RUN-13); and at a
 resume on his current word while a re-plan's manifest awaits its go, which makes no identity read
-and no read of a waiting step and ends `waiting`, as the run stood (RUN-12; the owner's ruling,
-A130). Where the
+and no read of a waiting step and ends as the run stood, `waiting` or `stopped` (RUN-12; the
+owner's ruling, A130; the frame's reading of it for a run that stood `stopped`, his to change by a
+word, A131). Where the
 identity read of the step's provider, made before the step's read, fails, is partial or runs out of
 time, so that the step's read is not made, the step is in no form and the run ends `stopped`, its
 form naming the identity read that failed, with no effect applied: a stop that rests on GOV-1,
