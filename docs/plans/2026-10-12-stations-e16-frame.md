@@ -49,6 +49,8 @@ These name things. They carry no rule; every rule is in Part 3.
 | go | the owner's typed word approving a manifest |
 | attempt | one making of a check, recorded on its own |
 | declaration | what a provider module states beforehand about one command: its arguments, its environment, its inputs and its result |
+| barred character | a control character (Unicode's category Cc), a format character (category Cf, the zero-width and direction marks among them), or a line break of any kind (each character at which the tool's Python breaks a line, `str.splitlines`), the line and paragraph separators U+2028 and U+2029 among them. The categories are those of the Unicode database of the Python that runs the tool. One set, shared by a secret's alphabet (SEC-4; the owner's ruling, A142) and a project's name (RUN-2; the owner's ruling, A144) |
+| white space | each character the tool's Python holds as white space (`str.isspace`), the space, the tab and the no-break space among them |
 
 ## Part 3. The rules
 
@@ -173,7 +175,7 @@ RUN-1's second step runs in this order, all of it before a run directory is open
 
 | Part | What is done | What it reads |
 |---|---|---|
-| (a) the name check | every name the summons carries, the one it was summoned with and each further name the owner gave, is checked in memory: it must hold no entry of the register, into which the invocation first reads each secret SEC-2 lets it read without the project (the hosting token). It must also hold no slash, be neither "." nor "..", and hold no ".." as a part between slashes (the owner's ruling, A135). A name that fails is refused with the tool's fixed text: nothing of it is written, in any form, no lock is taken and nothing is created | the token's channel; nothing of the project |
+| (a) the name check | every name the summons carries, the one it was summoned with and each further name the owner gave, is checked in memory: it must hold no entry of the register, into which the invocation first reads each secret SEC-2 lets it read without the project (the hosting token). It must also hold no slash, be neither "." nor "..", and hold no ".." as a part between slashes (the owner's ruling, A135). Nor may it hold no letter or digit, which is to fold to no key; begin with a hyphen; or hold a backslash or a barred character (Part 2). A space is allowed (the owner's ruling, A144). The command line's own usage error for a name that folds to no key gives way to this refusal. A name that fails is refused with the tool's fixed text: nothing of it is written, in any form, no lock is taken and nothing is created | the token's channel; nothing of the project |
 | (b) the first locks | the lock of the key of each of those names, in sorted order. Where the machine has no keying value yet, it is made now, by a create that fails if another invocation made it first | each lock's own record |
 | (c) the early look for an open run | under the keys of (b). A new summons that finds one is refused here (RUN-3). A summons that continues a run takes from the record the other keys that run is open under, and their locks, in sorted order; one that carries a name whose key that run is not open under is turned away here, as the paragraph below says | the record of open runs; nothing of the project |
 | (d) the alias reads | for a new summons, which is one that continues no open run, and for a re-plan, and for no other: the reads of this machine's own files that the lane's rows declare as showing another name form of the project, made in-process, with no runner and no provider | those files, and no other thing of the project |
@@ -277,7 +279,12 @@ holds a slash, and in further passes with the name ".", with the name ".." and w
 holds ".." as a part between slashes, and a go summons and a summons with a further name each
 carrying one of them, each end refused with the tool's fixed text, no lock taken, nothing written
 in the fixture home and no call recorded by any fake, and a name that holds none of them is accepted
-(the owner's ruling, A135); a summons whose name is a canary that
+(the owner's ruling, A135); so too, in each of those four places, a name that holds no letter or
+digit ("...", one space, no character at all), a name that begins with a hyphen ("---" among them),
+and a name that holds a backslash, a control character, a tab, a line break of each kind, the line
+or the paragraph separator, a zero-width mark or a direction mark, each refused with the tool's fixed
+text and no child started; through the shipped start "---" as the name meets that refusal and not
+the usage error; and a name that holds a space is accepted (the owner's ruling, A144); a summons whose name is a canary that
 equals no secret the tool can read before the project takes its locks and, after its go, is recorded
 as open, and the canary and its folded form, whole and in each form SEC-11 names, are in no lock's
 file name, no lock's record and not in the record of open runs, which hold fingerprints and run ids
@@ -1816,7 +1823,16 @@ A provider module declares, for each command, its result fields. Each field has:
 in the tool's structured answer it is read from; one type from the table below; for each result the
 command can give, whether the field is required in it; and one of four dispositions. The frame reads
 a field only from its declared place, never by searching the tool's text, and keeps nothing that is
-not declared.
+not declared. One reading bends the first of these, for a secret alone (the owner's ruling, PS48,
+A145): where the tool's answer cannot be decoded whole, it is read as the decoder reads it, its
+bytes as UTF-8 up to the first that is not, then member by member from its start, each member's name
+and value decoded whole, up to the first member that cannot be, which is the damage; nothing past
+the damage is read. A top-level member before the damage, named for a declared secret field's place
+and whose value is a complete text, stands at that field's place, and the custody this rule gives
+below holds for it; where a name stands more than once, the last before the damage is the one. No
+other member of such an answer is kept, a member of another name is decoded only to step past it,
+the text is never searched for a value-shaped string, and the result stays `malformed`. Where no such
+member stands, nothing stands at the place.
 
 | Disposition | What the frame does with the value |
 |---|---|
@@ -1833,7 +1849,7 @@ not declared.
 | flag | true or false | fixed | it is one of those two words, and what is kept is the tool's own word |
 | count | a non-negative integer | equal, held | it equals a number the tool counted or measured itself, or a number safe on record |
 | time | a timestamp in one registered form | held | never. A date or a limit in a form is the tool's own clock, its fixed text, or a fact measured beforehand (the catalog's M3) |
-| id | the provider's identifier: an alphabet and a length limit the module registers | equal, held, secret | it equals an id that is safe on record. An id a provider made is never that, so it is held |
+| id | the provider's identifier: an alphabet and a length limit the module registers. Where the field is secret, the alphabet admits no white space and no barred character (Part 2); a declaration whose secret field's registered alphabet admits any fails its manifest build, and the row and the provider are named (the owner's ruling, A142) | equal, held, secret | it equals an id that is safe on record. An id a provider made is never that, so it is held |
 | name | a key name or a resource name: letters, digits and the punctuation the module registers, with a length limit | fixed, equal, held | it is on the row's fixed list (the required key names, the environment names), or equals a name that is safe by where it came from, or equals a name in his settings |
 | hash | a fingerprint in a registered form | equal, held | it equals an address the tool computed itself (a commit it made or read on this machine) |
 | address | a link with no user part and no fragment | fixed, equal, held, secret | its whole text is fixed in the declaration, or it equals an address the tool built from safe content. Any other goes to a private file (the owner's ruling, A11, for a provider link that carries a code; a link with no code that is neither fixed nor built from safe content goes there by the frame's reading, his to change by a word, A124) |
@@ -1848,8 +1864,8 @@ record is written where the search finds it; and the receipt is given, all as SE
 result has more than one secret field, that holds for each of them, and what becomes of one changes
 nothing for another. One such value is not kept: one that fails its own validator and is under the
 least length. The least length is eight bytes. It is counted on what the tool read at the field's
-place in the tool's structured answer, in UTF-8, with white space at either end left out of the
-count. For a text that is the text itself, without the marks that enclose it in the answer. For a
+place in the tool's structured answer, in UTF-8, with white space (Part 2; A142) at either end left
+out of the count. For a text that is the text itself, without the marks that enclose it in the answer. For a
 value that is not a text, which is a number, a truth value, a list or an object, it is the whole of
 that value as the answer writes it. Where nothing stands at the place, or what stands there is the
 answer's own word for no value, there is no value to count: nothing is kept, and the receipt says
@@ -1956,7 +1972,21 @@ in the fixture's saved inputs. The journal then holds the receipt-due record, wh
 the disproof record, which refers to the second field's protected record; and two receipts, one for
 each field, in that order. Both values are in their protected records and in the register; the run
 is `stopped` on the disproof; and the next status form holds the fixed words in the description's
-place.
+place. A secret's alphabet (the owner's ruling, A142): a secret field whose registered alphabet
+admits a space, a tab, a line break (written as itself or as its escape), the line or the paragraph
+separator, a no-break space, a control character, a zero-width mark, a direction mark, the class of
+white space, a range that reaches the control characters, or a class that admits all but some,
+fails its manifest build naming the row and the provider, and a first look over it ends `refused`
+with no child started and no manifest written; a second secret field, and the secret field of a
+second command, are each checked; the shipped declarations' secret fields, which declare `a-z0-9`,
+build as before, and so does a held name field whose alphabet holds a space. A damaged answer (the
+owner's ruling, PS48, A145): beside a listed exit and an unlisted one, a complete secret member
+before the damage (an answer cut off after it, a member of another name before it, damage that is
+no JSON after it, bytes that are not UTF-8 after it) is kept as from a whole answer, a failing value
+at the least length among them; no other field is kept and the result is `malformed`. A member
+whose text the damage cuts off, the member after the damage, a value-shaped text under another name,
+the secret's name as a value and not a member, and an answer that is no JSON at all each keep
+nothing, and the register holds no entry.
 
 **SEC-5. Nothing a tool prints is kept or shown** (the owner's ruling, A4, that nothing from the
 tools is shown when one fails, only the reason and the command to rerun; that nothing a tool prints
