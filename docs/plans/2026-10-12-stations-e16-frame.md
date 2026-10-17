@@ -1523,7 +1523,10 @@ alone, whose provider offers no snapshot or hold: the keys read just before and 
 the pull, the two equal, and every key whose value the provider returns present in the copy, stand
 for one; a key whose value the provider never returns is listed apart, as SEC-6 has it, and any
 other difference fails the keep. That shows the keys were whole; a value changed by another during
-the pull is not seen, which is v1's risk, carried under RK18 (A148, A149). What of these a provider returned (the inventory, the
+the pull is not seen, which is v1's risk, carried under RK18 (A148, A149). For a folder of this
+machine copied whole in a row RK18 names (the memory copy), the same holds of the folder's file
+names and fingerprints read just before and again just after the copy, the two equal and equal to
+the copy's own; a file changed and changed back during the copy is v1's risk (A151). What of these a provider returned (the inventory, the
 source's identity) is held (SEC-4): it rests in a protected record and the completion record refers
 to it; the size and the fingerprint are the tool's own measure. Where the whole scope cannot be read
 or established, the keep fails and the run stops; where the look can already see that, it is a
@@ -2468,7 +2471,7 @@ value.
 | a command of the look | arguments and environment of safe content only; a held value by a protected input or not at all | this rule; SEC-3 |
 | a command of an operation | the same | this rule; SEC-3 |
 | a command that reads for one of his steps | the same | this rule; SEC-3, OP-9 |
-| a file the tool publishes outside the run directory | a secret, a held value or protected content only at a place SEC-7 names for it, by the construction SEC-7 gives, and at every one of those: the pulled env file, the hosting link file, each keep in the sunset folder (the dump, the saved hosting env values, the memory copy, a moved launch agent's file), and each thing a restore puts back at its place. Every other file the tool publishes holds safe content only, but for what already stood in that file, which a C3 swap carries unchanged and shows nowhere (A147) | this rule; SEC-7 |
+| a file the tool publishes outside the run directory | a secret, a held value or protected content only at a place SEC-7 names for it, by the construction SEC-7 gives, and at every one of those: the pulled env file, the hosting link file, each keep in the sunset folder (the dump, the saved hosting env values, the memory copy, a moved launch agent's file), and each thing a restore puts back at its place. Every other file the tool publishes holds safe content only, but for what already stood in that file, which a C3 swap carries unchanged and shows nowhere (A147); and, in a row RK18 names, for the files a build's own program writes in staging inside the project folder (a scaffolder's project), and for lines lifted unchanged from one of the project's own files into another, each published as it stands and shown nowhere (A151) | this rule; SEC-7 |
 | the cue | no value: a fixed sound and a fixed line | this rule |
 | an input saved for the run | what SEC-9 has passed | SEC-9 |
 | a protected record | held, secret and protected content | SEC-6, SEC-7 |
@@ -2926,7 +2929,8 @@ RK18 names, a step v1 did itself (the owner's pick, A147): there the read-then-a
 schedule table is read through its listing as SEC-4's protected text and replaced through its own
 tool. A before-test condition on
 something the effect does not change, which the row's construction does not enforce, stays closed in
-every case but the one RK5 names.
+every case but the one RK5 names and the rows RK18 names, where the condition is read just before
+the effect and another's change in between is v1's risk (A151).
 
 Test on fakes: a manifest that holds, as a tool's effect, a read-then-ask on a row RK3 does not
 name, an edit of a schedule table, or a row whose before-test names something its effect does not
