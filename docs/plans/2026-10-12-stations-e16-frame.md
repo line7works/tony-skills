@@ -1864,6 +1864,11 @@ it is read as a field, shown, or searched for a value-shaped string.
 | hash | a fingerprint in a registered form | equal, held | it equals an address the tool computed itself (a commit it made or read on this machine) |
 | address | a link with no user part and no fragment | fixed, equal, held, secret | its whole text is fixed in the declaration, or it equals an address the tool built from safe content. Any other goes to a private file (the owner's ruling, A11, for a provider link that carries a code; a link with no code that is neither fixed nor built from safe content goes there by the frame's reading, his to change by a word, A124) |
 
+A field may be declared a list of one of these types, its place stepping through the list: each
+member is checked by that type's validator, and a list field is held or secret, as declared,
+whatever its members' type would allow, so a member is never kept as safe from the list; a secret
+list enters each member in the register, as a secret field's value (A150).
+
 An undeclared field is dropped. A declared field that fails its validator, a required field that is
 missing, a fixed field off its list, or a fixed field on its list that holds an entry of the
 register, turns the whole result into kind `malformed` with nothing kept, but for one thing: a
