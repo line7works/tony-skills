@@ -1,0 +1,17 @@
+{
+ "at": "2026-01-01T00:00:01Z",
+ "channel": "hosting-token",
+ "h": "2025cb6fd64f774505b3e992b1e3e59fa9f0755a3b5b01a2f8cb5c92ca62262a",
+ "inv": "i-d9beb43890487729",
+ "kind": "disproof",
+ "n": 0,
+ "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+ "rests": {
+  "content": {
+   "end": 4,
+   "file": "../elsewhere",
+   "start": 0
+  }
+ },
+ "source": "channel"
+}

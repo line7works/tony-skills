@@ -1,0 +1,2474 @@
+{
+ "accounts": {
+  "fakehost": "fixture-account"
+ },
+ "already_so": [],
+ "capabilities": [
+  "canary"
+ ],
+ "carried": {},
+ "form_changes": {
+  "a receipt due": "a secret may have been received and lost: operation {operation}, execution {execution}, field {field}",
+  "a safe ground disproved": "a value this run held as safe is withheld ({count} on record)",
+  "answered": "you answered: {what}",
+  "not offered": "not offered by this restore ({reason}): {what}",
+  "not proven, on his word": "runs on your word; it was not proven the retirement's: {what}",
+  "passed": "the check passed: {what}"
+ },
+ "held_things": [],
+ "inputs": {
+  "answers": {},
+  "description": "a fixture project",
+  "flags": {},
+  "input_version": 1
+ },
+ "keys": [
+  "0d0d13b98c11bac223af322f6100a3d08726ee0b757e6459f1c659d384778c79"
+ ],
+ "kind": "sunrise",
+ "locations": {
+  "archive_root": "/home/fixture/home/dev/_archive",
+  "developer_root": "/home/fixture/home/dev",
+  "shortcut_file": "/home/fixture/home/shortcuts.txt"
+ },
+ "manifest_version": 1,
+ "names": [
+  "demo"
+ ],
+ "not_applicable": [],
+ "number": 1,
+ "operations": [
+  {
+   "after_check": "none",
+   "after_test": "none",
+   "answers": "none",
+   "before_test": "none",
+   "commands": "none",
+   "condition": "none",
+   "construction": "none",
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row K1",
+    "status": "the fake row K1"
+   },
+   "id": "K1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "check",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {},
+    "name": "preflight"
+   },
+   "owner_names": "none",
+   "phase": "prepare",
+   "planning_outcome": "in",
+   "planning_test": "none",
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "passes": [
+     {
+      "is": "dir",
+      "path": {
+       "literal": "/home/fixture/home/dev"
+      },
+      "read": "path"
+     }
+    ],
+    "place": {
+     "literal": "/home/fixture/home/dev"
+    },
+    "role": "a folder the run reads",
+    "tracked": [
+     "exists"
+    ]
+   },
+   "tracked_state": {
+    "exists": true,
+    "path": "/home/fixture/home/dev"
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "is": "file",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo/README.md"
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "dir",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo"
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo"
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "files": [
+     {
+      "rel": "README.md",
+      "text": {
+       "literal": "# demo\n"
+      }
+     },
+     {
+      "rel": "docs/notes.txt",
+      "text": {
+       "literal": "a fixture project\n"
+      }
+     }
+    ],
+    "id": "C1",
+    "mode": 493
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row B1",
+    "status": "the fake row B1"
+   },
+   "id": "B1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "build",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {
+     "path": {
+      "literal": "/home/fixture/home/dev/demo"
+     }
+    },
+    "name": "project folder"
+   },
+   "owner_names": "none",
+   "phase": "prepare",
+   "planning_outcome": "in",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "literal": "/home/fixture/home/dev/demo"
+    },
+    "role": "the project folder",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "tracked_state": {
+    "exists": false,
+    "identity": null,
+    "path": "/home/fixture/home/dev/demo"
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "count": 1,
+     "line": {
+      "literal": "alias demo"
+     },
+     "path": {
+      "literal": "/home/fixture/home/shortcuts.txt"
+     },
+     "read": "line"
+    }
+   ],
+   "after_test": [
+    {
+     "line": {
+      "literal": "alias demo"
+     },
+     "path": {
+      "literal": "/home/fixture/home/shortcuts.txt"
+     },
+     "present": true,
+     "read": "line"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "lacks",
+     "line": {
+      "literal": "alias demo"
+     },
+     "path": {
+      "literal": "/home/fixture/home/shortcuts.txt"
+     },
+     "present": false,
+     "read": "line"
+    },
+    {
+     "id": "name",
+     "name": {
+      "literal": "demo"
+     },
+     "on": "other",
+     "read": "name-free"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "edit": {
+     "kind": "append-line",
+     "line": {
+      "literal": "alias demo"
+     }
+    },
+    "id": "C3",
+    "risks": [
+     "RK2",
+     "RK5",
+     "RK13"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row S1",
+    "status": "the fake row S1"
+   },
+   "id": "S1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "project folder",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "file": {
+      "literal": "/home/fixture/home/shortcuts.txt"
+     }
+    },
+    "name": "shortcut"
+   },
+   "owner_names": "none",
+   "phase": "prepare",
+   "planning_outcome": "in",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "literal": "/home/fixture/home/shortcuts.txt"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "the shortcut file before the line was added",
+     "path": {
+      "literal": "/home/fixture/home/shortcuts.txt"
+     },
+     "read": "file",
+     "type": "before-image"
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": {
+    "ordered": false,
+    "placement": "at the end"
+   },
+   "thing": {
+    "identity": "path",
+    "place": {
+     "literal": "/home/fixture/home/shortcuts.txt"
+    },
+    "role": "the shortcut file",
+    "span": true,
+    "tracked": [
+     "exists",
+     "sha256"
+    ]
+   },
+   "tracked_state": {
+    "exists": true,
+    "path": "/home/fixture/home/shortcuts.txt",
+    "sha256": "9c0e79effbb1c349acf9af9918a059016a82c346fe81e4d8a25df5edd6f2ef61"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "line": {
+        "literal": "alias demo"
+       },
+       "path": {
+        "literal": "/home/fixture/home/shortcuts.txt"
+       },
+       "present": false,
+       "read": "line"
+      }
+     ],
+     "after_test": [
+      {
+       "line": {
+        "literal": "alias demo"
+       },
+       "path": {
+        "literal": "/home/fixture/home/shortcuts.txt"
+       },
+       "present": false,
+       "read": "line"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "count": 1,
+       "id": "has",
+       "line": {
+        "literal": "alias demo"
+       },
+       "path": {
+        "literal": "/home/fixture/home/shortcuts.txt"
+       },
+       "read": "line"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "edit": {
+       "kind": "remove-line",
+       "line": {
+        "literal": "alias demo"
+       }
+      },
+      "id": "C3",
+      "risks": [
+       "RK2"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "safe"
+      ],
+      "resting_places": [],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "safe"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the fake row S1-reverse",
+      "status": "the fake row S1-reverse"
+     },
+     "id": "S1-reverse",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": "none",
+     "output": {
+      "fields": {},
+      "name": "out-S1-reverse"
+     },
+     "owner_names": "none",
+     "phase": "prepare",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "literal": "/home/fixture/home/shortcuts.txt"
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "literal": "/home/fixture/home/shortcuts.txt"
+      },
+      "role": "the shortcut file",
+      "span": true,
+      "tracked": [
+       "exists",
+       "sha256"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": "scope.md"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "absent",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-scope.md"
+     },
+     "read": "path"
+    },
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": "scope.md"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "there",
+     "is": "file",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-scope.md"
+     },
+     "read": "path"
+    },
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": "scope.md"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "id": "C7",
+    "risks": [
+     "RK4"
+    ],
+    "to": {
+     "path": [
+      {
+       "output": "project folder.path"
+      },
+      {
+       "literal": "scope.md"
+      }
+     ]
+    }
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row M1",
+    "status": "the fake row M1"
+   },
+   "id": "M1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "move",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "project folder",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": "scope.md"
+       }
+      ]
+     }
+    },
+    "name": "moved document"
+   },
+   "owner_names": "none",
+   "phase": "prepare",
+   "planning_outcome": "in",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-scope.md"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "where the document was taken from",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "literal": "/home/fixture/home/dev/demo-scope.md"
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "literal": "/home/fixture/home/dev/demo-scope.md"
+    },
+    "role": "the staged document",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "is": "file",
+       "path": {
+        "literal": "/home/fixture/home/dev/demo-scope.md"
+       },
+       "read": "path"
+      }
+     ],
+     "after_test": [
+      {
+       "is": "absent",
+       "path": {
+        "path": [
+         {
+          "output": "project folder.path"
+         },
+         {
+          "literal": "scope.md"
+         }
+        ]
+       },
+       "read": "path"
+      },
+      {
+       "is": "file",
+       "path": {
+        "literal": "/home/fixture/home/dev/demo-scope.md"
+       },
+       "read": "path"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "id": "there",
+       "is": "file",
+       "path": {
+        "path": [
+         {
+          "output": "project folder.path"
+         },
+         {
+          "literal": "scope.md"
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "id": "C7",
+      "risks": [
+       "RK4"
+      ],
+      "to": {
+       "literal": "/home/fixture/home/dev/demo-scope.md"
+      }
+     },
+     "content_classes": {
+      "reads": [
+       "safe"
+      ],
+      "resting_places": [],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "safe"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the fake row M1-reverse",
+      "status": "the fake row M1-reverse"
+     },
+     "id": "M1-reverse",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "move",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": "none",
+     "output": {
+      "fields": {},
+      "name": "out-M1-reverse"
+     },
+     "owner_names": "none",
+     "phase": "prepare",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "path": [
+         {
+          "output": "project folder.path"
+         },
+         {
+          "literal": "scope.md"
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "path": [
+        {
+         "output": "project folder.path"
+        },
+        {
+         "literal": "scope.md"
+        }
+       ]
+      },
+      "role": "the staged document",
+      "tracked": [
+       "exists",
+       "identity"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "command": "by-id",
+     "equals": "active",
+     "field": "state",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "id": "free",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "commands": [
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [
+        "not-found"
+       ],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 0,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "disposition": "fixed",
+        "list": [
+         "active",
+         "paused",
+         "archived",
+         "connected"
+        ],
+        "name": "state",
+        "place": [
+         "state"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "state"
+       },
+       {
+        "alphabet": "a-zA-Z0-9._ -",
+        "disposition": "equal",
+        "equals": {
+         "param": "name"
+        },
+        "max_length": 80,
+        "name": "name",
+        "place": [
+         "name"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "name"
+       },
+       {
+        "alphabet": "a-z0-9",
+        "disposition": "held",
+        "max_length": 64,
+        "name": "id",
+        "place": [
+         "id"
+        ],
+        "required_in": [],
+        "type": "id"
+       }
+      ],
+      "provider": "fakehost",
+      "template": [
+       {
+        "literal": "get"
+       },
+       {
+        "literal": "--name"
+       },
+       {
+        "param": "name"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakehost",
+      "trace_flags": [
+       "--debug",
+       "--verbose",
+       "--trace"
+      ]
+     },
+     "name": "look",
+     "params": {
+      "name": {
+       "literal": "demo"
+      }
+     },
+     "use": "fakehost.get"
+    },
+    {
+     "declaration": {
+      "alternatives": [
+       "terms"
+      ],
+      "definite": {
+       "refusals": [
+        "conflict",
+        "terms"
+       ],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 1,
+      "exits": {
+       "0": "success",
+       "4": "conflict",
+       "6": "terms"
+      },
+      "fields": [
+       {
+        "alphabet": "a-z0-9",
+        "disposition": "held",
+        "max_length": 64,
+        "name": "id",
+        "place": [
+         "id"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "id"
+       },
+       {
+        "alphabet": "a-zA-Z0-9._ -",
+        "disposition": "equal",
+        "equals": {
+         "param": "name"
+        },
+        "max_length": 80,
+        "name": "name",
+        "place": [
+         "name"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "name"
+       },
+       {
+        "disposition": "fixed",
+        "list": [
+         "active",
+         "paused",
+         "archived",
+         "connected"
+        ],
+        "name": "state",
+        "place": [
+         "state"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "state"
+       }
+      ],
+      "provider": "fakehost",
+      "template": [
+       {
+        "literal": "create"
+       },
+       {
+        "literal": "--kind"
+       },
+       {
+        "param": "kind"
+       },
+       {
+        "literal": "--name"
+       },
+       {
+        "param": "name"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakehost",
+      "trace_flags": [
+       "--debug",
+       "--verbose",
+       "--trace"
+      ]
+     },
+     "name": "make",
+     "params": {
+      "kind": {
+       "literal": "repo"
+      },
+      "name": {
+       "literal": "demo"
+      }
+     },
+     "use": "fakehost.create"
+    },
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [
+        "not-found"
+       ],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 0,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "disposition": "fixed",
+        "list": [
+         "active",
+         "paused",
+         "archived",
+         "connected"
+        ],
+        "name": "state",
+        "place": [
+         "state"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "state"
+       },
+       {
+        "alphabet": "a-z0-9",
+        "disposition": "held",
+        "max_length": 64,
+        "name": "id",
+        "place": [
+         "id"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "id"
+       }
+      ],
+      "protected_inputs": [
+       {
+        "accepts": "held field",
+        "slot": "idfile"
+       }
+      ],
+      "provider": "fakehost",
+      "template": [
+       {
+        "literal": "get"
+       },
+       {
+        "literal": "--id-file"
+       },
+       {
+        "slot": "idfile"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakehost",
+      "trace_flags": [
+       "--debug",
+       "--verbose",
+       "--trace"
+      ]
+     },
+     "name": "by-id",
+     "params": {
+      "idfile": {
+       "output": "remote.id"
+      }
+     },
+     "use": "fakehost.get-by-id"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "make",
+    "document": "fakehost keeps a name unique in an account (the fake's own document)",
+    "id": "C2",
+    "id_field": "id"
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row C1",
+    "status": "the fake row C1"
+   },
+   "id": "C1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "create",
+   "lost_answer": {
+    "document": "fakehost keeps a name unique in an account",
+    "way": "provider-unique"
+   },
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "project folder",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "id": {
+      "held": "id"
+     },
+     "name": {
+      "literal": "demo"
+     }
+    },
+    "name": "remote"
+   },
+   "owner_names": "none",
+   "phase": "remote",
+   "planning_outcome": "in",
+   "planning_test": [
+    {
+     "command": "look",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "provider id",
+    "role": "a thing at the fake host"
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": "none",
+   "after_test": "none",
+   "answers": "none",
+   "before_test": "none",
+   "commands": "none",
+   "condition": "none",
+   "construction": "none",
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row K2",
+    "status": "the fake row K2"
+   },
+   "id": "K2",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "check",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "project folder",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {},
+    "name": "scanned"
+   },
+   "owner_names": "none",
+   "phase": "remote",
+   "planning_outcome": "in",
+   "planning_test": "none",
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "passes": [
+     {
+      "is": "file",
+      "path": {
+       "path": [
+        {
+         "output": "project folder.path"
+        },
+        {
+         "literal": "README.md"
+        }
+       ]
+      },
+      "read": "path"
+     }
+    ],
+    "place": {
+     "path": [
+      {
+       "output": "project folder.path"
+      },
+      {
+       "literal": "README.md"
+      }
+     ]
+    },
+    "role": "a folder the run reads",
+    "tracked": [
+     "exists",
+     "sha256"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "read-new",
+     "field": "ref",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "read-new",
+     "field": "ref",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "read-old",
+     "field": "ref",
+     "id": "old",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 0,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "alphabet": "a-zA-Z0-9._ -",
+        "disposition": "equal",
+        "equals": {
+         "param": "expect"
+        },
+        "max_length": 80,
+        "name": "ref",
+        "place": [
+         "ref"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "name"
+       }
+      ],
+      "provider": "fakegit",
+      "template": [
+       {
+        "literal": "ref"
+       },
+       {
+        "literal": "--ref"
+       },
+       {
+        "param": "ref"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakegit",
+      "trace_flags": [
+       "--verbose"
+      ]
+     },
+     "name": "read-old",
+     "params": {
+      "expect": {
+       "literal": "none"
+      },
+      "ref": {
+       "literal": "main"
+      }
+     },
+     "use": "fakegit.ref"
+    },
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 0,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "alphabet": "a-zA-Z0-9._ -",
+        "disposition": "equal",
+        "equals": {
+         "param": "expect"
+        },
+        "max_length": 80,
+        "name": "ref",
+        "place": [
+         "ref"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "name"
+       }
+      ],
+      "provider": "fakegit",
+      "template": [
+       {
+        "literal": "ref"
+       },
+       {
+        "literal": "--ref"
+       },
+       {
+        "param": "ref"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakegit",
+      "trace_flags": [
+       "--verbose"
+      ]
+     },
+     "name": "read-new",
+     "params": {
+      "expect": {
+       "literal": "c1"
+      },
+      "ref": {
+       "literal": "main"
+      }
+     },
+     "use": "fakegit.ref"
+    },
+    {
+     "declaration": {
+      "changes_repository": true,
+      "definite": {
+       "refusals": [
+        "conflict"
+       ],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 1,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "alphabet": "a-zA-Z0-9._ -",
+        "disposition": "equal",
+        "equals": {
+         "param": "new"
+        },
+        "max_length": 80,
+        "name": "ref",
+        "place": [
+         "ref"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "name"
+       }
+      ],
+      "provider": "fakegit",
+      "template": [
+       {
+        "literal": "cas"
+       },
+       {
+        "literal": "--ref"
+       },
+       {
+        "param": "ref"
+       },
+       {
+        "literal": "--new"
+       },
+       {
+        "param": "new"
+       },
+       {
+        "literal": "--old"
+       },
+       {
+        "param": "old"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakegit",
+      "trace_flags": [
+       "--verbose"
+      ]
+     },
+     "name": "swap",
+     "params": {
+      "new": {
+       "literal": "c1"
+      },
+      "old": {
+       "literal": "none"
+      },
+      "ref": {
+       "literal": "main"
+      }
+     },
+     "use": "fakegit.cas"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "swap",
+    "id": "C4"
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row G1",
+    "status": "the fake row G1"
+   },
+   "id": "G1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "remote",
+     "treatment": "then not applicable"
+    },
+    {
+     "level": "passed",
+     "output": "scanned",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "ref": {
+      "literal": "c1"
+     }
+    },
+    "name": "pushed"
+   },
+   "owner_names": "none",
+   "phase": "remote",
+   "planning_outcome": "in",
+   "planning_test": [
+    {
+     "command": "read-old",
+     "field": "ref",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": [
+    "swap"
+   ],
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "after_word": "c1",
+    "before_word": "none",
+    "identity": "named value",
+    "role": "a named value of the fake store"
+   },
+   "way_back": {
+    "none": "the row declares none: a push is not taken back"
+   }
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "equals": "paused",
+     "field": "state",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "equals": "paused",
+     "field": "state",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "equals": "active",
+     "field": "state",
+     "id": "was",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [
+        "not-found"
+       ],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 0,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "disposition": "fixed",
+        "list": [
+         "active",
+         "paused",
+         "archived",
+         "connected"
+        ],
+        "name": "state",
+        "place": [
+         "state"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "state"
+       },
+       {
+        "alphabet": "a-zA-Z0-9._ -",
+        "disposition": "equal",
+        "equals": {
+         "param": "name"
+        },
+        "max_length": 80,
+        "name": "name",
+        "place": [
+         "name"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "name"
+       },
+       {
+        "alphabet": "a-z0-9",
+        "disposition": "held",
+        "max_length": 64,
+        "name": "id",
+        "place": [
+         "id"
+        ],
+        "required_in": [],
+        "type": "id"
+       }
+      ],
+      "provider": "fakehost",
+      "template": [
+       {
+        "literal": "get"
+       },
+       {
+        "literal": "--name"
+       },
+       {
+        "param": "name"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakehost",
+      "trace_flags": [
+       "--debug",
+       "--verbose",
+       "--trace"
+      ]
+     },
+     "name": "look",
+     "params": {
+      "name": {
+       "output": "remote.name"
+      }
+     },
+     "use": "fakehost.get"
+    },
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [
+        "conflict",
+        "not-found"
+       ],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 1,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "disposition": "fixed",
+        "list": [
+         "active",
+         "paused",
+         "archived",
+         "connected"
+        ],
+        "name": "state",
+        "place": [
+         "state"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "state"
+       }
+      ],
+      "provider": "fakehost",
+      "template": [
+       {
+        "literal": "set"
+       },
+       {
+        "literal": "--name"
+       },
+       {
+        "param": "name"
+       },
+       {
+        "literal": "--state"
+       },
+       {
+        "param": "state"
+       },
+       {
+        "literal": "--if"
+       },
+       {
+        "param": "if"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakehost",
+      "trace_flags": [
+       "--debug",
+       "--verbose",
+       "--trace"
+      ]
+     },
+     "name": "set",
+     "params": {
+      "if": {
+       "literal": "active"
+      },
+      "name": {
+       "output": "remote.name"
+      },
+      "state": {
+       "literal": "paused"
+      }
+     },
+     "use": "fakehost.set-if"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "set",
+    "conditions": [
+     "was"
+    ],
+    "document": "fakehost refuses a state change when --if does not hold (the fake's own document)",
+    "id": "C5"
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row H1",
+    "status": "the fake row H1"
+   },
+   "id": "H1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "remote",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {},
+    "name": "state-H1"
+   },
+   "owner_names": "none",
+   "phase": "remote",
+   "planning_outcome": "in",
+   "planning_test": [
+    {
+     "command": "look",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "after_word": "paused",
+    "before_word": "active",
+    "identity": "provider id",
+    "role": "a thing at the fake host"
+   },
+   "way_back": {
+    "none": "the row declares none"
+   }
+  },
+  {
+   "after_check": "none",
+   "after_test": "none",
+   "answers": "none",
+   "before_test": "none",
+   "commands": "none",
+   "condition": "none",
+   "construction": "none",
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row O1",
+    "status": "the fake row O1"
+   },
+   "id": "O1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "owner step",
+   "lost_answer": "none",
+   "mode": "on his word",
+   "needs": "none",
+   "output": {
+    "fields": {},
+    "name": "connected"
+   },
+   "owner_names": "none",
+   "phase": "remote",
+   "planning_outcome": "in",
+   "planning_test": "none",
+   "repo_commands": "none",
+   "resolved_mode": "on his word",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": {
+    "step": "connect the fake host by hand"
+   },
+   "span": "none",
+   "thing": {
+    "identity": "provider id",
+    "role": "a thing only the owner can change"
+   },
+   "way_back": {
+    "none": "the row declares none"
+   }
+  },
+  {
+   "after_check": "none",
+   "after_test": "none",
+   "answers": [
+    "use it",
+    "keep the old file"
+   ],
+   "before_test": "none",
+   "commands": "none",
+   "condition": "none",
+   "construction": "none",
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row A1",
+    "status": "the fake row A1"
+   },
+   "id": "A1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "owner answer",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {},
+    "name": "answer-A1"
+   },
+   "owner_names": "none",
+   "phase": "remote",
+   "planning_outcome": "in",
+   "planning_test": "none",
+   "repo_commands": "none",
+   "resolved_mode": "answer",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": {
+    "question": "use the merged file?"
+   },
+   "span": "none",
+   "thing": "none",
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "equals": "made",
+     "field": "made",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "equals": "made",
+     "field": "made",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "equals": "nothing",
+     "field": "made",
+     "id": "was",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 0,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "disposition": "fixed",
+        "list": [
+         "made",
+         "nothing"
+        ],
+        "name": "made",
+        "place": [
+         "made"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "state"
+       }
+      ],
+      "provider": "fakehost",
+      "template": [
+       {
+        "literal": "issued"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakehost",
+      "trace_flags": [
+       "--debug",
+       "--verbose",
+       "--trace"
+      ]
+     },
+     "name": "look",
+     "params": {},
+     "use": "fakehost.issued"
+    },
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 1,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "alphabet": "a-z0-9",
+        "disposition": "secret",
+        "max_length": 64,
+        "name": "token",
+        "place": [
+         "token"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "id"
+       },
+       {
+        "disposition": "fixed",
+        "list": [
+         "issued"
+        ],
+        "name": "state",
+        "place": [
+         "state"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "state"
+       }
+      ],
+      "provider": "fakehost",
+      "template": [
+       {
+        "literal": "issue"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakehost",
+      "trace_flags": [
+       "--debug",
+       "--verbose",
+       "--trace"
+      ]
+     },
+     "name": "issue",
+     "params": {},
+     "use": "fakehost.issue"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "issue",
+    "conditions": [
+     "was"
+    ],
+    "document": "fakehost issues a credential once (the fake's own document)",
+    "id": "C5"
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row X1",
+    "status": "the fake row X1"
+   },
+   "id": "X1",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {},
+    "name": "credential"
+   },
+   "owner_names": "none",
+   "phase": "remote",
+   "planning_outcome": "in",
+   "planning_test": [
+    {
+     "command": "look",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "after_word": "made",
+    "before_word": "nothing",
+    "identity": "provider id",
+    "role": "a credential at the fake host"
+   },
+   "way_back": {
+    "none": "the row declares none"
+   }
+  },
+  {
+   "after_check": [
+    {
+     "is": "file",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-dump.txt"
+     },
+     "read": "path"
+    },
+    {
+     "at_most": 384,
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-dump.txt"
+     },
+     "read": "mode"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "file",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-dump.txt"
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-dump.txt"
+     },
+     "read": "path"
+    }
+   ],
+   "commands": [
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 1,
+      "env": {
+       "FAKEDUMP_PASSFILE": {
+        "class": "private path",
+        "param": "passfile"
+       }
+      },
+      "exits": {
+       "0": "success",
+       "5": "other"
+      },
+      "fields": [
+       {
+        "alphabet": "a-z0-9-",
+        "disposition": "held",
+        "max_length": 64,
+        "name": "identity",
+        "place": [
+         "identity"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "id"
+       },
+       {
+        "disposition": "held",
+        "name": "count",
+        "place": [
+         "count"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "count"
+       }
+      ],
+      "provider": "fakedump",
+      "secret_output": "staging",
+      "template": [
+       {
+        "literal": "dump"
+       },
+       {
+        "literal": "--out"
+       },
+       {
+        "param": "out"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakedump",
+      "trace_flags": [
+       "--verbose"
+      ]
+     },
+     "name": "dump",
+     "params": {},
+     "use": "fakedump.dump"
+    },
+    {
+     "declaration": {
+      "definite": {
+       "refusals": [],
+       "success": [
+        "success"
+       ]
+      },
+      "effects": 0,
+      "exits": {
+       "0": "success",
+       "3": "not-found",
+       "4": "conflict"
+      },
+      "fields": [
+       {
+        "alphabet": "a-z0-9-",
+        "disposition": "held",
+        "max_length": 64,
+        "name": "identity",
+        "place": [
+         "identity"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "id"
+       },
+       {
+        "disposition": "fixed",
+        "list": [
+         "yes",
+         "no"
+        ],
+        "name": "readable",
+        "place": [
+         "readable"
+        ],
+        "required_in": [
+         "success"
+        ],
+        "type": "state"
+       },
+       {
+        "alphabet": "a-zA-Z0-9._ -",
+        "disposition": "held",
+        "max_length": 80,
+        "name": "unreadable",
+        "place": [
+         "unreadable"
+        ],
+        "required_in": [],
+        "type": "name"
+       }
+      ],
+      "provider": "fakedump",
+      "template": [
+       {
+        "literal": "inventory"
+       }
+      ],
+      "time_limit": 20,
+      "tool": "fakedump",
+      "trace_flags": [
+       "--verbose"
+      ]
+     },
+     "name": "inventory",
+     "params": {},
+     "use": "fakedump.inventory"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "builder": "dump",
+    "connection": {
+     "file": {
+      "literal": "/home/fixture/home/dev/demo.env"
+     },
+     "keys": [
+      "DATABASE_URL"
+     ],
+     "slot": "passfile"
+    },
+    "id": "C1",
+    "mode": 384,
+    "out_param": "out",
+    "single_file": true
+   },
+   "content_classes": {
+    "reads": [
+     "secret"
+    ],
+    "resting_places": [
+     "the sunset folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "secret"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row P1",
+    "status": "the fake row P1"
+   },
+   "id": "P1",
+   "keep_scope": {
+    "content_checks": [
+     {
+      "check": "count-lines",
+      "field": "count",
+      "prefix": "TABLE "
+     }
+    ],
+    "inventory_field": "count",
+    "same_state": "the dump tool's own answer carries the inventory of the snapshot it copied",
+    "scope": "every table of the fake database",
+    "source_field": "identity",
+    "source_identity_read": {
+     "command": "inventory",
+     "field": "identity"
+    },
+    "unreadable_read": {
+     "command": "inventory",
+     "field": "unreadable",
+     "kind": "table"
+    }
+   },
+   "keeps_required": "none",
+   "kind": "keep",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-dump.txt"
+     }
+    },
+    "name": "dump"
+   },
+   "owner_names": "none",
+   "phase": "remote",
+   "planning_outcome": "in",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "literal": "/home/fixture/home/dev/demo-dump.txt"
+     },
+     "read": "path"
+    },
+    {
+     "command": "inventory",
+     "equals": "yes",
+     "field": "readable",
+     "id": "scope",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "literal": "/home/fixture/home/dev/demo-dump.txt"
+    },
+    "role": "the database's dump",
+    "secret_read": {
+     "command_to_show": "fakehost write --out <the env file>",
+     "file": {
+      "literal": "/home/fixture/home/dev/demo.env"
+     },
+     "keys": [
+      "DATABASE_URL"
+     ]
+    },
+    "tracked": [
+     "exists",
+     "identity",
+     "sha256"
+    ]
+   },
+   "tracked_state": {
+    "exists": false,
+    "identity": null,
+    "path": "/home/fixture/home/dev/demo-dump.txt",
+    "sha256": null
+   },
+   "way_back": "none"
+  }
+ ],
+ "phases": [
+  "prepare",
+  "remote"
+ ],
+ "run": "sunrise-d860d1415d6eb004",
+ "secret_reads": [
+  {
+   "file": "/home/fixture/home/dev/demo.env",
+   "keys": [
+    "DATABASE_URL"
+   ]
+  }
+ ],
+ "settled_needs": []
+}

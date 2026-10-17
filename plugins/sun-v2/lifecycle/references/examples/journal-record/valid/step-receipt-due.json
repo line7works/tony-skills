@@ -1,0 +1,18 @@
+{
+ "at": "2026-01-01T00:00:26Z",
+ "command": "issue",
+ "execution": 1,
+ "fields": [
+  {
+   "field": "token",
+   "record": "p-f7178cd51a839fad"
+  }
+ ],
+ "h": "1e069a3d87551a8dfd477cd7f99876ddb18721ef16baa6c6f895caa020ad951b",
+ "inv": "i-d9beb43890487729",
+ "kind": "step",
+ "n": 25,
+ "op": "X1",
+ "prev": "f70b598073d5e47e31099c90b4002bf6fcf1bdcae2fdb817a9bb808e1591bd91",
+ "step": "receipt-due"
+}

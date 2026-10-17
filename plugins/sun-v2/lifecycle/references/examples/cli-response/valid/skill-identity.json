@@ -1,0 +1,17 @@
+{
+ "command": "skill-identity",
+ "commit": "no commit holds these files",
+ "commit_by_git": "differs from what the tool holds",
+ "content_sha256": "a46ed6695837952a300f2b0d631a46447f229b511a86f8dd453a17bf6190390e",
+ "exit": 0,
+ "interface_version": 1,
+ "name": "sun-v2",
+ "ok": true,
+ "plugin_version": "0.1.0",
+ "skills": [
+  "sunrise-v2",
+  "sunset-v2"
+ ],
+ "tool": "sun-v2",
+ "version": "0.1.0"
+}

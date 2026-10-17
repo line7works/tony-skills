@@ -1,0 +1,294 @@
+{
+ "after_check": [
+  {
+   "is": "file",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-dump.txt"
+       }
+      ]
+     }
+    ]
+   },
+   "read": "path"
+  },
+  {
+   "at_most": 384,
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-dump.txt"
+       }
+      ]
+     }
+    ]
+   },
+   "read": "mode"
+  }
+ ],
+ "after_test": [
+  {
+   "is": "file",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-dump.txt"
+       }
+      ]
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "answers": "none",
+ "before_test": [
+  {
+   "id": "free",
+   "is": "absent",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-dump.txt"
+       }
+      ]
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "commands": [
+  {
+   "name": "dump",
+   "params": {},
+   "use": "fakedump.dump"
+  },
+  {
+   "name": "inventory",
+   "params": {},
+   "use": "fakedump.inventory"
+  }
+ ],
+ "condition": "none",
+ "construction": {
+  "builder": "dump",
+  "connection": {
+   "file": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": ".env"
+       }
+      ]
+     }
+    ]
+   },
+   "keys": [
+    "DATABASE_URL"
+   ],
+   "slot": "passfile"
+  },
+  "id": "C1",
+  "mode": 384,
+  "out_param": "out",
+  "single_file": true
+ },
+ "content_classes": {
+  "reads": [
+   "secret"
+  ],
+  "resting_places": [
+   "the sunset folder"
+  ],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "secret"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row P1",
+  "status": "the fake row P1"
+ },
+ "id": "P1",
+ "keep_scope": {
+  "content_checks": [
+   {
+    "check": "count-lines",
+    "field": "count",
+    "prefix": "TABLE "
+   }
+  ],
+  "inventory_field": "count",
+  "same_state": "the dump tool's own answer carries the inventory of the snapshot it copied",
+  "scope": "every table of the fake database",
+  "source_field": "identity",
+  "source_identity_read": {
+   "command": "inventory",
+   "field": "identity"
+  },
+  "unreadable_read": {
+   "command": "inventory",
+   "field": "unreadable",
+   "kind": "table"
+  }
+ },
+ "keeps_required": "none",
+ "kind": "keep",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": "none",
+ "output": {
+  "fields": {
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-dump.txt"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "name": "dump"
+ },
+ "owner_names": "none",
+ "phase": "remote",
+ "planning_test": [
+  {
+   "is": "absent",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-dump.txt"
+       }
+      ]
+     }
+    ]
+   },
+   "read": "path"
+  },
+  {
+   "command": "inventory",
+   "equals": "yes",
+   "field": "readable",
+   "id": "scope",
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "identity": "path",
+  "place": {
+   "path": [
+    {
+     "location": "developer_root"
+    },
+    {
+     "text": [
+      {
+       "name": 0
+      },
+      {
+       "literal": "-dump.txt"
+      }
+     ]
+    }
+   ]
+  },
+  "role": "the database's dump",
+  "secret_read": {
+   "command_to_show": "fakehost write --out <the env file>",
+   "file": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": ".env"
+       }
+      ]
+     }
+    ]
+   },
+   "keys": [
+    "DATABASE_URL"
+   ]
+  },
+  "tracked": [
+   "exists",
+   "identity",
+   "sha256"
+  ]
+ },
+ "way_back": "none"
+}

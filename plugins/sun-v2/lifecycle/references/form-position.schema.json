@@ -1,0 +1,21 @@
+{
+ "$id": "sun-v2/form-position.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "additionalProperties": false,
+ "properties": {
+  "position": {
+   "minimum": 0,
+   "type": "integer"
+  },
+  "run": {
+   "pattern": "^(sunrise|sunset|restore)-[0-9a-f]{16}$",
+   "type": "string"
+  }
+ },
+ "required": [
+  "run",
+  "position"
+ ],
+ "title": "The position of a status form: the count of journal records it was rendered from (RUN-10).",
+ "type": "object"
+}

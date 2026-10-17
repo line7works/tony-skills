@@ -1,0 +1,86 @@
+{
+ "after_check": "none",
+ "after_test": "none",
+ "answers": "none",
+ "before_test": "none",
+ "commands": "none",
+ "condition": "none",
+ "construction": "none",
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row K2",
+  "status": "the fake row K2"
+ },
+ "id": "K2",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "check",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": [
+  {
+   "level": "state",
+   "output": "project folder",
+   "treatment": "then not applicable"
+  }
+ ],
+ "output": {
+  "fields": {},
+  "name": "scanned"
+ },
+ "owner_names": "none",
+ "phase": "remote",
+ "planning_test": "none",
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "identity": "path",
+  "passes": [
+   {
+    "is": "file",
+    "path": {
+     "path": [
+      {
+       "output": "project folder.path"
+      },
+      {
+       "literal": "README.md"
+      }
+     ]
+    },
+    "read": "path"
+   }
+  ],
+  "place": {
+   "path": [
+    {
+     "output": "project folder.path"
+    },
+    {
+     "literal": "README.md"
+    }
+   ]
+  },
+  "role": "a folder the run reads",
+  "tracked": [
+   "exists",
+   "sha256"
+  ]
+ },
+ "way_back": "none"
+}

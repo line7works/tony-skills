@@ -1,0 +1,11 @@
+{
+  "name": "sun-v2",
+  "description": "Sunrise and sunset rebuilt around explicit operations: one lifecycle frame (a look, a preview, the owner's go, a journal, resume, a credential guard, fake providers) that both skills run on. The -v2 suffix stays while v1 sun is installed.",
+  "author": {
+    "name": "Tony Coon",
+    "email": "tonycoon@gmail.com"
+  },
+  "homepage": "https://github.com/line7works/tony-skills",
+  "repository": "https://github.com/line7works/tony-skills",
+  "version": "0.1.0"
+}

@@ -1,0 +1,16 @@
+{
+ "command": "resume",
+ "ending": "complete",
+ "exit": 10,
+ "forms": [
+  "/home/fixture/home/.sun-v2/runs/sunrise-d860d1415d6eb004/forms/status-5.txt"
+ ],
+ "interface_version": 1,
+ "lines": [
+  "the run now: complete"
+ ],
+ "plugin_version": "0.1.0",
+ "position": 40,
+ "run": "sunrise-d860d1415d6eb004",
+ "tool": "sun-v2"
+}

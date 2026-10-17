@@ -1,0 +1,30 @@
+{
+ "$id": "sun-v2/preview.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "additionalProperties": false,
+ "properties": {
+  "forms": {
+   "items": {
+    "maxLength": 2048,
+    "type": "string"
+   },
+   "minItems": 1,
+   "type": "array"
+  },
+  "manifest_sha256": {
+   "pattern": "^[0-9a-f]{64}$",
+   "type": "string"
+  },
+  "run": {
+   "pattern": "^(sunrise|sunset|restore)-[0-9a-f]{16}$",
+   "type": "string"
+  }
+ },
+ "required": [
+  "run",
+  "manifest_sha256",
+  "forms"
+ ],
+ "title": "What a look hands back with its preview: the run, the manifest's hash the go is bound to, and the form (RUN-8, RUN-9).",
+ "type": "object"
+}

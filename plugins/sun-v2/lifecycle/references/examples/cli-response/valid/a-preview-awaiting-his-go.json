@@ -1,0 +1,21 @@
+{
+ "command": "look",
+ "cue": {
+  "line": "S U N R I S E",
+  "sound": "/opt/plugins/sun-v2/lifecycle/assets/rise.wav"
+ },
+ "ending": "preview",
+ "exit": 0,
+ "forms": [
+  "/home/fixture/home/.sun-v2/runs/sunrise-d860d1415d6eb004/forms/preview-1.txt"
+ ],
+ "interface_version": 1,
+ "lines": [
+  "The preview is rendered; nothing is done before your go.",
+  "run: sunrise-d860d1415d6eb004"
+ ],
+ "manifest_sha256": "72e29cce9f2a8c7d5e6ebc4666357d00aaa53c99e99f44a7ae7938318852b1b6",
+ "plugin_version": "0.1.0",
+ "run": "sunrise-d860d1415d6eb004",
+ "tool": "sun-v2"
+}

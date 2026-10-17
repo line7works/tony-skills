@@ -1,0 +1,19 @@
+{
+ "command": "look",
+ "ending": "refused",
+ "exit": 4,
+ "findings": [
+  {
+   "entry": "lane",
+   "finding": "no lane has written rows for this kind of run",
+   "row": null
+  }
+ ],
+ "interface_version": 1,
+ "lines": [
+  "The manifest's build failed; nothing was written of it. Each finding:",
+  "row None, entry lane: no lane has written rows for this kind of run"
+ ],
+ "plugin_version": "0.1.0",
+ "tool": "sun-v2"
+}

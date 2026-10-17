@@ -1,0 +1,134 @@
+{
+ "commands": {
+  "dump": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "FAKEDUMP_PASSFILE": {
+     "class": "private path",
+     "param": "passfile"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "5": "other"
+   },
+   "fields": [
+    {
+     "alphabet": "a-z0-9-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "identity",
+     "place": [
+      "identity"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "disposition": "held",
+     "name": "count",
+     "place": [
+      "count"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "count"
+    }
+   ],
+   "secret_output": "staging",
+   "template": [
+    {
+     "literal": "dump"
+    },
+    {
+     "literal": "--out"
+    },
+    {
+     "param": "out"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakedump"
+  },
+  "inventory": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "alphabet": "a-z0-9-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "identity",
+     "place": [
+      "identity"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "disposition": "fixed",
+     "list": [
+      "yes",
+      "no"
+     ],
+     "name": "readable",
+     "place": [
+      "readable"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    },
+    {
+     "alphabet": "a-zA-Z0-9._ -",
+     "disposition": "held",
+     "max_length": 80,
+     "name": "unreadable",
+     "place": [
+      "unreadable"
+     ],
+     "required_in": [],
+     "type": "name"
+    }
+   ],
+   "template": [
+    {
+     "literal": "inventory"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakedump"
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "fakedump",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": [
+  "--verbose"
+ ]
+}

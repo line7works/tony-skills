@@ -1,0 +1,22 @@
+{
+ "at": "2026-01-01T00:00:05Z",
+ "ground": "a",
+ "h": "c7a63b3b78ac2f886eb5a890904e35da9bc6163f2215529ab7362ecfcd9f403b",
+ "inv": "i-d9beb43890487729",
+ "kind": "completion",
+ "n": 4,
+ "observed": {
+  "exists": true,
+  "identity": {
+   "object": 38363872,
+   "volume": 16777232
+  },
+  "path": "/home/fixture/home/dev/demo"
+ },
+ "op": "B1",
+ "prev": "262a17dd5db413c027cb72dbbcb8a6292d62e3d1e2daaf4021b5da1f5e4541cc",
+ "way_back": {
+  "offered": false,
+  "reason": "the row declares none"
+ }
+}

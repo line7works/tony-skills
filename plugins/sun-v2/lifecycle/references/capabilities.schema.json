@@ -1,0 +1,20 @@
+{
+ "$id": "sun-v2/capabilities.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "additionalProperties": false,
+ "properties": {
+  "capabilities": {
+   "items": {
+    "maxLength": 200,
+    "type": "string"
+   },
+   "type": "array",
+   "uniqueItems": true
+  }
+ },
+ "required": [
+  "capabilities"
+ ],
+ "title": "What the harness adapter declares it can do (RUN-5; the contract's E16-14).",
+ "type": "object"
+}

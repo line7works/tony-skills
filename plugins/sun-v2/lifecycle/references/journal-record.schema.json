@@ -1,0 +1,2192 @@
+{
+ "$id": "sun-v2/journal-record.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "oneOf": [
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "closes": {
+     "anyOf": [
+      {
+       "pattern": "^(sunrise|sunset|restore)-[0-9a-f]{16}$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "keys": {
+     "items": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+     },
+     "minItems": 1,
+     "type": "array",
+     "uniqueItems": true
+    },
+    "kind": {
+     "const": "open"
+    },
+    "manifest": {
+     "minimum": 1,
+     "type": "integer"
+    },
+    "manifest_sha256": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "run": {
+     "pattern": "^(sunrise|sunset|restore)-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "run_kind": {
+     "enum": [
+      "sunrise",
+      "sunset",
+      "restore"
+     ]
+    },
+    "word": {
+     "const": "go"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "run",
+    "run_kind",
+    "keys",
+    "manifest",
+    "manifest_sha256",
+    "word",
+    "closes"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "keys": {
+     "items": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+     },
+     "minItems": 1,
+     "type": "array",
+     "uniqueItems": true
+    },
+    "kind": {
+     "const": "go"
+    },
+    "manifest": {
+     "minimum": 2,
+     "type": "integer"
+    },
+    "manifest_sha256": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "word": {
+     "const": "go"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "manifest",
+    "manifest_sha256",
+    "keys",
+    "word"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "word"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "position": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "value": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "word": {
+     "enum": [
+      "go on",
+      "done",
+      "leave it",
+      "answer"
+     ]
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "word",
+    "position"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "after": {
+     "additionalProperties": false,
+     "properties": {
+      "exists": {
+       "type": "boolean"
+      },
+      "identity": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "object": {
+           "type": "integer"
+          },
+          "volume": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "volume",
+          "object"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "mode": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "path": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "sha256": {
+       "anyOf": [
+        {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "target": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "word": {
+       "maxLength": 64,
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "checked": {
+     "items": {
+      "additionalProperties": false,
+      "properties": {
+       "attempt": {
+        "minimum": 1,
+        "type": "integer"
+       },
+       "check": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+        "type": "string"
+       },
+       "subject": {
+        "additionalProperties": false,
+        "properties": {
+         "exists": {
+          "type": "boolean"
+         },
+         "identity": {
+          "anyOf": [
+           {
+            "additionalProperties": false,
+            "properties": {
+             "object": {
+              "type": "integer"
+             },
+             "volume": {
+              "type": "integer"
+             }
+            },
+            "required": [
+             "volume",
+             "object"
+            ],
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "mode": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "path": {
+          "maxLength": 1024,
+          "type": "string"
+         },
+         "sha256": {
+          "anyOf": [
+           {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "target": {
+          "maxLength": 1024,
+          "type": "string"
+         },
+         "word": {
+          "maxLength": 64,
+          "type": "string"
+         }
+        },
+        "required": [],
+        "type": "object"
+       }
+      },
+      "required": [
+       "check",
+       "attempt",
+       "subject"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inputs": {
+     "items": {
+      "additionalProperties": false,
+      "properties": {
+       "fingerprint": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+       },
+       "label": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "record": {
+        "pattern": "^p-[0-9a-f]{16}$",
+        "type": "string"
+       },
+       "type": {
+        "enum": [
+         "before-image",
+         "after-image",
+         "definition",
+         "line",
+         "values",
+         "copy",
+         "held field",
+         "secret field"
+        ]
+       }
+      },
+      "required": [
+       "record",
+       "type",
+       "label",
+       "fingerprint"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "start"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "probe": {
+     "enum": [
+      "ready",
+      "not landed"
+     ]
+    },
+    "start": {
+     "minimum": 1,
+     "type": "integer"
+    },
+    "thing": {
+     "additionalProperties": false,
+     "properties": {
+      "exists": {
+       "type": "boolean"
+      },
+      "identity": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "object": {
+           "type": "integer"
+          },
+          "volume": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "volume",
+          "object"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "mode": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "path": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "sha256": {
+       "anyOf": [
+        {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "target": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "word": {
+       "maxLength": 64,
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "op",
+    "start",
+    "probe",
+    "thing",
+    "after"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "child": {
+     "const": "none created"
+    },
+    "command": {
+     "maxLength": 128,
+     "type": "string"
+    },
+    "execution": {
+     "minimum": 1,
+     "type": "integer"
+    },
+    "field": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "fields": {
+     "items": {
+      "additionalProperties": false,
+      "properties": {
+       "field": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "record": {
+        "pattern": "^p-[0-9a-f]{16}$",
+        "type": "string"
+       }
+      },
+      "required": [
+       "field",
+       "record"
+      ],
+      "type": "object"
+     },
+     "minItems": 1,
+     "type": "array"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "identity": {
+     "anyOf": [
+      {
+       "additionalProperties": false,
+       "properties": {
+        "object": {
+         "type": "integer"
+        },
+        "volume": {
+         "type": "integer"
+        }
+       },
+       "required": [
+        "volume",
+        "object"
+       ],
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "inputs": {
+     "items": {
+      "additionalProperties": false,
+      "properties": {
+       "fingerprint": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+       },
+       "label": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "record": {
+        "pattern": "^p-[0-9a-f]{16}$",
+        "type": "string"
+       },
+       "type": {
+        "enum": [
+         "before-image",
+         "after-image",
+         "definition",
+         "line",
+         "values",
+         "copy",
+         "held field",
+         "secret field"
+        ]
+       }
+      },
+      "required": [
+       "record",
+       "type",
+       "label",
+       "fingerprint"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "keep": {
+     "additionalProperties": false,
+     "properties": {
+      "inventory": {
+       "additionalProperties": false,
+       "properties": {
+        "fingerprint": {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        "label": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "record": {
+         "pattern": "^p-[0-9a-f]{16}$",
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "before-image",
+          "after-image",
+          "definition",
+          "line",
+          "values",
+          "copy",
+          "held field",
+          "secret field"
+         ]
+        }
+       },
+       "required": [
+        "record",
+        "type",
+        "label",
+        "fingerprint"
+       ],
+       "type": "object"
+      },
+      "sha256": {
+       "pattern": "^[0-9a-f]{64}$",
+       "type": "string"
+      },
+      "size": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "source": {
+       "additionalProperties": false,
+       "properties": {
+        "fingerprint": {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        "label": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "record": {
+         "pattern": "^p-[0-9a-f]{16}$",
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "before-image",
+          "after-image",
+          "definition",
+          "line",
+          "values",
+          "copy",
+          "held field",
+          "secret field"
+         ]
+        }
+       },
+       "required": [
+        "record",
+        "type",
+        "label",
+        "fingerprint"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "size",
+      "sha256",
+      "inventory",
+      "source"
+     ],
+     "type": "object"
+    },
+    "kind": {
+     "const": "step"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "outcome": {
+     "enum": [
+      "kept",
+      "no such value",
+      "under the least length, dropped",
+      "no child started"
+     ]
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "reference": {
+     "additionalProperties": false,
+     "properties": {
+      "fingerprint": {
+       "pattern": "^[0-9a-f]{64}$",
+       "type": "string"
+      },
+      "label": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "record": {
+       "pattern": "^p-[0-9a-f]{16}$",
+       "type": "string"
+      },
+      "type": {
+       "enum": [
+        "before-image",
+        "after-image",
+        "definition",
+        "line",
+        "values",
+        "copy",
+        "held field",
+        "secret field"
+       ]
+      }
+     },
+     "required": [
+      "record",
+      "type",
+      "label",
+      "fingerprint"
+     ],
+     "type": "object"
+    },
+    "refusal": {
+     "enum": [
+      "no declaration",
+      "trace flag",
+      "tool not found",
+      "register entry",
+      "start refused"
+     ]
+    },
+    "risk": {
+     "enum": [
+      "RK2",
+      "RK3",
+      "RK4",
+      "RK5",
+      "RK13"
+     ]
+    },
+    "sha256": {
+     "anyOf": [
+      {
+       "pattern": "^[0-9a-f]{64}$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "step": {
+     "enum": [
+      "staged",
+      "receipt-due",
+      "receipt",
+      "risk-mark",
+      "reverse-inputs-saved",
+      "send-refused"
+     ]
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "op",
+    "step"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "held": {
+     "additionalProperties": false,
+     "properties": {
+      "fingerprint": {
+       "pattern": "^[0-9a-f]{64}$",
+       "type": "string"
+      },
+      "label": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "record": {
+       "pattern": "^p-[0-9a-f]{16}$",
+       "type": "string"
+      },
+      "type": {
+       "enum": [
+        "before-image",
+        "after-image",
+        "definition",
+        "line",
+        "values",
+        "copy",
+        "held field",
+        "secret field"
+       ]
+      }
+     },
+     "required": [
+      "record",
+      "type",
+      "label",
+      "fingerprint"
+     ],
+     "type": "object"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "answer"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "result": {
+     "const": "success"
+    },
+    "source": {
+     "enum": [
+      "call",
+      "status-read"
+     ]
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "op",
+    "result",
+    "source"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "ground": {
+     "enum": [
+      "a",
+      "b",
+      "c"
+     ]
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "keep": {
+     "additionalProperties": false,
+     "properties": {
+      "inventory": {
+       "additionalProperties": false,
+       "properties": {
+        "fingerprint": {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        "label": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "record": {
+         "pattern": "^p-[0-9a-f]{16}$",
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "before-image",
+          "after-image",
+          "definition",
+          "line",
+          "values",
+          "copy",
+          "held field",
+          "secret field"
+         ]
+        }
+       },
+       "required": [
+        "record",
+        "type",
+        "label",
+        "fingerprint"
+       ],
+       "type": "object"
+      },
+      "sha256": {
+       "pattern": "^[0-9a-f]{64}$",
+       "type": "string"
+      },
+      "size": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "source": {
+       "additionalProperties": false,
+       "properties": {
+        "fingerprint": {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        "label": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "record": {
+         "pattern": "^p-[0-9a-f]{16}$",
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "before-image",
+          "after-image",
+          "definition",
+          "line",
+          "values",
+          "copy",
+          "held field",
+          "secret field"
+         ]
+        }
+       },
+       "required": [
+        "record",
+        "type",
+        "label",
+        "fingerprint"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "size",
+      "sha256",
+      "inventory",
+      "source"
+     ],
+     "type": "object"
+    },
+    "kind": {
+     "const": "completion"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "observed": {
+     "additionalProperties": false,
+     "properties": {
+      "exists": {
+       "type": "boolean"
+      },
+      "identity": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "object": {
+           "type": "integer"
+          },
+          "volume": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "volume",
+          "object"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "mode": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "path": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "sha256": {
+       "anyOf": [
+        {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "target": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "word": {
+       "maxLength": 64,
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "way_back": {
+     "additionalProperties": false,
+     "properties": {
+      "inputs": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+         },
+         "label": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "record": {
+          "pattern": "^p-[0-9a-f]{16}$",
+          "type": "string"
+         },
+         "type": {
+          "enum": [
+           "before-image",
+           "after-image",
+           "definition",
+           "line",
+           "values",
+           "copy",
+           "held field",
+           "secret field"
+          ]
+         }
+        },
+        "required": [
+         "record",
+         "type",
+         "label",
+         "fingerprint"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "offered": {
+       "type": "boolean"
+      },
+      "reason": {
+       "enum": [
+        "the row declares none",
+        "found already so",
+        "not proven",
+        "an input is missing",
+        "done by the owner",
+        "not needed",
+        "refused",
+        "left",
+        "held"
+       ]
+      },
+      "reverse": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "offered"
+     ],
+     "type": "object"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "op",
+    "ground",
+    "observed",
+    "way_back"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "binds": {
+     "additionalProperties": false,
+     "properties": {
+      "exists": {
+       "type": "boolean"
+      },
+      "identity": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "object": {
+           "type": "integer"
+          },
+          "volume": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "volume",
+          "object"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "mode": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "path": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "sha256": {
+       "anyOf": [
+        {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "target": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "word": {
+       "maxLength": 64,
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "status"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "observed": {
+     "additionalProperties": false,
+     "properties": {
+      "exists": {
+       "type": "boolean"
+      },
+      "identity": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "object": {
+           "type": "integer"
+          },
+          "volume": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "volume",
+          "object"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "mode": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "path": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "sha256": {
+       "anyOf": [
+        {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "target": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "word": {
+       "maxLength": 64,
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "reason": {
+     "additionalProperties": false,
+     "properties": {
+      "command": {
+       "maxLength": 2000,
+       "type": "string"
+      },
+      "condition": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "kind": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "need": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "op": {
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+       "type": "string"
+      },
+      "provider": {
+       "anyOf": [
+        {
+         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "provider_status": {
+       "enum": [
+        "done",
+        "already so",
+        "not proven",
+        "adopted",
+        "passed",
+        "unavailable",
+        "refused",
+        "done by owner, read back",
+        "done by owner, on his word",
+        "answered",
+        "left",
+        "not needed",
+        "held",
+        null
+       ]
+      },
+      "result": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "what": {
+       "maxLength": 2000,
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "status": {
+     "enum": [
+      "already so",
+      "not proven",
+      "adopted",
+      "refused",
+      "done by owner, read back",
+      "done by owner, on his word",
+      "answered",
+      "left",
+      "not needed",
+      "held"
+     ]
+    },
+    "way_back": {
+     "additionalProperties": false,
+     "properties": {
+      "inputs": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+         },
+         "label": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "record": {
+          "pattern": "^p-[0-9a-f]{16}$",
+          "type": "string"
+         },
+         "type": {
+          "enum": [
+           "before-image",
+           "after-image",
+           "definition",
+           "line",
+           "values",
+           "copy",
+           "held field",
+           "secret field"
+          ]
+         }
+        },
+        "required": [
+         "record",
+         "type",
+         "label",
+         "fingerprint"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "offered": {
+       "type": "boolean"
+      },
+      "reason": {
+       "enum": [
+        "the row declares none",
+        "found already so",
+        "not proven",
+        "an input is missing",
+        "done by the owner",
+        "not needed",
+        "refused",
+        "left",
+        "held"
+       ]
+      },
+      "reverse": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "offered"
+     ],
+     "type": "object"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "op",
+    "status"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "answer": {
+     "enum": [
+      "passed",
+      "failed",
+      "unavailable"
+     ]
+    },
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "attempt": {
+     "minimum": 1,
+     "type": "integer"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "attempt"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "subject": {
+     "additionalProperties": false,
+     "properties": {
+      "exists": {
+       "type": "boolean"
+      },
+      "identity": {
+       "anyOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "object": {
+           "type": "integer"
+          },
+          "volume": {
+           "type": "integer"
+          }
+         },
+         "required": [
+          "volume",
+          "object"
+         ],
+         "type": "object"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "mode": {
+       "minimum": 0,
+       "type": "integer"
+      },
+      "path": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "sha256": {
+       "anyOf": [
+        {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "target": {
+       "maxLength": 1024,
+       "type": "string"
+      },
+      "word": {
+       "maxLength": 64,
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "way_back": {
+     "additionalProperties": false,
+     "properties": {
+      "inputs": {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+         },
+         "label": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "record": {
+          "pattern": "^p-[0-9a-f]{16}$",
+          "type": "string"
+         },
+         "type": {
+          "enum": [
+           "before-image",
+           "after-image",
+           "definition",
+           "line",
+           "values",
+           "copy",
+           "held field",
+           "secret field"
+          ]
+         }
+        },
+        "required": [
+         "record",
+         "type",
+         "label",
+         "fingerprint"
+        ],
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "offered": {
+       "type": "boolean"
+      },
+      "reason": {
+       "enum": [
+        "the row declares none",
+        "found already so",
+        "not proven",
+        "an input is missing",
+        "done by the owner",
+        "not needed",
+        "refused",
+        "left",
+        "held"
+       ]
+      },
+      "reverse": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "offered"
+     ],
+     "type": "object"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "op",
+    "attempt",
+    "subject",
+    "answer"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inputs": {
+     "items": {
+      "additionalProperties": false,
+      "properties": {
+       "fingerprint": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+       },
+       "label": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "record": {
+        "pattern": "^p-[0-9a-f]{16}$",
+        "type": "string"
+       },
+       "type": {
+        "enum": [
+         "before-image",
+         "after-image",
+         "definition",
+         "line",
+         "values",
+         "copy",
+         "held field",
+         "secret field"
+        ]
+       }
+      },
+      "required": [
+       "record",
+       "type",
+       "label",
+       "fingerprint"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "waiting"
+    },
+    "mode": {
+     "enum": [
+      "read back",
+      "on his word",
+      "answer"
+     ]
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "review": {
+     "additionalProperties": false,
+     "properties": {
+      "fingerprint": {
+       "pattern": "^[0-9a-f]{64}$",
+       "type": "string"
+      },
+      "label": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "record": {
+       "pattern": "^p-[0-9a-f]{16}$",
+       "type": "string"
+      },
+      "type": {
+       "enum": [
+        "before-image",
+        "after-image",
+        "definition",
+        "line",
+        "values",
+        "copy",
+        "held field",
+        "secret field"
+       ]
+      }
+     },
+     "required": [
+      "record",
+      "type",
+      "label",
+      "fingerprint"
+     ],
+     "type": "object"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "op",
+    "mode"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "answer": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "owner-answer"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "position": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "op",
+    "answer",
+    "position"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "channel": {
+     "enum": [
+      "hosting-token",
+      "connection"
+     ]
+    },
+    "execution": {
+     "minimum": 1,
+     "type": "integer"
+    },
+    "found": {
+     "items": {
+      "additionalProperties": false,
+      "properties": {
+       "end": {
+        "minimum": 1,
+        "type": "integer"
+       },
+       "file": {
+        "pattern": "^(inputs(-[0-9]+)?\\.json|manifest-[0-9]+\\.json|journal\\.jsonl)$",
+        "type": "string"
+       },
+       "start": {
+        "minimum": 0,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "file",
+       "start",
+       "end"
+      ],
+      "type": "object"
+     },
+     "maxItems": 32,
+     "type": "array"
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "disproof"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "op": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "rests": {
+     "oneOf": [
+      {
+       "additionalProperties": false,
+       "properties": {
+        "protected": {
+         "additionalProperties": false,
+         "properties": {
+          "fingerprint": {
+           "pattern": "^[0-9a-f]{64}$",
+           "type": "string"
+          },
+          "label": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "record": {
+           "pattern": "^p-[0-9a-f]{16}$",
+           "type": "string"
+          },
+          "type": {
+           "enum": [
+            "before-image",
+            "after-image",
+            "definition",
+            "line",
+            "values",
+            "copy",
+            "held field",
+            "secret field"
+           ]
+          }
+         },
+         "required": [
+          "record",
+          "type",
+          "label",
+          "fingerprint"
+         ],
+         "type": "object"
+        }
+       },
+       "required": [
+        "protected"
+       ],
+       "type": "object"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "content": {
+         "additionalProperties": false,
+         "properties": {
+          "end": {
+           "minimum": 1,
+           "type": "integer"
+          },
+          "file": {
+           "pattern": "^(inputs(-[0-9]+)?\\.json|manifest-[0-9]+\\.json|journal\\.jsonl)$",
+           "type": "string"
+          },
+          "start": {
+           "minimum": 0,
+           "type": "integer"
+          }
+         },
+         "required": [
+          "file",
+          "start",
+          "end"
+         ],
+         "type": "object"
+        }
+       },
+       "required": [
+        "content"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "source": {
+     "enum": [
+      "secret field",
+      "channel"
+     ]
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "rests",
+    "source"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "ending": {
+     "enum": [
+      "waiting",
+      "stopped"
+     ]
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "invocation-end"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "reason": {
+     "additionalProperties": false,
+     "properties": {
+      "command": {
+       "maxLength": 2000,
+       "type": "string"
+      },
+      "condition": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "kind": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "need": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "op": {
+       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+       "type": "string"
+      },
+      "provider": {
+       "anyOf": [
+        {
+         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      },
+      "provider_status": {
+       "enum": [
+        "done",
+        "already so",
+        "not proven",
+        "adopted",
+        "passed",
+        "unavailable",
+        "refused",
+        "done by owner, read back",
+        "done by owner, on his word",
+        "answered",
+        "left",
+        "not needed",
+        "held",
+        null
+       ]
+      },
+      "result": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "what": {
+       "maxLength": 2000,
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "ending"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "at": {
+     "maxLength": 40,
+     "type": "string"
+    },
+    "by": {
+     "enum": [
+      "the owner's word",
+      "a restore's go"
+     ]
+    },
+    "ending": {
+     "enum": [
+      "complete",
+      "ended with exceptions",
+      "closed"
+     ]
+    },
+    "h": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "inv": {
+     "pattern": "^i-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    "kind": {
+     "const": "run-end"
+    },
+    "n": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "position": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "prev": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "restore": {
+     "pattern": "^(sunrise|sunset|restore)-[0-9a-f]{16}$",
+     "type": "string"
+    }
+   },
+   "required": [
+    "n",
+    "kind",
+    "at",
+    "prev",
+    "h",
+    "inv",
+    "ending"
+   ],
+   "type": "object"
+  }
+ ],
+ "title": "One record of a run's journal (the frame's LOG-1): one of fourteen kinds and no other, closed at every level."
+}

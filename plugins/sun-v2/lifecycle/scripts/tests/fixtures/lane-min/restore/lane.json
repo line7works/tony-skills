@@ -1,0 +1,11 @@
+{
+  "lane_version": 1,
+  "kind": "restore",
+  "alias_reads": [{"location": "developer_root", "path": ["{name}", "names.txt"], "form": "lines"}],
+  "phases": ["only"],
+  "facts": [],
+  "questions": [],
+  "rows": [],
+  "form_changes": {},
+  "checklist": []
+}

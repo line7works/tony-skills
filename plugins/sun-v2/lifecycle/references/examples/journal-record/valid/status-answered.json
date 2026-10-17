@@ -1,0 +1,14 @@
+{
+ "at": "2026-01-01T00:00:39Z",
+ "h": "ab9158ebdad2749bd128f5d8c370ed602b55f4e0dae8d1eef231503b9131686e",
+ "inv": "i-eab081819cba6644",
+ "kind": "status",
+ "n": 38,
+ "op": "A1",
+ "prev": "3bf0313ac3fc83cb2c14d1208fb22d5275621441657cda9a5e5e526c90c0b2cd",
+ "status": "answered",
+ "way_back": {
+  "offered": false,
+  "reason": "the row declares none"
+ }
+}

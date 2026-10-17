@@ -1,0 +1,63 @@
+{
+ "$id": "sun-v2/input.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "additionalProperties": false,
+ "properties": {
+  "adopt": {
+   "additionalProperties": {
+    "maxLength": 1024,
+    "type": "string"
+   },
+   "type": "object"
+  },
+  "answers": {
+   "additionalProperties": {
+    "maxLength": 200,
+    "type": "string"
+   },
+   "type": "object"
+  },
+  "description": {
+   "maxLength": 2000,
+   "type": "string"
+  },
+  "drop_layers": {
+   "items": {
+    "maxLength": 200,
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "flags": {
+   "additionalProperties": {
+    "type": [
+     "boolean",
+     "string",
+     "number"
+    ]
+   },
+   "type": "object"
+  },
+  "input_version": {
+   "const": 1
+  },
+  "restore_lines": {
+   "items": {
+    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "type": {
+   "maxLength": 200,
+   "type": "string"
+  }
+ },
+ "required": [
+  "input_version",
+  "answers",
+  "flags"
+ ],
+ "title": "The owner's inputs to a look or a re-plan, as saved (the frame's RUN-5, SEC-9).",
+ "type": "object"
+}

@@ -1,0 +1,232 @@
+{
+ "$id": "sun-v2/cli-response.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "oneOf": [
+  {
+   "additionalProperties": false,
+   "properties": {
+    "command": {
+     "enum": [
+      "look",
+      "go",
+      "resume",
+      "status",
+      "replan",
+      "close"
+     ]
+    },
+    "cue": {
+     "additionalProperties": false,
+     "properties": {
+      "line": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "sound": {
+       "maxLength": 2048,
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     },
+     "required": [
+      "line",
+      "sound"
+     ],
+     "type": "object"
+    },
+    "ending": {
+     "enum": [
+      "preview",
+      "refused",
+      "waiting",
+      "stopped",
+      "complete",
+      "ended with exceptions",
+      "closed",
+      "[withheld: a value this tool may not show]",
+      ""
+     ]
+    },
+    "exit": {
+     "enum": [
+      0,
+      4,
+      10
+     ]
+    },
+    "findings": {
+     "items": {
+      "additionalProperties": false,
+      "properties": {
+       "entry": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "finding": {
+        "maxLength": 2000,
+        "type": "string"
+       },
+       "row": {
+        "type": [
+         "string",
+         "null"
+        ]
+       }
+      },
+      "required": [
+       "row",
+       "entry",
+       "finding"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "forms": {
+     "items": {
+      "maxLength": 2048,
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "interface_version": {
+     "const": 1
+    },
+    "lines": {
+     "items": {
+      "maxLength": 2000,
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "manifest_sha256": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "plugin_version": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "position": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "run": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "tool": {
+     "const": "sun-v2"
+    }
+   },
+   "required": [
+    "interface_version",
+    "plugin_version",
+    "tool",
+    "command",
+    "exit",
+    "ending",
+    "lines"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "command": {
+     "const": "skill-identity"
+    },
+    "commit": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "commit_by_git": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "content_sha256": {
+     "pattern": "^[0-9a-f]{64}$",
+     "type": "string"
+    },
+    "exit": {
+     "const": 0
+    },
+    "interface_version": {
+     "const": 1
+    },
+    "name": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "ok": {
+     "const": true
+    },
+    "plugin_version": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "skills": {
+     "items": {
+      "maxLength": 200,
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "tool": {
+     "const": "sun-v2"
+    },
+    "version": {
+     "maxLength": 200,
+     "type": "string"
+    }
+   },
+   "required": [
+    "interface_version",
+    "plugin_version",
+    "tool",
+    "command",
+    "exit",
+    "ok",
+    "name",
+    "version",
+    "commit",
+    "commit_by_git",
+    "content_sha256",
+    "skills"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {
+    "interface_version": {
+     "const": 1
+    },
+    "lines": {
+     "items": {
+      "maxLength": 2000,
+      "type": "string"
+     },
+     "maxItems": 1,
+     "type": "array"
+    }
+   },
+   "required": [
+    "interface_version",
+    "lines"
+   ],
+   "type": "object"
+  },
+  {
+   "additionalProperties": false,
+   "properties": {},
+   "required": [],
+   "type": "object"
+  }
+ ],
+ "title": "The one JSON document a sun-v2 command writes on standard output (E16-15)."
+}

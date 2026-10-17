@@ -1,0 +1,178 @@
+{
+ "after_check": [
+  {
+   "is": "file",
+   "path": {
+    "path": [
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     {
+      "literal": "README.md"
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "after_test": [
+  {
+   "is": "dir",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "name": 0
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "answers": "none",
+ "before_test": [
+  {
+   "id": "free",
+   "is": "absent",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "name": 0
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "commands": "none",
+ "condition": "none",
+ "construction": {
+  "files": [
+   {
+    "rel": "README.md",
+    "text": {
+     "text": [
+      {
+       "literal": "# "
+      },
+      {
+       "name": 0
+      },
+      {
+       "literal": "\n"
+      }
+     ]
+    }
+   },
+   {
+    "rel": "docs/notes.txt",
+    "text": {
+     "text": [
+      {
+       "input": "description"
+      },
+      {
+       "literal": "\n"
+      }
+     ]
+    }
+   }
+  ],
+  "id": "C1",
+  "mode": 493,
+  "notes": "x"
+ },
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row B1",
+  "status": "the fake row B1"
+ },
+ "id": "B1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "build",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": "none",
+ "output": {
+  "fields": {
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "name": 0
+     }
+    ]
+   }
+  },
+  "name": "project folder"
+ },
+ "owner_names": "none",
+ "phase": "one",
+ "planning_test": [
+  {
+   "is": "absent",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "name": 0
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "identity": "path",
+  "place": {
+   "path": [
+    {
+     "location": "developer_root"
+    },
+    {
+     "name": 0
+    }
+   ]
+  },
+  "role": "the project folder",
+  "tracked": [
+   "exists",
+   "identity"
+  ]
+ },
+ "way_back": "none"
+}

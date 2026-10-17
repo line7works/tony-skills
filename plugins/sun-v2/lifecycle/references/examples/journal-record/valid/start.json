@@ -1,0 +1,19 @@
+{
+ "after": {
+  "exists": true,
+  "path": "/home/fixture/home/dev/demo"
+ },
+ "at": "2026-01-01T00:00:03Z",
+ "h": "3a4be3f2ed4a8fb82e30b6042eecae8757a34170722221a3fc99aa957deb12a0",
+ "inv": "i-d9beb43890487729",
+ "kind": "start",
+ "n": 2,
+ "op": "B1",
+ "prev": "8ac225b049fa6e5e755ab185254e947a5b4e2b48cc722c2be6b68ced87a7337f",
+ "probe": "ready",
+ "start": 1,
+ "thing": {
+  "exists": false,
+  "path": "/home/fixture/home/dev/demo"
+ }
+}

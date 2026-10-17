@@ -1,0 +1,52 @@
+{
+ "after_check": "none",
+ "after_test": "none",
+ "answers": [
+  "use it",
+  "keep the old file"
+ ],
+ "before_test": "none",
+ "commands": "none",
+ "condition": "none",
+ "construction": "none",
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row A1",
+  "status": "the fake row A1"
+ },
+ "id": "A1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "owner answer",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": "none",
+ "output": {
+  "fields": {},
+  "name": "answer-A1"
+ },
+ "owner_names": "none",
+ "phase": "remote",
+ "planning_test": "none",
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": {
+  "question": "use the merged file?"
+ },
+ "span": "none",
+ "thing": "none",
+ "way_back": "none"
+}

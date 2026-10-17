@@ -1,0 +1,2694 @@
+{
+ "$defs": {
+  "row": {
+   "additionalProperties": false,
+   "properties": {
+    "after_check": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "at_most": {
+          "type": "integer"
+         },
+         "base": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "branch": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "command": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "compare_held": {
+          "type": "boolean"
+         },
+         "count": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "enforced": {
+          "enum": [
+           "in the same request"
+          ]
+         },
+         "env_file": {
+          "$ref": "#/$defs/value"
+         },
+         "equals": {
+          "anyOf": [
+           {
+            "$ref": "#/$defs/value"
+           },
+           {
+            "type": [
+             "string",
+             "number",
+             "boolean"
+            ]
+           }
+          ]
+         },
+         "field": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "fixed_words": {
+          "additionalProperties": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "propertyNames": {
+           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "type": "object"
+         },
+         "id": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "is": {
+          "enum": [
+           "absent",
+           "file",
+           "dir",
+           "present"
+          ]
+         },
+         "is_equal": {
+          "type": "boolean"
+         },
+         "line": {
+          "$ref": "#/$defs/value"
+         },
+         "link_file": {
+          "$ref": "#/$defs/value"
+         },
+         "name": {
+          "$ref": "#/$defs/value"
+         },
+         "on": {
+          "enum": [
+           "target",
+           "other"
+          ]
+         },
+         "path": {
+          "$ref": "#/$defs/value"
+         },
+         "present": {
+          "type": "boolean"
+         },
+         "read": {
+          "enum": [
+           "path",
+           "sha256",
+           "line",
+           "identity",
+           "mode",
+           "name-free",
+           "command",
+           "commit-scan",
+           "push-scan"
+          ]
+         },
+         "repo": {
+          "$ref": "#/$defs/value"
+         },
+         "result": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "read"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "after_test": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "at_most": {
+          "type": "integer"
+         },
+         "base": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "branch": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "command": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "compare_held": {
+          "type": "boolean"
+         },
+         "count": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "enforced": {
+          "enum": [
+           "in the same request"
+          ]
+         },
+         "env_file": {
+          "$ref": "#/$defs/value"
+         },
+         "equals": {
+          "anyOf": [
+           {
+            "$ref": "#/$defs/value"
+           },
+           {
+            "type": [
+             "string",
+             "number",
+             "boolean"
+            ]
+           }
+          ]
+         },
+         "field": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "fixed_words": {
+          "additionalProperties": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "propertyNames": {
+           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "type": "object"
+         },
+         "id": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "is": {
+          "enum": [
+           "absent",
+           "file",
+           "dir",
+           "present"
+          ]
+         },
+         "is_equal": {
+          "type": "boolean"
+         },
+         "line": {
+          "$ref": "#/$defs/value"
+         },
+         "link_file": {
+          "$ref": "#/$defs/value"
+         },
+         "name": {
+          "$ref": "#/$defs/value"
+         },
+         "on": {
+          "enum": [
+           "target",
+           "other"
+          ]
+         },
+         "path": {
+          "$ref": "#/$defs/value"
+         },
+         "present": {
+          "type": "boolean"
+         },
+         "read": {
+          "enum": [
+           "path",
+           "sha256",
+           "line",
+           "identity",
+           "mode",
+           "name-free",
+           "command",
+           "commit-scan",
+           "push-scan"
+          ]
+         },
+         "repo": {
+          "$ref": "#/$defs/value"
+         },
+         "result": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "read"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "answers": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "before_test": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "at_most": {
+          "type": "integer"
+         },
+         "base": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "branch": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "command": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "compare_held": {
+          "type": "boolean"
+         },
+         "count": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "enforced": {
+          "enum": [
+           "in the same request"
+          ]
+         },
+         "env_file": {
+          "$ref": "#/$defs/value"
+         },
+         "equals": {
+          "anyOf": [
+           {
+            "$ref": "#/$defs/value"
+           },
+           {
+            "type": [
+             "string",
+             "number",
+             "boolean"
+            ]
+           }
+          ]
+         },
+         "field": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "fixed_words": {
+          "additionalProperties": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "propertyNames": {
+           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "type": "object"
+         },
+         "id": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "is": {
+          "enum": [
+           "absent",
+           "file",
+           "dir",
+           "present"
+          ]
+         },
+         "is_equal": {
+          "type": "boolean"
+         },
+         "line": {
+          "$ref": "#/$defs/value"
+         },
+         "link_file": {
+          "$ref": "#/$defs/value"
+         },
+         "name": {
+          "$ref": "#/$defs/value"
+         },
+         "on": {
+          "enum": [
+           "target",
+           "other"
+          ]
+         },
+         "path": {
+          "$ref": "#/$defs/value"
+         },
+         "present": {
+          "type": "boolean"
+         },
+         "read": {
+          "enum": [
+           "path",
+           "sha256",
+           "line",
+           "identity",
+           "mode",
+           "name-free",
+           "command",
+           "commit-scan",
+           "push-scan"
+          ]
+         },
+         "repo": {
+          "$ref": "#/$defs/value"
+         },
+         "result": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "read"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "commands": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "declaration": {
+          "additionalProperties": false,
+          "properties": {
+           "alternatives": {
+            "items": {
+             "maxLength": 200,
+             "type": "string"
+            },
+            "type": "array"
+           },
+           "changes_repository": {
+            "type": "boolean"
+           },
+           "definite": {
+            "additionalProperties": false,
+            "properties": {
+             "refusals": {
+              "items": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "success": {
+              "items": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "type": "array"
+             }
+            },
+            "required": [
+             "success",
+             "refusals"
+            ],
+            "type": "object"
+           },
+           "effects": {
+            "minimum": 0,
+            "type": "integer"
+           },
+           "env": {
+            "additionalProperties": {
+             "additionalProperties": false,
+             "properties": {
+              "class": {
+               "enum": [
+                "fixed",
+                "passed",
+                "private path"
+               ]
+              },
+              "param": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "reason": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "slot": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "value": {
+               "maxLength": 200,
+               "type": "string"
+              }
+             },
+             "required": [
+              "class"
+             ],
+             "type": "object"
+            },
+            "propertyNames": {
+             "pattern": "^[A-Z_][A-Z0-9_]*$"
+            },
+            "type": "object"
+           },
+           "exits": {
+            "additionalProperties": {
+             "enum": [
+              "success",
+              "not-found",
+              "auth",
+              "conflict",
+              "terms",
+              "timeout",
+              "malformed",
+              "other"
+             ]
+            },
+            "propertyNames": {
+             "pattern": "^[0-9]+$"
+            },
+            "type": "object"
+           },
+           "fields": {
+            "items": {
+             "additionalProperties": false,
+             "properties": {
+              "alphabet": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "components": {
+               "enum": [
+                "address"
+               ]
+              },
+              "disposition": {
+               "enum": [
+                "fixed",
+                "equal",
+                "held",
+                "secret"
+               ]
+              },
+              "equals": {
+               "additionalProperties": false,
+               "maxProperties": 1,
+               "minProperties": 1,
+               "properties": {
+                "literal": {
+                 "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                 ]
+                },
+                "own": {
+                 "maxLength": 200,
+                 "type": "string"
+                },
+                "param": {
+                 "maxLength": 200,
+                 "type": "string"
+                },
+                "settings": {
+                 "maxLength": 200,
+                 "type": "string"
+                }
+               },
+               "required": [],
+               "type": "object"
+              },
+              "form": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "list": {
+               "items": {
+                "maxLength": 200,
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "max_length": {
+               "minimum": 1,
+               "type": "integer"
+              },
+              "name": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "place": {
+               "items": {
+                "type": [
+                 "string",
+                 "integer"
+                ]
+               },
+               "minItems": 1,
+               "type": "array"
+              },
+              "required_in": {
+               "items": {
+                "maxLength": 200,
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "type": {
+               "enum": [
+                "exit",
+                "kind",
+                "state",
+                "flag",
+                "count",
+                "time",
+                "id",
+                "name",
+                "hash",
+                "address"
+               ]
+              }
+             },
+             "required": [
+              "name",
+              "place",
+              "type",
+              "disposition",
+              "required_in"
+             ],
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "method": {
+            "enum": [
+             "GET",
+             "PUT",
+             "POST",
+             "PATCH",
+             "DELETE"
+            ]
+           },
+           "protected_inputs": {
+            "items": {
+             "additionalProperties": false,
+             "properties": {
+              "accepts": {
+               "enum": [
+                "before-image",
+                "after-image",
+                "definition",
+                "line",
+                "values",
+                "copy",
+                "held field",
+                "secret field"
+               ]
+              },
+              "slot": {
+               "maxLength": 200,
+               "type": "string"
+              }
+             },
+             "required": [
+              "slot",
+              "accepts"
+             ],
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "provider": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "repository_writes": {
+            "enum": [
+             "off",
+             "listed",
+             "unlisted"
+            ]
+           },
+           "secret_output": {
+            "enum": [
+             "staging",
+             "in place"
+            ]
+           },
+           "side_effects": {
+            "items": {
+             "additionalProperties": false,
+             "properties": {
+              "secret_writing": {
+               "type": "boolean"
+              },
+              "turned_off_by": {
+               "items": {
+                "maxLength": 200,
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "what": {
+               "maxLength": 200,
+               "type": "string"
+              }
+             },
+             "required": [
+              "what"
+             ],
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "template": {
+            "items": {
+             "oneOf": [
+              {
+               "additionalProperties": false,
+               "properties": {
+                "literal": {
+                 "type": [
+                  "string",
+                  "number"
+                 ]
+                }
+               },
+               "required": [
+                "literal"
+               ],
+               "type": "object"
+              },
+              {
+               "additionalProperties": false,
+               "properties": {
+                "param": {
+                 "maxLength": 200,
+                 "type": "string"
+                }
+               },
+               "required": [
+                "param"
+               ],
+               "type": "object"
+              },
+              {
+               "additionalProperties": false,
+               "properties": {
+                "slot": {
+                 "maxLength": 200,
+                 "type": "string"
+                }
+               },
+               "required": [
+                "slot"
+               ],
+               "type": "object"
+              }
+             ]
+            },
+            "type": "array"
+           },
+           "time_limit": {
+            "exclusiveMinimum": 0,
+            "type": "number"
+           },
+           "tool": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "trace_flags": {
+            "items": {
+             "maxLength": 200,
+             "type": "string"
+            },
+            "type": "array"
+           },
+           "via": {
+            "enum": [
+             "runner",
+             "adapter",
+             "request"
+            ]
+           }
+          },
+          "required": [
+           "tool",
+           "template",
+           "time_limit",
+           "effects",
+           "exits",
+           "fields",
+           "definite"
+          ],
+          "type": "object"
+         },
+         "name": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "params": {
+          "additionalProperties": {
+           "$ref": "#/$defs/value"
+          },
+          "type": "object"
+         },
+         "use": {
+          "pattern": "^[^.]+\\.[^.]+$",
+          "type": "string"
+         }
+        },
+        "required": [
+         "name",
+         "use"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "condition": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "equals": {
+         "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+         ]
+        },
+        "fact": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "on": {
+         "enum": [
+          "fact",
+          "alternative",
+          "answer"
+         ]
+        },
+        "operation": {
+         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+         "type": "string"
+        },
+        "reason": {
+         "enum": [
+          "a flag",
+          "the project type",
+          "a layer the project lacks"
+         ]
+        },
+        "result": {
+         "maxLength": 200,
+         "type": "string"
+        }
+       },
+       "required": [
+        "on"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "construction": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "alternatives": {
+         "items": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "builder": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "command": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "conditions": {
+         "items": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "connection": {
+         "additionalProperties": false,
+         "properties": {
+          "file": {
+           "$ref": "#/$defs/value"
+          },
+          "keys": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "minItems": 1,
+           "type": "array"
+          },
+          "slot": {
+           "maxLength": 200,
+           "type": "string"
+          }
+         },
+         "required": [
+          "file",
+          "keys"
+         ],
+         "type": "object"
+        },
+        "copy": {
+         "additionalProperties": false,
+         "properties": {
+          "path": {
+           "maxLength": 1024,
+           "type": "string"
+          },
+          "sha256": {
+           "pattern": "^[0-9a-f]{64}$",
+           "type": "string"
+          },
+          "size": {
+           "minimum": 0,
+           "type": "integer"
+          }
+         },
+         "required": [
+          "path",
+          "size",
+          "sha256"
+         ],
+         "type": "object"
+        },
+        "document": {
+         "maxLength": 2000,
+         "type": "string"
+        },
+        "edit": {
+         "additionalProperties": false,
+         "properties": {
+          "above": {
+           "$ref": "#/$defs/value"
+          },
+          "before_sha256": {
+           "pattern": "^[0-9a-f]{64}$",
+           "type": "string"
+          },
+          "below": {
+           "$ref": "#/$defs/value"
+          },
+          "head": {
+           "$ref": "#/$defs/value"
+          },
+          "kind": {
+           "enum": [
+            "append-line",
+            "remove-line",
+            "replace",
+            "insert-between"
+           ]
+          },
+          "line": {
+           "$ref": "#/$defs/value"
+          },
+          "new": {
+           "$ref": "#/$defs/value"
+          },
+          "old": {
+           "$ref": "#/$defs/value"
+          },
+          "ordered": {
+           "type": "boolean"
+          }
+         },
+         "required": [
+          "kind"
+         ],
+         "type": "object"
+        },
+        "files": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "rel": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "text": {
+            "anyOf": [
+             {
+              "$ref": "#/$defs/value"
+             },
+             {
+              "additionalProperties": false,
+              "properties": {
+               "held_fields": {
+                "additionalProperties": {
+                 "$ref": "#/$defs/value"
+                },
+                "type": "object"
+               }
+              },
+              "required": [
+               "held_fields"
+              ],
+              "type": "object"
+             }
+            ]
+           }
+          },
+          "required": [
+           "text"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "from_keep": {
+         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+         "type": "string"
+        },
+        "id": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "id_field": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "last_record": {
+         "type": "boolean"
+        },
+        "mode": {
+         "type": "integer"
+        },
+        "out_param": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "risks": {
+         "items": {
+          "enum": [
+           "RK2",
+           "RK3",
+           "RK4",
+           "RK5",
+           "RK13"
+          ]
+         },
+         "type": "array"
+        },
+        "single_file": {
+         "type": "boolean"
+        },
+        "to": {
+         "$ref": "#/$defs/value"
+        }
+       },
+       "required": [
+        "id"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "content_classes": {
+     "additionalProperties": false,
+     "properties": {
+      "reads": {
+       "items": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "resting_places": {
+       "items": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "shows": {
+       "items": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "stores": {
+       "items": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "validators": {
+       "items": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "type": "array"
+      }
+     },
+     "required": [
+      "reads",
+      "stores",
+      "shows",
+      "validators",
+      "resting_places"
+     ],
+     "type": "object"
+    },
+    "form_lines": {
+     "additionalProperties": false,
+     "properties": {
+      "owner_step": {
+       "maxLength": 2000,
+       "type": "string"
+      },
+      "preview": {
+       "maxLength": 2000,
+       "type": "string"
+      },
+      "status": {
+       "maxLength": 2000,
+       "type": "string"
+      },
+      "step": {
+       "maxLength": 2000,
+       "type": "string"
+      },
+      "summary": {
+       "maxLength": 2000,
+       "type": "string"
+      }
+     },
+     "required": [
+      "preview"
+     ],
+     "type": "object"
+    },
+    "id": {
+     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+     "type": "string"
+    },
+    "keep_scope": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "content_checks": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "check": {
+            "enum": [
+             "count-lines",
+             "ends-with"
+            ]
+           },
+           "field": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "prefix": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "record": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "text": {
+            "maxLength": 200,
+            "type": "string"
+           }
+          },
+          "required": [
+           "check"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "inventory_field": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "same_state": {
+         "maxLength": 2000,
+         "type": "string"
+        },
+        "scope": {
+         "maxLength": 2000,
+         "type": "string"
+        },
+        "source_field": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "source_identity_read": {
+         "additionalProperties": false,
+         "properties": {
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "field": {
+           "maxLength": 200,
+           "type": "string"
+          }
+         },
+         "required": [
+          "command",
+          "field"
+         ],
+         "type": "object"
+        },
+        "unreadable_read": {
+         "additionalProperties": false,
+         "properties": {
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "field": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "kind": {
+           "maxLength": 200,
+           "type": "string"
+          }
+         },
+         "required": [
+          "command",
+          "field",
+          "kind"
+         ],
+         "type": "object"
+        }
+       },
+       "required": [
+        "scope",
+        "same_state",
+        "content_checks"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "keeps_required": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+        "type": "string"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "kind": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "lost_answer": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "command": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "document": {
+         "maxLength": 2000,
+         "type": "string"
+        },
+        "field": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "made_word": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "nothing_word": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "way": {
+         "enum": [
+          "status-read",
+          "provider-unique",
+          "idempotency-key",
+          "by dropping the layer only"
+         ]
+        }
+       },
+       "required": [
+        "way"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "mode": {
+     "maxLength": 32,
+     "type": "string"
+    },
+    "needs": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "accepts": {
+          "items": {
+           "enum": [
+            "unavailable",
+            "his word"
+           ]
+          },
+          "type": "array"
+         },
+         "level": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "output": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "treatment": {
+          "enum": [
+           "then not applicable",
+           "then not needed"
+          ]
+         },
+         "value": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "output",
+         "level"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "output": {
+     "additionalProperties": false,
+     "properties": {
+      "fields": {
+       "additionalProperties": {
+        "anyOf": [
+         {
+          "$ref": "#/$defs/value"
+         },
+         {
+          "additionalProperties": false,
+          "properties": {
+           "held": {
+            "maxLength": 200,
+            "type": "string"
+           }
+          },
+          "required": [
+           "held"
+          ],
+          "type": "object"
+         },
+         {
+          "additionalProperties": false,
+          "properties": {
+           "secret": {
+            "maxLength": 200,
+            "type": "string"
+           }
+          },
+          "required": [
+           "secret"
+          ],
+          "type": "object"
+         },
+         {
+          "additionalProperties": false,
+          "properties": {
+           "observed": {
+            "maxLength": 200,
+            "type": "string"
+           }
+          },
+          "required": [
+           "observed"
+          ],
+          "type": "object"
+         }
+        ]
+       },
+       "type": "object"
+      },
+      "name": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "name",
+      "fields"
+     ],
+     "type": "object"
+    },
+    "owner_names": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "input": {
+         "maxLength": 200,
+         "type": "string"
+        }
+       },
+       "required": [
+        "input"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "phase": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "planning_test": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "at_most": {
+          "type": "integer"
+         },
+         "base": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "branch": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "command": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "compare_held": {
+          "type": "boolean"
+         },
+         "count": {
+          "minimum": 0,
+          "type": "integer"
+         },
+         "enforced": {
+          "enum": [
+           "in the same request"
+          ]
+         },
+         "env_file": {
+          "$ref": "#/$defs/value"
+         },
+         "equals": {
+          "anyOf": [
+           {
+            "$ref": "#/$defs/value"
+           },
+           {
+            "type": [
+             "string",
+             "number",
+             "boolean"
+            ]
+           }
+          ]
+         },
+         "field": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "fixed_words": {
+          "additionalProperties": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "propertyNames": {
+           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "type": "object"
+         },
+         "id": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "is": {
+          "enum": [
+           "absent",
+           "file",
+           "dir",
+           "present"
+          ]
+         },
+         "is_equal": {
+          "type": "boolean"
+         },
+         "line": {
+          "$ref": "#/$defs/value"
+         },
+         "link_file": {
+          "$ref": "#/$defs/value"
+         },
+         "name": {
+          "$ref": "#/$defs/value"
+         },
+         "on": {
+          "enum": [
+           "target",
+           "other"
+          ]
+         },
+         "path": {
+          "$ref": "#/$defs/value"
+         },
+         "present": {
+          "type": "boolean"
+         },
+         "read": {
+          "enum": [
+           "path",
+           "sha256",
+           "line",
+           "identity",
+           "mode",
+           "name-free",
+           "command",
+           "commit-scan",
+           "push-scan"
+          ]
+         },
+         "repo": {
+          "$ref": "#/$defs/value"
+         },
+         "result": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "read"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "repo_commands": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "reverse_inputs": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "items": {
+        "additionalProperties": false,
+        "properties": {
+         "command": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "field": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "label": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "line": {
+          "$ref": "#/$defs/value"
+         },
+         "path": {
+          "$ref": "#/$defs/value"
+         },
+         "read": {
+          "enum": [
+           "file",
+           "value",
+           "command",
+           "line-above",
+           "line-below",
+           "head"
+          ]
+         },
+         "type": {
+          "enum": [
+           "before-image",
+           "after-image",
+           "definition",
+           "line",
+           "values",
+           "copy",
+           "held field",
+           "secret field"
+          ]
+         },
+         "value": {
+          "$ref": "#/$defs/value"
+         }
+        },
+        "required": [
+         "read",
+         "type",
+         "label"
+        ],
+        "type": "object"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     ]
+    },
+    "review_file": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "content": {
+         "$ref": "#/$defs/value"
+        },
+        "label": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "before-image",
+          "after-image",
+          "definition",
+          "line",
+          "values",
+          "copy",
+          "held field",
+          "secret field"
+         ]
+        }
+       },
+       "required": [
+        "content",
+        "type",
+        "label"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "safe_content": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "minProperties": 1,
+       "properties": {
+        "needs_review": {
+         "type": "boolean"
+        },
+        "question": {
+         "maxLength": 2000,
+         "type": "string"
+        },
+        "step": {
+         "anyOf": [
+          {
+           "maxLength": 2000,
+           "type": "string"
+          },
+          {
+           "$ref": "#/$defs/value"
+          }
+         ]
+        }
+       },
+       "required": [],
+       "type": "object"
+      }
+     ]
+    },
+    "span": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "ordered": {
+         "type": "boolean"
+        },
+        "placement": {
+         "maxLength": 200,
+         "type": "string"
+        }
+       },
+       "required": [
+        "placement",
+        "ordered"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "thing": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "additionalProperties": false,
+       "properties": {
+        "after_word": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "also": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "id": {
+            "$ref": "#/$defs/value"
+           },
+           "identity": {
+            "enum": [
+             "path",
+             "provider id"
+            ]
+           },
+           "kind": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "place": {
+            "$ref": "#/$defs/value"
+           },
+           "read": {
+            "additionalProperties": false,
+            "properties": {
+             "command": {
+              "maxLength": 200,
+              "type": "string"
+             },
+             "field": {
+              "maxLength": 200,
+              "type": "string"
+             }
+            },
+            "required": [
+             "command",
+             "field"
+            ],
+            "type": "object"
+           },
+           "role": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "tracked": {
+            "items": {
+             "enum": [
+              "exists",
+              "identity",
+              "sha256",
+              "mode"
+             ]
+            },
+            "type": "array"
+           }
+          },
+          "required": [
+           "role",
+           "identity"
+          ],
+          "type": "object"
+         },
+         "type": "array"
+        },
+        "before_word": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "capability": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "command": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "found_things": {
+         "additionalProperties": false,
+         "properties": {
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "field": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "kind": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "provider": {
+           "maxLength": 200,
+           "type": "string"
+          }
+         },
+         "required": [
+          "command",
+          "field"
+         ],
+         "type": "object"
+        },
+        "identity": {
+         "enum": [
+          "path",
+          "provider id",
+          "named value",
+          "none"
+         ]
+        },
+        "identity_read": {
+         "additionalProperties": false,
+         "properties": {
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "field": {
+           "maxLength": 200,
+           "type": "string"
+          }
+         },
+         "required": [
+          "command",
+          "field"
+         ],
+         "type": "object"
+        },
+        "layer": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "name_form": {
+         "additionalProperties": false,
+         "properties": {
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "field": {
+           "maxLength": 200,
+           "type": "string"
+          }
+         },
+         "required": [
+          "command",
+          "field"
+         ],
+         "type": "object"
+        },
+        "passes": {
+         "items": {
+          "additionalProperties": false,
+          "properties": {
+           "at_most": {
+            "type": "integer"
+           },
+           "base": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "branch": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "command": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "compare_held": {
+            "type": "boolean"
+           },
+           "count": {
+            "minimum": 0,
+            "type": "integer"
+           },
+           "enforced": {
+            "enum": [
+             "in the same request"
+            ]
+           },
+           "env_file": {
+            "$ref": "#/$defs/value"
+           },
+           "equals": {
+            "anyOf": [
+             {
+              "$ref": "#/$defs/value"
+             },
+             {
+              "type": [
+               "string",
+               "number",
+               "boolean"
+              ]
+             }
+            ]
+           },
+           "field": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "fixed_words": {
+            "additionalProperties": {
+             "items": {
+              "maxLength": 200,
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "propertyNames": {
+             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "type": "object"
+           },
+           "id": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "is": {
+            "enum": [
+             "absent",
+             "file",
+             "dir",
+             "present"
+            ]
+           },
+           "is_equal": {
+            "type": "boolean"
+           },
+           "line": {
+            "$ref": "#/$defs/value"
+           },
+           "link_file": {
+            "$ref": "#/$defs/value"
+           },
+           "name": {
+            "$ref": "#/$defs/value"
+           },
+           "on": {
+            "enum": [
+             "target",
+             "other"
+            ]
+           },
+           "path": {
+            "$ref": "#/$defs/value"
+           },
+           "present": {
+            "type": "boolean"
+           },
+           "read": {
+            "enum": [
+             "path",
+             "sha256",
+             "line",
+             "identity",
+             "mode",
+             "name-free",
+             "command",
+             "commit-scan",
+             "push-scan"
+            ]
+           },
+           "repo": {
+            "$ref": "#/$defs/value"
+           },
+           "result": {
+            "maxLength": 200,
+            "type": "string"
+           }
+          },
+          "required": [
+           "read"
+          ],
+          "type": "object"
+         },
+         "minItems": 1,
+         "type": "array"
+        },
+        "place": {
+         "$ref": "#/$defs/value"
+        },
+        "retires": {
+         "type": "boolean"
+        },
+        "role": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "ruling": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "runs_on": {
+         "items": {
+          "maxLength": 200,
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "secret_read": {
+         "additionalProperties": false,
+         "properties": {
+          "command_to_show": {
+           "maxLength": 2000,
+           "type": "string"
+          },
+          "file": {
+           "$ref": "#/$defs/value"
+          },
+          "keys": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "minItems": 1,
+           "type": "array"
+          }
+         },
+         "required": [
+          "file",
+          "keys",
+          "command_to_show"
+         ],
+         "type": "object"
+        },
+        "span": {
+         "type": "boolean"
+        },
+        "stands_in_for": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "starts": {
+         "type": "boolean"
+        },
+        "subject_field": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "subject_git": {
+         "enum": [
+          "index",
+          "head"
+         ]
+        },
+        "tracked": {
+         "items": {
+          "enum": [
+           "exists",
+           "identity",
+           "sha256",
+           "mode"
+          ]
+         },
+         "type": "array"
+        },
+        "where": {
+         "enum": [
+          "machine",
+          "provider"
+         ]
+        }
+       },
+       "required": [
+        "role"
+       ],
+       "type": "object"
+      }
+     ]
+    },
+    "way_back": {
+     "oneOf": [
+      {
+       "const": "none"
+      },
+      {
+       "oneOf": [
+        {
+         "additionalProperties": false,
+         "properties": {
+          "reverse": {
+           "$ref": "#/$defs/row"
+          }
+         },
+         "required": [
+          "reverse"
+         ],
+         "type": "object"
+        },
+        {
+         "additionalProperties": false,
+         "properties": {
+          "none": {
+           "maxLength": 200,
+           "type": "string"
+          }
+         },
+         "required": [
+          "none"
+         ],
+         "type": "object"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "required": [
+    "id",
+    "kind",
+    "phase",
+    "thing",
+    "planning_test",
+    "before_test",
+    "after_test",
+    "construction",
+    "commands",
+    "repo_commands",
+    "after_check",
+    "output",
+    "needs",
+    "condition",
+    "lost_answer",
+    "way_back",
+    "reverse_inputs",
+    "span",
+    "mode",
+    "safe_content",
+    "answers",
+    "review_file",
+    "owner_names",
+    "keep_scope",
+    "keeps_required",
+    "content_classes",
+    "form_lines"
+   ],
+   "type": "object"
+  },
+  "value": {
+   "oneOf": [
+    {
+     "additionalProperties": false,
+     "properties": {
+      "literal": {
+       "type": [
+        "string",
+        "number",
+        "boolean"
+       ]
+      }
+     },
+     "required": [
+      "literal"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "input": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "input"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "name": {
+       "type": [
+        "integer",
+        "string"
+       ]
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "location": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "location"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "fact": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "fact"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "run": {
+       "const": "id"
+      }
+     },
+     "required": [
+      "run"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "output": {
+       "pattern": "^[^.]+\\.[^.]+$",
+       "type": "string"
+      }
+     },
+     "required": [
+      "output"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "record": {
+       "additionalProperties": false,
+       "properties": {
+        "fingerprint": {
+         "pattern": "^[0-9a-f]{64}$",
+         "type": "string"
+        },
+        "label": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "record": {
+         "pattern": "^p-[0-9a-f]{16}$",
+         "type": "string"
+        },
+        "type": {
+         "enum": [
+          "before-image",
+          "after-image",
+          "definition",
+          "line",
+          "values",
+          "copy",
+          "held field",
+          "secret field"
+         ]
+        }
+       },
+       "required": [
+        "record",
+        "type",
+        "label",
+        "fingerprint"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "record"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "saved": {
+       "minimum": 0,
+       "type": "integer"
+      }
+     },
+     "required": [
+      "saved"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "local": {
+       "additionalProperties": false,
+       "properties": {
+        "path": {
+         "$ref": "#/$defs/value"
+        },
+        "validator": {
+         "maxLength": 200,
+         "type": "string"
+        }
+       },
+       "required": [
+        "path",
+        "validator"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "local"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "path": {
+       "items": {
+        "$ref": "#/$defs/value"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     },
+     "required": [
+      "path"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "text": {
+       "items": {
+        "$ref": "#/$defs/value"
+       },
+       "minItems": 1,
+       "type": "array"
+      }
+     },
+     "required": [
+      "text"
+     ],
+     "type": "object"
+    }
+   ]
+  }
+ },
+ "$id": "sun-v2/lane.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "additionalProperties": false,
+ "properties": {
+  "alias_reads": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "form": {
+      "const": "lines"
+     },
+     "location": {
+      "maxLength": 200,
+      "type": "string"
+     },
+     "path": {
+      "items": {
+       "maxLength": 200,
+       "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "location",
+     "path",
+     "form"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "checklist": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "answered_by": {
+      "oneOf": [
+       {
+        "additionalProperties": false,
+        "properties": {
+         "row": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+          "type": "string"
+         }
+        },
+        "required": [
+         "row"
+        ],
+        "type": "object"
+       },
+       {
+        "additionalProperties": false,
+        "properties": {
+         "form_line": {
+          "maxLength": 200,
+          "type": "string"
+         }
+        },
+        "required": [
+         "form_line"
+        ],
+        "type": "object"
+       },
+       {
+        "additionalProperties": false,
+        "properties": {
+         "reason": {
+          "maxLength": 2000,
+          "type": "string"
+         }
+        },
+        "required": [
+         "reason"
+        ],
+        "type": "object"
+       }
+      ]
+     },
+     "item": {
+      "maxLength": 2000,
+      "type": "string"
+     },
+     "must": {
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": [
+          "string",
+          "number",
+          "boolean"
+         ]
+        },
+        {
+         "additionalProperties": {
+          "type": [
+           "string",
+           "number",
+           "boolean"
+          ]
+         },
+         "type": "object"
+        }
+       ]
+      },
+      "minProperties": 1,
+      "propertyNames": {
+       "enum": [
+        "id",
+        "kind",
+        "phase",
+        "thing",
+        "planning_test",
+        "before_test",
+        "after_test",
+        "construction",
+        "commands",
+        "repo_commands",
+        "after_check",
+        "output",
+        "needs",
+        "condition",
+        "lost_answer",
+        "way_back",
+        "reverse_inputs",
+        "span",
+        "mode",
+        "safe_content",
+        "answers",
+        "review_file",
+        "owner_names",
+        "keep_scope",
+        "keeps_required",
+        "content_classes",
+        "form_lines"
+       ]
+      },
+      "type": "object"
+     }
+    },
+    "required": [
+     "item",
+     "answered_by"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "facts": {
+   "items": {
+    "maxLength": 200,
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "form_changes": {
+   "additionalProperties": {
+    "maxLength": 2000,
+    "type": "string"
+   },
+   "type": "object"
+  },
+  "kind": {
+   "enum": [
+    "sunrise",
+    "sunset",
+    "restore"
+   ]
+  },
+  "lane_version": {
+   "const": 1
+  },
+  "phases": {
+   "items": {
+    "maxLength": 200,
+    "type": "string"
+   },
+   "minItems": 1,
+   "type": "array",
+   "uniqueItems": true
+  },
+  "questions": {
+   "items": {
+    "additionalProperties": false,
+    "properties": {
+     "input": {
+      "maxLength": 200,
+      "type": "string"
+     },
+     "question": {
+      "maxLength": 2000,
+      "type": "string"
+     },
+     "required": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "question",
+     "input",
+     "required"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "rows": {
+   "items": {
+    "$ref": "#/$defs/row"
+   },
+   "type": "array"
+  }
+ },
+ "required": [
+  "lane_version",
+  "kind",
+  "alias_reads",
+  "phases",
+  "facts",
+  "questions",
+  "rows",
+  "form_changes",
+  "checklist"
+ ],
+ "title": "A lane's rows for one kind of run, with what the look needs beside them.",
+ "type": "object"
+}

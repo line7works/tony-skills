@@ -1,0 +1,17 @@
+{
+ "at": "2026-01-01T00:00:16Z",
+ "h": "077cc1167a779251aea03b5a87d4536fe1b8d50ef0732a00f6b25d7d1b7f0467",
+ "held": {
+  "fingerprint": "1be1a62154dba77ac07cd9fc06bb26c044ae8df78c11265849bbbbc64b48796f",
+  "label": "the id of what C1 made",
+  "record": "p-0f4feaaabed97ff8",
+  "type": "held field"
+ },
+ "inv": "i-d9beb43890487729",
+ "kind": "answer",
+ "n": 15,
+ "op": "C1",
+ "prev": "df30f1addf6882564fda3644484dac9a83e26d40955eb1c4537a2874367c6753",
+ "result": "success",
+ "source": "call"
+}
