@@ -121,7 +121,7 @@ def tests_of(row):
 
 def command_names_used(row):
     """The local names of the commands a row's tests, its construction and its thing refer to."""
-    used = [c.get("command") for _k, c in tests_of(row) if c.get("read") == "command"]
+    used = [c.get("command") for _k, c in tests_of(row) if c.get("read") in ("command", "text")]
     construction = row.get("construction")
     if isinstance(construction, dict):
         for key in ("command", "builder", "status_command"):
@@ -131,7 +131,7 @@ def command_names_used(row):
     if isinstance(thing, dict):
         if thing.get("command"):
             used.append(thing["command"])
-        for key in ("identity_read", "name_form", "found_things"):
+        for key in ("identity_read", "name_form", "found_things", "family"):
             if isinstance(thing.get(key), dict) and thing[key].get("command"):
                 used.append(thing[key]["command"])
         for other in thing.get("also") if isinstance(thing.get("also"), list) else []:
@@ -140,6 +140,8 @@ def command_names_used(row):
     scope = row.get("keep_scope")
     if isinstance(scope, dict) and isinstance(scope.get("source_identity_read"), dict):
         used.append(scope["source_identity_read"].get("command"))
+    if isinstance(scope, dict) and isinstance(scope.get("inventory_from"), dict):
+        used.append(scope["inventory_from"].get("command"))
     for item in row.get("reverse_inputs") if isinstance(row.get("reverse_inputs"), list) else []:
         if isinstance(item, dict) and item.get("read") == "command":
             used.append(item.get("command"))
@@ -189,6 +191,8 @@ def _table_findings(row):
                 out.append(finding(row, key, "the entry is left out"))
                 continue
             value = row[key]
+            if key == "keeps_required" and value == [] and _o_condition(entry, row) is True:
+                continue                  # a retiring row may state that it requires no keep (G19-16; KEEP-2)
             if value in (None, "", [], {}):
                 out.append(finding(row, key, "the entry is left empty"))
                 continue
@@ -228,14 +232,37 @@ def _construction_findings(row, as_reverse=False):
     if name_free:
         # a shortcut's add or put-back: RK5, and RK13 beside it, whose window is RK5's (RISK-1; the owner's ruling A63)
         wanted.update(("RK5", "RK13"))
+    # RK18 (A147): v1's risk for a step v1 did itself, in the rows a lane names under it; a C6 is open for such a row in
+    # place of RK3's four (OP-3), and the row carries one line of what can go wrong (the catalog's Part 6)
+    rk18 = "RK18" in risks
+    if cid == "C6" and rk18 and row.get("id") not in RK3_ROWS:
+        wanted.discard("RK3")
     for risk in risks:
-        if risk not in wanted:
+        if risk not in wanted and risk != "RK18":
             out.append(finding(row, "construction", "an accepted risk that does not cover its construction"))
     for risk in sorted(wanted):
         if risk not in risks:
             out.append(finding(row, "construction", "its construction's window is carried under no accepted risk (RISK-2)"))
-    if cid == "C6" and row.get("id") not in RK3_ROWS:
+    if cid == "C6" and row.get("id") not in RK3_ROWS and not rk18:
         out.append(finding(row, "construction", "a read-then-ask on a row RK3 does not name (RISK-2)"))
+    if rk18 and not construction.get("risk_line"):
+        out.append(finding(row, "construction", "RK18 is carried with no line of what can go wrong (RISK-1)"))
+    if construction.get("hosting_env") is not None and (kind != "keep" or not construction.get("builder")):
+        # the mark of the one keep construction that saves a hosting environment's values, whose builder's secret pair list
+        # RK19's floor applies to (G22-3), stands on a keep built by its builder and on no other row
+        out.append(finding(row, "construction", "the hosting environment's mark stands only on a keep built by its builder (RK19, KEEP-1)"))
+    if kind == "keep":
+        # KEEP-1 (A148, A149, A151): two reads, before and after the copy, stand for one consistent state for a hosting
+        # environment's variables alone, and for a folder of this machine copied whole in a row RK18 names. "Admit two-read
+        # inventory proof only for hosting environment variables and whole-folder copies explicitly carried under RK18; other
+        # keeps must establish one consistent state" (the reviewer's F4, G22-4)
+        scope = row.get("keep_scope") if isinstance(row.get("keep_scope"), dict) else {}
+        inventory = scope.get("inventory_from") if isinstance(scope.get("inventory_from"), dict) else {}
+        if inventory.get("command") and construction.get("hosting_env") is not True:
+            out.append(finding(row, "keep_scope", "an inventory read before and after the copy stands only for a hosting "
+                                                  "environment's variables (KEEP-1, A149)"))
+        if construction.get("copy_folder") is not None and not rk18:
+            out.append(finding(row, "construction", "a folder copied whole stands only in a row RK18 names (KEEP-1, A151)"))
     if cid in ("C2", "C5") and not construction.get("document"):
         out.append(finding(row, "construction", "no document is cited"))
     listed = construction.get("conditions") if isinstance(construction.get("conditions"), list) else []
@@ -247,7 +274,8 @@ def _construction_findings(row, as_reverse=False):
             out.append(finding(row, "construction", "the cited refusal does not cover the whole before-test (RISK-2)"))
         if condition.get("on") == "other" and condition.get("read") != "name-free":
             enforced = (cid == "C4" and condition.get("enforced") == "in the same request") or (cid == "C5" and covered)
-            if not enforced:
+            # RISK-2 as A151 words it: a condition on another thing is open in a row RK18 names, read just before the effect
+            if not enforced and not rk18:
                 out.append(finding(row, "before_test", "a condition on something the effect does not change, which the "
                                                        "construction does not enforce (RISK-2)"))
     return out
@@ -268,7 +296,9 @@ def _command_findings(row, providers, held_outputs, in_look):
             continue
         names[command["name"]] = decl
         for field in decl.get("fields") or []:
-            if field.get("disposition") not in results.TYPES.get(field.get("type"), ()):
+            # a list field is held or secret, as declared, whatever its members' type would allow (SEC-4 as A150 words it)
+            allowed = ("held", "secret") if "*" in (field.get("place") or []) else results.TYPES.get(field.get("type"), ())
+            if field.get("disposition") not in allowed:
                 out.append(finding(row, "commands", "a disposition SEC-4 does not give its type"))
             if field.get("disposition") == "secret" and "alphabet" in field and chars.alphabet_admits_barred(field.get("alphabet")):
                 # the owner's ruling on PS46 (A142): "A declaration whose secret field's registered alphabet admits any white

@@ -126,7 +126,9 @@ class Keeps(KeepCase):
         used = seen[-1]
         self.assertTrue(used["passfile"].startswith(os.path.join(m.facts.run_dir(run), "private") + os.sep))
         self.assertEqual(used["passfile_mode"], "0o600")
-        self.assertEqual(used["passfile_text"], ADDRESS + "\n")
+        # G20-1: the whole address as one libpq service section, its name the one the declaration fixes for PGSERVICE
+        self.assertEqual(used["passfile_text"], "[sun]\nhost=db.fixture.invalid\nport=5432\ndbname=appdb\nuser=appuser\n"
+                                                "password=%s\nsslmode=require\n" % PASSWORD)
         self.assertFalse(os.path.exists(used["passfile"]), "the password file is not gone after the call")
         parts = [ADDRESS, PASSWORD, "appuser", "db.fixture.invalid", "5432", "appdb", "sslmode=require"]
         for call in m.calls("fakedump"):

@@ -109,12 +109,70 @@ def _input_file(world, run_dir, content):
     return path
 
 
-def call(session, command, outputs, op=None, journal=None, extra_params=None, cwd=None, own=None):
+SERVICE_ENV = "PGSERVICE"     # libpq's name for the service a password file's one section is named for (G20-1)
+
+
+def _password_file(world, run_dir, decl, connection):
+    """SEC-2's private password file for a command that declares its slot (G20-1): `connection` is (the address, the slot,
+    the operation or row it is made for). Where the declaration's environment names the slot as a private path, the whole
+    address is written as one libpq service section, named for the service the declaration fixes, in the run directory's
+    private folder, owner-only from its first byte; returns (slot, path), or None where the command declares no such slot."""
+    from . import channels, rundir
+    address, slot, label = connection
+    env = decl.get("env") or {}
+    if not any(s.get("class") == "private path" and (s.get("slot") or s.get("param")) == slot for s in env.values()):
+        return None
+    service = (env.get(SERVICE_ENV) or {})
+    if service.get("class") != "fixed" or not service.get("value"):
+        raise NotCallable("the connection cannot be written as a service file")
+    try:
+        data = channels.service_file(address, str(service["value"]))
+    except ValueError:
+        raise NotCallable("the connection cannot be written as a service file")
+    path = os.path.join(run_dir, "private", rundir.PASSWORD_PREFIX + label)
+    world.fs.write_new(path, data)
+    return slot, path
+
+
+def _part(part, params):
+    """One value of a request's query or body (G20-2): a literal of the declaration's, or a value the row gives, filled as a
+    template's part is (a held value in memory, going back to its issuer, SEC-2)."""
+    if isinstance(part, dict) and "literal" in part:
+        return part["literal"]
+    if isinstance(part, dict) and "param" in part and part["param"] in params:
+        return params[part["param"]]
+    raise NotCallable("a template names a value the row does not give")
+
+
+def _body(node, params):
+    """A request's JSON body: an object whose leaves are `_part`s."""
+    if isinstance(node, dict) and ("literal" in node or "param" in node) and len(node) == 1:
+        return _part(node, params)
+    if isinstance(node, dict):
+        return dict((k, _body(v, params)) for k, v in node.items())
+    if isinstance(node, list):
+        return [_body(v, params) for v in node]
+    raise NotCallable("a request body leaf is no value of the row")
+
+
+def call(session, command, outputs, op=None, journal=None, extra_params=None, cwd=None, own=None, connection=None, hosting_env=False):
     """Run one command of a row. Returns (results.Result, shown) where `shown` is the command as a
-    form may show it. Raises `runner.Refused`, `NotCallable` or `Disproved`."""
+    form may show it. Raises `runner.Refused`, `NotCallable` or `Disproved`. `connection`, where given, is the address SEC-2's
+    private password file is built from for a command that declares its slot (G20-1); the file is removed when the call ends,
+    however it ends. `hosting_env` is true for the builder of the keep construction marked as the one that saves a hosting
+    environment's values, and for no other call: RK19's floor is applied there alone (G22-3)."""
+    if connection is not None:
+        made = _password_file(session.world, session.run_dir, command["declaration"], connection)
+        if made is not None:
+            try:
+                return call(session, command, outputs, op, journal, dict(extra_params or {}, **{made[0]: made[1]}), cwd, own,
+                            hosting_env=hosting_env)
+            finally:
+                session.world.fs.remove(made[1])
     world, register, run_dir = session.world, session.register, session.run_dir
     decl = command["declaration"]
     params, shown, private = {}, {}, []
+    held_params = set()          # a held value the request carries, or a protected input's path: never a ground (G22-1)
     given = dict(command.get("params") or {})
     given.update(extra_params or {})
     slots = dict((s["slot"], s) for s in decl.get("protected_inputs") or [])
@@ -128,6 +186,7 @@ def call(session, command, outputs, op=None, journal=None, extra_params=None, cw
                 raise NotCallable("a secret goes in no request")
             params[name] = protected.read(world.fs, run_dir, resolved.reference).decode("utf-8")
             shown[name] = "<held:%s>" % name
+            held_params.add(name)
             continue
         if isinstance(resolved, values.Held):
             if name not in slots:
@@ -139,6 +198,7 @@ def call(session, command, outputs, op=None, journal=None, extra_params=None, cw
             private.append(path)
             params[name] = path
             shown[name] = "<file:%s>" % name
+            held_params.add(name)
         else:
             params[name] = resolved
             shown[name] = resolved
@@ -151,6 +211,8 @@ def call(session, command, outputs, op=None, journal=None, extra_params=None, cw
             if key not in params:
                 raise NotCallable("a template names a value the row does not give")
             argv.append(str(params[key]))
+    request_query = [(item["name"], _part(item["value"], params)) for item in decl.get("query") or []] if request else None
+    request_body = _body(decl["body"], params) if request and isinstance(decl.get("body"), dict) else None
     env = {}
     for name, spec in (decl.get("env") or {}).items():
         kind = spec.get("class")
@@ -168,8 +230,12 @@ def call(session, command, outputs, op=None, journal=None, extra_params=None, cw
         spec = field.get("equals")
         if field.get("disposition") == "equal" and isinstance(spec, dict):
             field = dict(field)
-            if "param" in spec and spec["param"] in shown and not str(shown[spec["param"]]).startswith("<file:"):
-                field["equals_value"] = params[spec["param"]]            # what the tool sent in that request
+            if "param" in spec and spec["param"] in shown and spec["param"] not in held_params:
+                # what the tool sent in that request, where it is safe content. A held value sent back to its issuer is no
+                # ground: "An equality ground may use only independently safe content; a held request parameter and its
+                # echo must remain held" (the reviewer's F1, G22-1). Such a field has no safe value to equal: its value stays
+                # held and the tool keeps the fixed fact that it differs
+                field["equals_value"] = params[spec["param"]]
             elif "literal" in spec:
                 field["equals_value"] = spec["literal"]
             elif "settings" in spec:                                      # ground C: a name in his settings
@@ -215,7 +281,8 @@ def call(session, command, outputs, op=None, journal=None, extra_params=None, cw
             from . import hostcall
             provider = command["use"].partition(".")[0] if isinstance(command.get("use"), str) else decl.get("provider")
             try:
-                raw = hostcall.send(world, register, session.providers.get(provider) or {}, decl, argv, session.tokens.get(provider))
+                raw = hostcall.send(world, register, session.providers.get(provider) or {}, decl, argv, session.tokens.get(provider),
+                                    query=request_query, body=request_body)
             except hostcall.Refused as refused:
                 raise runner.Refused(refused.reason)
         else:
@@ -239,7 +306,7 @@ def call(session, command, outputs, op=None, journal=None, extra_params=None, cw
     # `runner.run`), and the parser reads from it only the declared fields at their declared places, never the
     # tool's text (`results.Parser`); what it keeps is held unless a ground proves it, and the records are only as
     # true as that program's answer (RK11, where the program stands in a folder he named).
-    parser = results.Parser(decl, raw, register)
+    parser = results.Parser(decl, raw, register, hosting_env=hosting_env)
     disproved = False
     if secret:
         disproved = _custody(session, parser.secrets(), due_fields, command["name"], op, execution, journal)

@@ -104,10 +104,10 @@ class Engine(object):
             raise Stop("a read would change something", op)
         return self.call(command, op)
 
-    def call(self, command, op, extra=None, cwd=None, own=None):
+    def call(self, command, op, extra=None, cwd=None, own=None, connection=None, hosting_env=False):
         try:
             outputs = self.state.with_own(op) if op in self.state.ops else self.state.outputs
-            return calls.call(self.session, command, outputs, op, self.journal, extra, cwd, own)
+            return calls.call(self.session, command, outputs, op, self.journal, extra, cwd, own, connection, hosting_env)
         except calls.Disproved:
             self.refresh()
             raise Stop("a safe ground disproved", op)
@@ -281,10 +281,11 @@ class Engine(object):
             raise stop
         if verdict == reads.UNREADABLE:
             raise Stop("unreadable", op, what="the check's subject")
+        shown = {"safe": dict(reader.seen_safe)} if reader.seen_safe else {}      # the safe fields a form line may show (G19-28)
         if verdict:
-            self.log("attempt", op=op, attempt=number, subject=subject, answer="passed", way_back=self.no_way_back(operation, "passed"))
+            self.log("attempt", op=op, attempt=number, subject=subject, answer="passed", way_back=self.no_way_back(operation, "passed"), **shown)
         else:
-            self.log("attempt", op=op, attempt=number, subject=subject, answer="failed")
+            self.log("attempt", op=op, attempt=number, subject=subject, answer="failed", **shown)
         if not verdict:
             if reader.last_hit:
                 args, more = sec10_stop(reader.last_hit, op, self.session.register)
@@ -428,22 +429,35 @@ class Engine(object):
         except (OSError, protected.Unreadable):
             raise Stop("a protected record could not be saved", op)
 
-    def save_reverse_inputs(self, operation):
+    def save_reverse_inputs(self, operation, computed=None):
         """Every input the row's reverse names, read and saved as a protected record before the
-        effect (LOG-2), each read back against its fingerprint."""
+        effect (LOG-2), each read back against its fingerprint. `computed`, for a C6 whose command's protected input is made
+        from a computed text, is (the command its text was read by, that text, the computed text), read once by the caller:
+        a `command` input of that command with no field saves that same text, and a `computed` input the computed text, so
+        the before-image and the after-image are the very texts the effect starts from and sends (G22-7, rows-set T10d)."""
         op, saved = operation["id"], []
         for item in operation.get("reverse_inputs") if isinstance(operation.get("reverse_inputs"), list) else []:
             try:
                 if item.get("read") == "file":
                     content = self.fs.read(self.value(item["path"], op))
                 elif item.get("read") == "value":
-                    content = str(self.value(item["value"], op)).encode("utf-8")
+                    found = self.value(item["value"], op)
+                    if isinstance(found, values.Held):
+                        content = protected.read(self.fs, self.run_dir, found.reference)     # a held value, by its content
+                    else:
+                        content = str(found).encode("utf-8")
                 elif item.get("read") in ("line-above", "line-below", "head"):
                     # EV-6 (A83, A84): "For a span that stood at its file's start or at its end, the file's start, or its
                     # end, stands as the recorded line on that side, and the sunset's save records it so"
                     lines, _ended = reads.file_lines(self.fs.read_text(self.value(item["path"], op)))
-                    span = str(self.value(item["line"], op)).split("\n")
-                    found = reads.span_at(lines, span)
+                    if item.get("holding") is not None:
+                        # the one line that holds a text (a line `move-line` moves, G19-14)
+                        holding = str(self.value(item["holding"], op))
+                        found = [i for i, l in enumerate(lines) if holding in l]
+                        span = [lines[found[0]]] if len(found) == 1 else []
+                    else:
+                        span = str(self.value(item["line"], op)).split("\n")
+                        found = reads.span_at(lines, span)
                     if len(found) != 1:
                         raise Stop("an input a reverse needs could not be read", op)
                     at = found[0]
@@ -453,6 +467,35 @@ class Engine(object):
                         content = (lines[at + len(span)] if at + len(span) < len(lines) else EDGE_END).encode("utf-8")
                     else:
                         content = "".join(l + "\n" for l in lines[:at]).encode("utf-8")
+                elif item.get("read") == "command" and item.get("out_param"):
+                    # a read command that writes into staging: its file kept as a protected record of the declared type,
+                    # and the staged file removed (G19-15; LOG-3)
+                    folder = staging_of(self.run_dir, op)
+                    if self.fs.lexists(folder):
+                        self.fs.rmtree(folder)
+                    self.fs.mkdir(folder)
+                    staged = os.path.join(folder, "object")
+                    try:
+                        result = self.call(self.command(operation, item["command"]), op, extra={item["out_param"]: staged}, cwd=folder)
+                        if result.kind != "success" or not self.fs.isfile(staged):
+                            raise Stop("an input a reverse needs could not be read", op)
+                        content = self.fs.read(staged)
+                    finally:
+                        self.fs.rmtree(folder)
+                elif item.get("read") == "computed":
+                    if computed is None:
+                        raise Stop("an input a reverse needs could not be read", op)
+                    content = computed[2]
+                elif item.get("read") == "command" and not item.get("field"):
+                    # a command whose whole answer is declared protected text (SEC-4, A147): that text, whole (G22-7)
+                    if computed is not None and computed[0] == item["command"]:
+                        content = computed[1]
+                    else:
+                        result = self.call(self.command(operation, item["command"]), op)
+                        text = getattr(result, "protected_text", None)
+                        if result.kind != "success" or text is None:
+                            raise Stop("an input a reverse needs could not be read", op)
+                        content = text.encode("utf-8")
                 elif item.get("read") == "command":
                     result = self.call(self.command(operation, item["command"]), op)
                     held = result.held(item.get("field")) if result.kind == "success" else None

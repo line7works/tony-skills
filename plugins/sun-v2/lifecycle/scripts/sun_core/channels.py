@@ -45,7 +45,45 @@ def address_components(address):
         out.append(password)
         if user:
             out.append("%s:%s" % (user, password))
+        plain = urllib.parse.unquote(password)
+        if plain != password:               # the password as the dump tool reads it from the service file (G20-1)
+            out.append(plain)
     return out
+
+
+def service_file(address, service):
+    """The whole connection address as one libpq service section (G20-1; SEC-2): `[service]`, then host, port, dbname, user
+    and password, then each of the address's parameters, one `key=value` line each, the URI's percent-encoding read off.
+    A service file has no escape: a part that cannot be one such line (a line break or another character of Part 2's core in
+    it, white space at either end of a part, `=` in a parameter's name, or several hosts) cannot be written, and raises
+    ValueError (GOV-1; the control room's reading, A153). Each part is checked on its own, so white space at an end of a value
+    is found though its line begins with the key (G22-6)."""
+    from . import chars
+    unquote = urllib.parse.unquote
+    try:
+        parts = urllib.parse.urlsplit(address)
+        port = parts.port
+        user, _, hostport = parts.netloc.rpartition("@")
+        host = hostport.rpartition(":")[0] if port is not None else hostport
+        params = urllib.parse.parse_qsl(parts.query, keep_blank_values=True, strict_parsing=bool(parts.query))
+    except ValueError:
+        raise ValueError("not an address")
+    if parts.scheme not in ("postgres", "postgresql") or parts.fragment:
+        raise ValueError("not an address")
+    found = [("host", unquote(host)), ("port", str(port) if port is not None else ""),
+             ("dbname", unquote(parts.path[1:]) if parts.path.startswith("/") else ""),
+             ("user", unquote(parts.username or "")), ("password", unquote(parts.password or ""))]
+    if "," in found[0][1]:
+        raise ValueError("several hosts")             # a service section names one host
+    pairs = [(k, v) for k, v in found if v]
+    for key, value in params:
+        if not key or "=" in key:
+            raise ValueError("a parameter's name")
+        pairs.append((key, value))
+    for part in [service] + [p for pair in pairs for p in pair]:
+        if any(chars.in_core(ch) for ch in part) or part != part.strip():
+            raise ValueError("a part that cannot be one line")
+    return ("\n".join(["[%s]" % service] + ["%s=%s" % pair for pair in pairs]) + "\n").encode("utf-8")
 
 
 def read_connection(world, path, key_names):

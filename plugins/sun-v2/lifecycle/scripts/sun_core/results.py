@@ -90,6 +90,34 @@ class Result(object):
         return kept.held if kept is not None else None
 
 
+def place_of(field):
+    """A field's declared place; `[]` is the top level, the whole answer (G19-12)."""
+    place = field.get("place")
+    return tuple(place) if isinstance(place, list) else (field.get("name"),)
+
+
+def _members(node, path):
+    """The values at a place that steps through a list (`"*"`): one per member, in order; None where a step is missing."""
+    if not path:
+        return [node]
+    part, rest = path[0], path[1:]
+    if part == "*":
+        if not isinstance(node, list):
+            return None
+        out = []
+        for item in node:
+            found = _members(item, rest)
+            if found is None:
+                return None
+            out += found
+        return out
+    if isinstance(node, dict) and part in node:
+        return _members(node[part], rest)
+    if isinstance(node, list) and isinstance(part, int) and 0 <= part < len(node):
+        return _members(node[part], rest)
+    return None
+
+
 def _count_bytes(text):
     return len(text.strip().encode("utf-8"))
 
@@ -168,8 +196,11 @@ def _before_the_damage(stdout, names):
 
 
 class Parser(object):
-    def __init__(self, declaration, raw, register):
+    def __init__(self, declaration, raw, register, hosting_env=False):
         self.decl = declaration
+        # the builder of the one keep construction that saves a hosting environment's values (its `hosting_env` mark): RK19's
+        # floor applies to its secret pair list and to no other (G22-3)
+        self.hosting_env = hosting_env
         self.raw = raw
         self.register = register
         self.kind = None
@@ -179,13 +210,15 @@ class Parser(object):
         self.bad = False              # the result is `malformed`, whatever else stands in it
         self.salvaged = {}            # an answer that cannot be decoded whole: {place: (kind, start, end, value)}
         self._secrets_read = False
+        self.protected_text = None    # a declaration's whole answer named protected text: in memory only (SEC-4, A147)
+        self.secret_lists = {}        # a secret list field's members, kept, in memory only (G20-6; SEC-4 as A150 words it)
         self._classify()
 
     def _secret_members(self):
         """The names of the top-level members that are declared secret fields' places, and no other."""
         out = set()
         for field in self._fields(True):
-            path = list(field.get("place") or [field.get("name")])
+            path = list(place_of(field))
             if len(path) == 1 and isinstance(path[0], str):
                 out.add(path[0])
         return out
@@ -206,6 +239,15 @@ class Parser(object):
             # structured answer is still read below, as it is beside an exit the declaration lists, and `secrets()` reads
             # its secret fields' places; `finish()` reads nothing else, the result being `malformed`
             self.kind, self.bad = "malformed", True
+        if self.decl.get("answer") == "protected text":
+            # SEC-4 (A147): a command whose declaration names its whole answer `protected text` is read whole as protected
+            # content, in memory: no field is read from it, and nothing of it is kept here (G19-8)
+            try:
+                self.protected_text = raw.stdout.decode("utf-8")
+            except UnicodeDecodeError:
+                self.protected_text = None
+            self.doc, self.found = {}, {}
+            return
         try:
             self.text = raw.stdout.decode("utf-8")
             self.doc = json.loads(self.text) if self.text.strip() else {}
@@ -215,14 +257,14 @@ class Parser(object):
             # an answer that cannot be decoded whole: a declared secret field whose place stands complete before the damage
             # is still read from that place (the reviewer's D8-M, check 3; the owner's pick, brief-27 item 3)
             self.salvaged = _before_the_damage(raw.stdout, self._secret_members())
-        if not self.bad and not isinstance(self.doc, dict):
-            self.bad = True
+        if not self.bad and not isinstance(self.doc, dict) and not any(place_of(f) == () for f in self.decl.get("fields") or []):
+            self.bad = True                 # an answer that is no object, where no field's place is the whole answer
 
     def _fields(self, secret):
         return [f for f in self.decl.get("fields") or [] if (f.get("disposition") == "secret") == secret]
 
     def _place(self, field):
-        path = tuple(field.get("place") or [field.get("name")])
+        path = place_of(field)
         if self.found is None or path not in self.found:
             return None
         kind, start, end = self.found[path]
@@ -234,7 +276,7 @@ class Parser(object):
     def _salvaged_place(self, field):
         """A secret field's place in an answer that could not be decoded whole: read only where it stood complete before
         the damage (`_before_the_damage`); None where it did not, which gives the receipt as before."""
-        path = tuple(field.get("place") or [field.get("name")])
+        path = place_of(field)
         if path not in self.salvaged:
             return None
         kind, start, end, node = self.salvaged[path]
@@ -245,8 +287,11 @@ class Parser(object):
         self._secrets_read = True
         out = []
         for field in self._fields(True):
-            at = self._place(field) if self.found is not None else self._salvaged_place(field)
             required = self.kind in (field.get("required_in") or [])
+            if "*" in place_of(field):
+                out.append(self._secret_list(field, required))
+                continue
+            at = self._place(field) if self.found is not None else self._salvaged_place(field)
             if at is None or at[0] == "null":
                 out.append(SecretRead(field["name"], NO_VALUE))
                 if required:
@@ -278,6 +323,45 @@ class Parser(object):
             out.append(SecretRead(field["name"], "kept", raw, is_text, False, components))
         return out
 
+    def _secret_list(self, field, required):
+        """A secret list field (SEC-4 as A150 words it; G20-6): each member checked by the type's validator, and each entered
+        in the register as a secret field's value is, as a component of the list's one value (for a list of key and text
+        pairs, G19-29, each member's text is the secret). A list that fails is kept whole at the least length or over, the
+        texts in it at that length or over its components, and makes the result `malformed`, as SEC-4 has a failing value."""
+        members = _members(self.doc, list(place_of(field))) if isinstance(self.doc, (dict, list)) else None
+        if members is None:
+            if required:
+                self.bad = True
+            return SecretRead(field["name"], NO_VALUE)
+        pairs = field.get("pairs") if isinstance(field.get("pairs"), dict) else None
+        if pairs:
+            passed = all(isinstance(m, dict) and _valid(field, m.get(pairs.get("key"))) and isinstance(m.get(pairs.get("value")), str)
+                         for m in members)
+            texts = [m.get(pairs.get("value")) for m in members if isinstance(m, dict)]
+        else:
+            passed = all(_valid(field, m) for m in members)
+            texts = list(members)
+        raw = json.dumps(members, sort_keys=True, ensure_ascii=False)
+        texts = [t if isinstance(t, str) else json.dumps(t) for t in texts if isinstance(t, (str, int, float)) and not isinstance(t, bool)]
+        if passed:
+            components = []
+            for text in texts:
+                if pairs and self.hosting_env and _count_bytes(text) < LEAST_LENGTH:
+                    # RK19 (A153): a hosting environment's saved value under the least length makes no entry. "Apply RK19 only to
+                    # saved hosting environment values; other valid secret-list members must enter the register regardless of
+                    # their short length" (the reviewer's F3, G22-3)
+                    continue
+                for piece in (text, text.strip()):
+                    if piece and piece not in components:
+                        components.append(piece)
+            self.secret_lists[field["name"]] = [[m[pairs["key"]], m[pairs["value"]]] for m in members] if pairs else list(members)
+            return SecretRead(field["name"], "kept", raw, False, True, components)
+        self.bad = True
+        if _count_bytes(raw) < LEAST_LENGTH:
+            return SecretRead(field["name"], DROPPED)
+        components = [t for t in texts if _count_bytes(t) >= LEAST_LENGTH]
+        return SecretRead(field["name"], "kept", raw, False, False, components)
+
     def _definite(self, kind):
         definite = self.decl.get("definite") or {}
         if kind in (definite.get("success") or []):
@@ -297,6 +381,28 @@ class Parser(object):
         fields = {}
         for field in self._fields(False):
             name = field["name"]
+            if "*" in place_of(field):
+                # a held field holding a list: one value per member of a list in the answer, each by its type's validator,
+                # and held whole (G19-25; the control room's item 8): no ground proves a list
+                found = _members(self.doc, list(place_of(field)))
+                if found is None:
+                    if self.kind in (field.get("required_in") or []):
+                        return Result("malformed")
+                    continue
+                pairs = field.get("pairs")
+                if isinstance(pairs, dict):
+                    # a held list of key and text pairs (G19-29): each member an object whose key passes the field's
+                    # validator and whose value is any text
+                    if not all(isinstance(v, dict) and _valid(field, v.get(pairs.get("key"))) and isinstance(v.get(pairs.get("value")), str)
+                               for v in found):
+                        return Result("malformed")
+                    found = [[v[pairs["key"]], v[pairs["value"]]] for v in found]
+                elif not all(_valid(field, v) for v in found):
+                    return Result("malformed")
+                if field.get("disposition") != "held":
+                    return Result("malformed")
+                fields[name] = Kept("held", held=found)
+                continue
             at = self._place(field)
             if at is None or at[0] == "null":
                 if self.kind in (field.get("required_in") or []):
@@ -324,5 +430,9 @@ class Parser(object):
                     fields[name] = Kept("equal", safe=DIFFERS, held=value, equal=False)
             else:
                 fields[name] = Kept("held", held=value)
+        for name, members in self.secret_lists.items():
+            fields[name] = Kept("secret", held=members)          # held in memory for the step that needs it (SEC-4, SEC-7)
         alternative = self.kind in (self.decl.get("alternatives") or [])
-        return Result(self.kind, fields, "refusal" if alternative else self._definite(self.kind), alternative)
+        result = Result(self.kind, fields, "refusal" if alternative else self._definite(self.kind), alternative)
+        result.protected_text = self.protected_text
+        return result

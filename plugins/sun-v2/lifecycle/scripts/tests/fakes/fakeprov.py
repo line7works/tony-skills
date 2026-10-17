@@ -122,7 +122,7 @@ def main():
     os.makedirs(ROOT, exist_ok=True)
     with open(COUNTS, "w") as fh:
         json.dump(counts, fh)
-    changing = command in ("create", "set", "cas", "write", "dump", "scaffold", "issue")
+    changing = command in ("create", "set", "cas", "write", "dump", "scaffold", "issue", "take")
     env = given()
     append(CALLS, {"tool": TOOL, "argv": ARGV, "env_names": sorted(env), "cwd": os.getcwd(), "pid": os.getpid(),
                    "changing": changing, "nth": nth, "env_values": env})
@@ -246,7 +246,7 @@ def main():
             os.chmod(target, int(todo["mode"], 8))
         answer({"keys": ["FIXTURE_URL", "FIXTURE_KEY"][: len(lines)], "count": len(lines)})
     if command in ("dump", "inventory"):
-        passfile = os.environ.get("FAKEDUMP_PASSFILE", "")
+        passfile = os.environ.get("FAKEDUMP_PASSFILE") or os.environ.get("PGSERVICEFILE", "")
         seen = {"passfile": passfile, "passfile_mode": None, "passfile_text": None}
         if passfile and os.path.exists(passfile):
             seen["passfile_mode"] = oct(os.stat(passfile).st_mode & 0o777)
@@ -305,11 +305,23 @@ def main():
             fd = os.open(os.path.join(target, rel), os.O_WRONLY | os.O_CREAT, int(todo.get("mode", "644"), 8))   # it asks for wider
             os.write(fd, text.encode())
             os.close(fd)
+        if todo.get("dot_git"):
+            # a scaffolder that makes its own repository where it runs (G21-4): a `.git` folder at the top, a `.git` file deeper
+            os.makedirs(os.path.join(target, ".git"))
+            with open(os.path.join(target, ".git", "HEAD"), "w") as fh:
+                fh.write("ref: refs/heads/main\n")
+            with open(os.path.join(target, "src", ".git"), "w") as fh:
+                fh.write("gitdir: elsewhere\n")
         for line in todo.get("git") or []:
             subprocess.call(["fakegit"] + line)
         answer({"files": 2})
     if command == "noop":
         answer(todo.get("stdout") or {"ok": True})
+    if command == "take":
+        # a command handed a protected input by its slot (G21-8): the file's text and permissions as the program saw them
+        path = opts.get("file", "")
+        append(os.path.join(ROOT, "taken.jsonl"), {"file": path, "mode": oct(os.stat(path).st_mode & 0o777), "text": open(path).read()})
+        answer({"ok": True})
     answer({"kind": "other"}, 2)
 
 
