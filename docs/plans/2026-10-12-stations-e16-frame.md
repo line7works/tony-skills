@@ -841,7 +841,7 @@ operation the tool performs. The last column is decided by RISK-1 and RISK-2.
 | Id | Construction | What it enforces at the instant of change | Window that remains | Open to the tool today |
 |---|---|---|---|---|
 | C1 | publish from staging: the staged object (OP-4) is put at its place by a rename that fails if anything is there, an empty folder included, and never through a symbolic link | nothing is at the place; the object is the one the run built | none, under RUN-4's assumption | yes |
-| C2 | a provider's create whose answer carries the new thing's id; where the row says the name must be free, a create the provider itself refuses on a taken name | the provider's own uniqueness | none at the provider | yes |
+| C2 | a provider's create whose answer carries the new thing's id; where the row says the name must be free, a create the provider itself refuses on a taken name, or, in a row RK18 names, a create of a step v1 did itself whose name the provider does not keep unique (A148) | the provider's own uniqueness; in a row RK18 names, the name check as of the look | none at the provider; in a row RK18 names, the same name taken by another between the check and the create | yes |
 | C3 | swap: under the file's own lock, a new file is built in staging and put in the old file's place only if the old file's hash is the one in the start record; at the swap the new file takes the old file's permissions | the whole file is as recorded | a writer that ignores the lock, between the hash check and the swap | yes, under RK2 |
 | C4 | compare-and-swap enforced by the store: the request names every value that must hold now, on the thing changed and on any related thing the store checks in the same request, each of which may be "none" (a local branch or tag updated only from its recorded value; a remote branch pushed only if the remote holds the value named), and the store refuses otherwise | every named value | none | yes |
 | C5 | a refusing call: a call that the tool or the provider, by its own document cited in the row, refuses when the before-state does not hold; the row lists each condition the refusal covers | each listed condition | none, as far as the cited refusal goes; a condition of the before-test that is not listed is a window | yes |
@@ -1518,7 +1518,9 @@ with no clock. What "whole" means is read from the same consistent state that is
 inventory is taken inside the same snapshot or hold as the copy, the copy is compared with it, and
 the completion record holds the inventory, the copy's size and fingerprint, and the identity of the
 source as read inside that same state, or, where the copying tool reports none, as read over the
-same connection or link immediately before the copy (A147). What of these a provider returned (the inventory, the
+same connection or link immediately before the copy (A147). Where the provider offers no snapshot
+or hold, an inventory read just before and again just after the copy, the two equal and equal to
+the copy's own, stands for one, and any difference fails the keep (A148). What of these a provider returned (the inventory, the
 source's identity) is held (SEC-4): it rests in a protected record and the completion record refers
 to it; the size and the fingerprint are the tool's own measure. Where the whole scope cannot be read
 or established, the keep fails and the run stops; where the look can already see that, it is a
@@ -2015,7 +2017,9 @@ the file's path and says he opens it himself; a file made for him to read before
 review file, kept in the same folder on the same terms. Where a form must speak of things found at a
 provider whose names are held, it says what kind of thing each is and how many there are, by the
 tool's own count, and names the file that lists them (the owner's ruling, A21); a name he then types
-is his own word and is shown.
+is his own word and is shown. One kind is shown by name: a hosting variable whose value the provider
+never returns is named by its key, never its value, in the preview and the tombstone as not saved
+(the owner's ruling, A148).
 
 Test on fakes: for a schedule whose saved command holds a canary, on a harness with no capability to
 recreate it, the owner's step names a file path and a label, and the canary is in no form or output;
