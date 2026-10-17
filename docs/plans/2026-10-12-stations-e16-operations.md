@@ -227,7 +227,7 @@ withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
 (A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40), and
-RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68), and RK15 the same day (A89), and RK16 on 2026-10-15 (A103), and RK17 the same day (A107), and RK18 on 2026-10-17 (A147).**
+RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68), and RK15 the same day (A89), and RK16 on 2026-10-15 (A103), and RK17 the same day (A107), and RK18 on 2026-10-17 (A147), and RK19 the same day (A153).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -406,6 +406,12 @@ How likely each is was never measured.
   change made by another between the tool's read and its request, as v1 risked it. He was told that
   this pick reaches the two windows he ruled no in A6 (a read-then-ask outside RK3's rows, and the
   schedule table read and replaced). Not measured.
+- **RK19, a short saved hosting env value not guarded** (accepted by the owner, A153). His pick,
+  in his words: "Skip under 8 bytes (Recommended)": "Same line you already accepted for the env file
+  at commit time (RK15): a value under 8 bytes is saved but not guarded. A real short secret could
+  then show in output. Long values stay fully guarded." A sunset saves every hosting env value it
+  reads; a value under eight bytes, counted as SEC-4 counts, makes no entry of the register, so it
+  is not withheld where it later appears. Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same

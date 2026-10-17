@@ -1870,7 +1870,9 @@ it is read as a field, shown, or searched for a value-shaped string.
 A field may be declared a list of one of these types, its place stepping through the list: each
 member is checked by that type's validator, and a list field is held or secret, as declared,
 whatever its members' type would allow, so a member is never kept as safe from the list; a secret
-list enters each member in the register, as a secret field's value (A150).
+list enters each member in the register, as a secret field's value (A150), but for a member of a
+hosting environment's saved values under SEC-4's least length, which is saved and makes no entry:
+RK19 (A153).
 
 An undeclared field is dropped. A declared field that fails its validator, a required field that is
 missing, a fixed field off its list, or a fixed field on its list that holds an entry of the
@@ -2872,8 +2874,8 @@ unanswered or names a row that does not exist.
 ## Part 4. The risk that is left
 
 **RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted
-seventeen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
-A48, A55, A63, A68, A89, A103, A107 and A147): RK1;
+eighteen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
+A48, A55, A63, A68, A89, A103, A107, A147 and A153): RK1;
 RK2, which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7;
 RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
@@ -2888,23 +2890,24 @@ whose send is a request of the frame's own, refused before any connection to the
 left outstanding with no record of the refusal (LOG-2, OP-7); RK17, for a false line that a secret
 may have been received and lost, where the frame refuses a request of its own that has a secret
 field before any connection to the host is opened (SEC-12); RK18, for a step v1 did itself, in the
-rows a lane names under it (OP-3, RISK-2); and the run directory's assumption
-(RUN-4). RK10, RK11, RK12, RK13, RK14, RK15, RK16, RK17 and RK18 are the ninth, the tenth, the
-eleventh, the twelfth, the thirteenth, the fourteenth, the fifteenth, the sixteenth and the
-seventeenth: no risk bears the
+rows a lane names under it (OP-3, RISK-2); RK19, for a saved hosting env value under eight bytes
+that makes no entry of the register (SEC-4, SEC-12); and the run directory's assumption
+(RUN-4). RK10, RK11, RK12, RK13, RK14, RK15, RK16, RK17, RK18 and RK19 are the ninth, the tenth,
+the eleventh, the twelfth, the thirteenth, the fourteenth, the fifteenth, the sixteenth, the
+seventeenth and the eighteenth: no risk bears the
 number nine, RK9 being merged into RK7. Their wording is in the catalog's Part 6 and
 is not restated here. This frame removes none of them and accepts none itself. An operation carried
 under RK2, RK3, RK4, RK5, RK13 or RK18 is marked so in the journal, once for each of those risks it is
 carried under. RK13's window is the one RK5's is, between the check and the add, so a shortcut's add
-and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15, RK16
-and RK17 belong to no one operation, and no mark is recorded for any of them.
+and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15, RK16,
+RK17 and RK19 belong to no one operation, and no mark is recorded for any of them.
 Where RK8's instant has passed, the journal already shows a receipt due and not given (SEC-12); that
 is the record of what happened, and no mark of a risk.
 
 Test on fakes: every operation built by C3, C6 or C7 carries the mark of its risk; a shortcut's add
 and its put-back carry RK5's mark and RK13's beside RK2's; each mark is recorded exactly once for
 its operation and its risk, also after a kill and a resume; no other operation carries a mark, and
-no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15, RK16 or RK17, an
+no record carries a mark for RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15, RK16, RK17 or RK19, an
 operation with a receipt due and not given, a restore that read the later of two sunsets by their
 times, a run that holds a disproof record, an operation whose program stands in a folder the
 fixture's settings name, a look that made the shortcut check, a commit made past a value of the env
