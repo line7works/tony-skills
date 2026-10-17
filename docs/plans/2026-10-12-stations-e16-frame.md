@@ -2059,6 +2059,7 @@ permissions than this table gives is a failure.
 | the same | a span put back into its file (EV-6) | a swap, C3, of the file it was taken from and no other; the file keeps the permissions it has, never wider |
 | the same | the working memory store copied back from its keep | new files: staged and published by C1 at the original place, which must be empty of anything; with the permissions recorded at the retirement, never wider |
 | the same | a routine recreated through the adapter | a protected input (SEC-3) |
+| the project folder, in a row RK18 names (A151, A152) | the files a build's own program wrote in staging (a scaffolder's project), and lines lifted unchanged from one of the project's own files into another, protected because the tool did not write them | published by C1 from staging, or carried by a C3 swap of the file they move into; each keeps the permissions its program or its file gave it, shown nowhere |
 | the provider | the token in the authorization header; the password, to the database server; a held value, to the provider that issued it | the authorized transmissions of SEC-2 |
 
 What a tool writes into its own folders is not on this list: it is risk RK1 (RISK-1).
