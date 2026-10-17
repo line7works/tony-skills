@@ -1518,9 +1518,12 @@ with no clock. What "whole" means is read from the same consistent state that is
 inventory is taken inside the same snapshot or hold as the copy, the copy is compared with it, and
 the completion record holds the inventory, the copy's size and fingerprint, and the identity of the
 source as read inside that same state, or, where the copying tool reports none, as read over the
-same connection or link immediately before the copy (A147). Where the provider offers no snapshot
-or hold, an inventory read just before and again just after the copy, the two equal and equal to
-the copy's own, stands for one, and any difference fails the keep (A148). What of these a provider returned (the inventory, the
+same connection or link immediately before the copy (A147). For a hosting environment's variables
+alone, whose provider offers no snapshot or hold: the keys read just before and again just after
+the pull, the two equal, and every key whose value the provider returns present in the copy, stand
+for one; a key whose value the provider never returns is listed apart, as SEC-6 has it, and any
+other difference fails the keep. That shows the keys were whole; a value changed by another during
+the pull is not seen, which is v1's risk, carried under RK18 (A148, A149). What of these a provider returned (the inventory, the
 source's identity) is held (SEC-4): it rests in a protected record and the completion record refers
 to it; the size and the fingerprint are the tool's own measure. Where the whole scope cannot be read
 or established, the keep fails and the run stops; where the look can already see that, it is a
