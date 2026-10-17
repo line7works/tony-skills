@@ -1,0 +1,147 @@
+{
+ "after_check": [
+  {
+   "command": "read-new",
+   "field": "ref",
+   "is_equal": true,
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "after_test": [
+  {
+   "command": "read-new",
+   "field": "ref",
+   "is_equal": true,
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "answers": "none",
+ "before_test": [
+  {
+   "command": "read-old",
+   "field": "ref",
+   "id": "old",
+   "is_equal": true,
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "commands": [
+  {
+   "name": "read-old",
+   "params": {
+    "expect": {
+     "literal": "none"
+    },
+    "ref": {
+     "literal": "main"
+    }
+   },
+   "use": "fakegit.ref"
+  },
+  {
+   "name": "read-new",
+   "params": {
+    "expect": {
+     "literal": "c1"
+    },
+    "ref": {
+     "literal": "main"
+    }
+   },
+   "use": "fakegit.ref"
+  },
+  {
+   "name": "swap",
+   "params": {
+    "new": {
+     "literal": "c1"
+    },
+    "old": {
+     "literal": "none"
+    },
+    "ref": {
+     "literal": "main"
+    }
+   },
+   "use": "fakegit.cas"
+  }
+ ],
+ "condition": "none",
+ "construction": {
+  "command": "swap",
+  "id": "C4"
+ },
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row G1",
+  "status": "the fake row G1"
+ },
+ "id": "G1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "change",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": [
+  {
+   "level": "made",
+   "output": "remote",
+   "treatment": "then not applicable"
+  },
+  {
+   "level": "passed",
+   "output": "scanned",
+   "treatment": "then not applicable"
+  }
+ ],
+ "output": {
+  "fields": {
+   "ref": {
+    "literal": "c1"
+   }
+  },
+  "name": "pushed"
+ },
+ "owner_names": "none",
+ "phase": "remote",
+ "planning_test": [
+  {
+   "command": "read-old",
+   "field": "ref",
+   "is_equal": true,
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "repo_commands": [
+  "swap"
+ ],
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "after_word": "c1",
+  "before_word": "none",
+  "identity": "named value",
+  "role": "a named value of the fake store"
+ },
+ "way_back": {
+  "none": "the row declares none: a push is not taken back"
+ }
+}

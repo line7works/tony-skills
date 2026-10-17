@@ -1,0 +1,14 @@
+{
+ "at": "2026-01-01T00:00:35Z",
+ "h": "3502a627cb9834214f6c4e44a9b3b1c87fc9237caa58aca0c090b60d0092907c",
+ "inv": "i-1f35c478b41cd5e0",
+ "kind": "status",
+ "n": 34,
+ "op": "O1",
+ "prev": "b8e19ab08bd1462b6a01fd0c658ac00f5f59cb6d1ed4f5879cc7ad13628b0beb",
+ "status": "done by owner, on his word",
+ "way_back": {
+  "offered": false,
+  "reason": "the row declares none"
+ }
+}

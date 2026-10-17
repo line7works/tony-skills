@@ -1,0 +1,26 @@
+{
+ "$id": "sun-v2/open-runs.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "additionalProperties": false,
+ "properties": {
+  "open": {
+   "additionalProperties": {
+    "pattern": "^(sunrise|sunset|restore)-[0-9a-f]{16}$",
+    "type": "string"
+   },
+   "propertyNames": {
+    "pattern": "^[0-9a-f]{64}$"
+   },
+   "type": "object"
+  },
+  "record_version": {
+   "const": 1
+  }
+ },
+ "required": [
+  "record_version",
+  "open"
+ ],
+ "title": "The record of open runs: fingerprints of project keys against run ids, and nothing else (RUN-3, SEC-12).",
+ "type": "object"
+}

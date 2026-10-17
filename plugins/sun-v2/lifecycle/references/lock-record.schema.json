@@ -1,0 +1,28 @@
+{
+ "$id": "sun-v2/lock-record.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "additionalProperties": false,
+ "properties": {
+  "fingerprint": {
+   "pattern": "^[0-9a-f]{64}$",
+   "type": "string"
+  },
+  "run": {
+   "anyOf": [
+    {
+     "pattern": "^(sunrise|sunset|restore)-[0-9a-f]{16}$",
+     "type": "string"
+    },
+    {
+     "const": ""
+    }
+   ]
+  }
+ },
+ "required": [
+  "fingerprint",
+  "run"
+ ],
+ "title": "A lock's own record: the fingerprint of a project key and the id of the run that holds it (RUN-2, SEC-12).",
+ "type": "object"
+}

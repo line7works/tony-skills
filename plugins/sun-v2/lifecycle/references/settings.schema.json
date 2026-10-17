@@ -1,0 +1,74 @@
+{
+ "$id": "sun-v2/settings.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "additionalProperties": false,
+ "properties": {
+  "accounts": {
+   "additionalProperties": {
+    "items": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "type": "array"
+   },
+   "type": "object"
+  },
+  "locations": {
+   "additionalProperties": {
+    "maxLength": 1024,
+    "type": "string"
+   },
+   "type": "object"
+  },
+  "program_folders": {
+   "items": {
+    "maxLength": 1024,
+    "pattern": "^/",
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "settings_version": {
+   "const": 1
+  },
+  "vault": {
+   "additionalProperties": false,
+   "properties": {
+    "marker_file": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "path": {
+     "maxLength": 1024,
+     "type": "string"
+    },
+    "projects_dir": {
+     "maxLength": 200,
+     "type": "string"
+    },
+    "synced_segments": {
+     "items": {
+      "maxLength": 200,
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "path",
+    "marker_file",
+    "projects_dir",
+    "synced_segments"
+   ],
+   "type": "object"
+  }
+ },
+ "required": [
+  "settings_version",
+  "vault",
+  "locations",
+  "accounts"
+ ],
+ "title": "The one user-level settings file (the contract's E16-12).",
+ "type": "object"
+}

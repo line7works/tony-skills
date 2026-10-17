@@ -1,0 +1,11 @@
+{
+ "at": "2026-01-01T00:00:07Z",
+ "h": "df71dc2db2ba6c014acb458001bd10ed159e8927523370315c2e441855d6ebf3",
+ "inv": "i-d9beb43890487729",
+ "kind": "step",
+ "n": 6,
+ "op": "S1",
+ "prev": "14e52edac17483d664ca1b32fbaece549d673c4062fa3008a3ba97af6ff6519e",
+ "risk": "RK2",
+ "step": "risk-mark"
+}

@@ -1,0 +1,13 @@
+{
+  "skills_version": 1,
+  "plugin": "sun-v2",
+  "skills": [
+    {"name": "sunrise-v2", "folder": "skills/sunrise-v2"},
+    {"name": "sunset-v2", "folder": "skills/sunset-v2"}
+  ],
+  "summonses": {
+    "sunrise": "sunrise-v2",
+    "sunset": "sunset-v2",
+    "restore": null
+  }
+}

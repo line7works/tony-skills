@@ -1,0 +1,123 @@
+{
+ "after_check": [
+  {
+   "command": "look",
+   "equals": "paused",
+   "field": "state",
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "after_test": [
+  {
+   "command": "look",
+   "equals": "paused",
+   "field": "state",
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "answers": "none",
+ "before_test": [
+  {
+   "command": "look",
+   "equals": "active",
+   "field": "state",
+   "id": "was",
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "commands": [
+  {
+   "name": "look",
+   "params": {
+    "name": {
+     "output": "remote.name"
+    }
+   },
+   "use": "fakehost.get"
+  },
+  {
+   "name": "set",
+   "params": {
+    "if": {
+     "literal": "active"
+    },
+    "name": {
+     "output": "remote.name"
+    },
+    "state": {
+     "literal": "paused"
+    }
+   },
+   "use": "fakehost.set-if"
+  }
+ ],
+ "condition": "none",
+ "construction": {
+  "command": "set",
+  "conditions": [
+   "was"
+  ],
+  "document": "fakehost refuses a state change when --if does not hold (the fake's own document)",
+  "id": "C5"
+ },
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row H1",
+  "status": "the fake row H1"
+ },
+ "id": "H1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "change",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": [
+  {
+   "level": "made",
+   "output": "remote",
+   "treatment": "then not applicable"
+  }
+ ],
+ "output": {
+  "fields": {},
+  "name": "state-H1"
+ },
+ "owner_names": "none",
+ "phase": "remote",
+ "planning_test": [
+  {
+   "command": "look",
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "after_word": "paused",
+  "before_word": "active",
+  "identity": "provider id",
+  "role": "a thing at the fake host"
+ },
+ "way_back": {
+  "none": "the row declares none"
+ }
+}

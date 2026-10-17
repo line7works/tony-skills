@@ -1,0 +1,313 @@
+{
+ "after_check": [
+  {
+   "count": 1,
+   "line": {
+    "text": [
+     {
+      "literal": "alias "
+     },
+     {
+      "name": 0
+     }
+    ]
+   },
+   "path": {
+    "location": "shortcut_file"
+   },
+   "read": "line"
+  }
+ ],
+ "after_test": [
+  {
+   "line": {
+    "text": [
+     {
+      "literal": "alias "
+     },
+     {
+      "name": 0
+     }
+    ]
+   },
+   "path": {
+    "location": "shortcut_file"
+   },
+   "present": true,
+   "read": "line"
+  }
+ ],
+ "answers": "none",
+ "before_test": [
+  {
+   "id": "lacks",
+   "line": {
+    "text": [
+     {
+      "literal": "alias "
+     },
+     {
+      "name": 0
+     }
+    ]
+   },
+   "path": {
+    "location": "shortcut_file"
+   },
+   "present": false,
+   "read": "line"
+  },
+  {
+   "id": "name",
+   "name": {
+    "name": 0
+   },
+   "on": "other",
+   "read": "name-free"
+  }
+ ],
+ "commands": "none",
+ "condition": "none",
+ "construction": {
+  "edit": {
+   "kind": "append-line",
+   "line": {
+    "text": [
+     {
+      "literal": "alias "
+     },
+     {
+      "name": 0
+     }
+    ]
+   }
+  },
+  "id": "C3",
+  "risks": [
+   "RK2",
+   "RK5",
+   "RK13"
+  ]
+ },
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row S1",
+  "status": "the fake row S1"
+ },
+ "id": "S1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "change",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": [
+  {
+   "level": "state",
+   "output": "project folder",
+   "treatment": "then not applicable"
+  }
+ ],
+ "output": {
+  "fields": {
+   "file": {
+    "location": "shortcut_file"
+   }
+  },
+  "name": "shortcut"
+ },
+ "owner_names": "none",
+ "phase": "prepare",
+ "planning_test": [
+  {
+   "is": "file",
+   "path": {
+    "location": "shortcut_file"
+   },
+   "read": "path"
+  }
+ ],
+ "repo_commands": "none",
+ "reverse_inputs": [
+  {
+   "label": "the shortcut file before the line was added",
+   "path": {
+    "location": "shortcut_file"
+   },
+   "read": "file",
+   "type": "before-image"
+  }
+ ],
+ "review_file": "none",
+ "safe_content": "none",
+ "span": {
+  "ordered": false,
+  "placement": "at the end"
+ },
+ "thing": {
+  "identity": "path",
+  "place": {
+   "location": "shortcut_file"
+  },
+  "role": "the shortcut file",
+  "span": true,
+  "tracked": [
+   "exists",
+   "sha256"
+  ]
+ },
+ "way_back": {
+  "reverse": {
+   "after_check": [
+    {
+     "line": {
+      "text": [
+       {
+        "literal": "alias "
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "path": {
+      "location": "shortcut_file"
+     },
+     "present": false,
+     "read": "line"
+    }
+   ],
+   "after_test": [
+    {
+     "line": {
+      "text": [
+       {
+        "literal": "alias "
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "path": {
+      "location": "shortcut_file"
+     },
+     "present": false,
+     "read": "line"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "count": 1,
+     "id": "has",
+     "line": {
+      "text": [
+       {
+        "literal": "alias "
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "path": {
+      "location": "shortcut_file"
+     },
+     "read": "line"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "edit": {
+     "kind": "remove-line",
+     "line": {
+      "text": [
+       {
+        "literal": "alias "
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    },
+    "id": "C3",
+    "risks": [
+     "RK2"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row S1-reverse",
+    "status": "the fake row S1-reverse"
+   },
+   "id": "S1-reverse",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {},
+    "name": "out-S1-reverse"
+   },
+   "owner_names": "none",
+   "phase": "prepare",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "location": "shortcut_file"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "location": "shortcut_file"
+    },
+    "role": "the shortcut file",
+    "span": true,
+    "tracked": [
+     "exists",
+     "sha256"
+    ]
+   },
+   "way_back": {
+    "none": "the row declares none: it is itself a reverse"
+   }
+  }
+ }
+}

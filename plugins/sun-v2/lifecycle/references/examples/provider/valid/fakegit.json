@@ -1,0 +1,118 @@
+{
+ "commands": {
+  "cas": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [
+     "conflict"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "alphabet": "a-zA-Z0-9._ -",
+     "disposition": "equal",
+     "equals": {
+      "param": "new"
+     },
+     "max_length": 80,
+     "name": "ref",
+     "place": [
+      "ref"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    }
+   ],
+   "template": [
+    {
+     "literal": "cas"
+    },
+    {
+     "literal": "--ref"
+    },
+    {
+     "param": "ref"
+    },
+    {
+     "literal": "--new"
+    },
+    {
+     "param": "new"
+    },
+    {
+     "literal": "--old"
+    },
+    {
+     "param": "old"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakegit"
+  },
+  "ref": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "alphabet": "a-zA-Z0-9._ -",
+     "disposition": "equal",
+     "equals": {
+      "param": "expect"
+     },
+     "max_length": 80,
+     "name": "ref",
+     "place": [
+      "ref"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    }
+   ],
+   "template": [
+    {
+     "literal": "ref"
+    },
+    {
+     "literal": "--ref"
+    },
+    {
+     "param": "ref"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakegit"
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "fakegit",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": [
+  "--verbose"
+ ]
+}

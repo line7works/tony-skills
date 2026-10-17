@@ -1,0 +1,129 @@
+{
+ "after_check": [
+  {
+   "command": "by-id",
+   "equals": "active",
+   "field": "state",
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "after_test": [
+  {
+   "command": "look",
+   "read": "command",
+   "result": "success"
+  }
+ ],
+ "answers": "none",
+ "before_test": [
+  {
+   "command": "look",
+   "id": "free",
+   "read": "command",
+   "result": "not-found"
+  }
+ ],
+ "commands": [
+  {
+   "name": "look",
+   "params": {
+    "name": {
+     "name": 0
+    }
+   },
+   "use": "fakehost.get"
+  },
+  {
+   "name": "make",
+   "params": {
+    "kind": {
+     "literal": "repo"
+    },
+    "name": {
+     "name": 0
+    }
+   },
+   "use": "fakehost.create"
+  },
+  {
+   "name": "by-id",
+   "params": {
+    "idfile": {
+     "output": "remote.id"
+    }
+   },
+   "use": "fakehost.get-by-id"
+  }
+ ],
+ "condition": "none",
+ "construction": {
+  "command": "make",
+  "document": "fakehost keeps a name unique in an account (the fake's own document)",
+  "id": "C2",
+  "id_field": "id"
+ },
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row C1",
+  "status": "the fake row C1"
+ },
+ "id": "C1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "create",
+ "lost_answer": {
+  "document": "fakehost keeps a name unique in an account",
+  "way": "provider-unique"
+ },
+ "mode": "none",
+ "needs": [
+  {
+   "level": "made",
+   "output": "project folder",
+   "treatment": "then not applicable"
+  }
+ ],
+ "output": {
+  "fields": {
+   "id": {
+    "held": "id"
+   },
+   "name": {
+    "name": 0
+   }
+  },
+  "name": "remote"
+ },
+ "owner_names": "none",
+ "phase": "remote",
+ "planning_test": [
+  {
+   "command": "look",
+   "read": "command",
+   "result": "not-found"
+  }
+ ],
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "identity": "provider id",
+  "role": "a thing at the fake host"
+ },
+ "way_back": "none"
+}

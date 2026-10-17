@@ -1,0 +1,10 @@
+{
+  "provider_version": 1,
+  "provider": "fakehost",
+  "host": "api.fakehost.invalid",
+  "token": {"env": "FAKEHOST_TOKEN", "credentials": {"location": "fakehost_credentials", "field": "token"}},
+  "credential_env": ["FAKEHOST_TOKEN"],
+  "trace_flags": ["--debug", "--verbose", "--trace"],
+  "identity": "none",
+  "commands": {}
+}

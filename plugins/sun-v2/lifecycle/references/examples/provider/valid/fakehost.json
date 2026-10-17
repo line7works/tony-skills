@@ -1,0 +1,679 @@
+{
+ "commands": {
+  "create": {
+   "alternatives": [
+    "terms"
+   ],
+   "definite": {
+    "refusals": [
+     "conflict",
+     "terms"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "4": "conflict",
+    "6": "terms"
+   },
+   "fields": [
+    {
+     "alphabet": "a-z0-9",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "id"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "alphabet": "a-zA-Z0-9._ -",
+     "disposition": "equal",
+     "equals": {
+      "param": "name"
+     },
+     "max_length": 80,
+     "name": "name",
+     "place": [
+      "name"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    },
+    {
+     "disposition": "fixed",
+     "list": [
+      "active",
+      "paused",
+      "archived",
+      "connected"
+     ],
+     "name": "state",
+     "place": [
+      "state"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    }
+   ],
+   "template": [
+    {
+     "literal": "create"
+    },
+    {
+     "literal": "--kind"
+    },
+    {
+     "param": "kind"
+    },
+    {
+     "literal": "--name"
+    },
+    {
+     "param": "name"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "get": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "active",
+      "paused",
+      "archived",
+      "connected"
+     ],
+     "name": "state",
+     "place": [
+      "state"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    },
+    {
+     "alphabet": "a-zA-Z0-9._ -",
+     "disposition": "equal",
+     "equals": {
+      "param": "name"
+     },
+     "max_length": 80,
+     "name": "name",
+     "place": [
+      "name"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    },
+    {
+     "alphabet": "a-z0-9",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "id"
+     ],
+     "required_in": [],
+     "type": "id"
+    }
+   ],
+   "template": [
+    {
+     "literal": "get"
+    },
+    {
+     "literal": "--name"
+    },
+    {
+     "param": "name"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "get-by-id": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "active",
+      "paused",
+      "archived",
+      "connected"
+     ],
+     "name": "state",
+     "place": [
+      "state"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    },
+    {
+     "alphabet": "a-z0-9",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "id"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    }
+   ],
+   "protected_inputs": [
+    {
+     "accepts": "held field",
+     "slot": "idfile"
+    }
+   ],
+   "template": [
+    {
+     "literal": "get"
+    },
+    {
+     "literal": "--id-file"
+    },
+    {
+     "slot": "idfile"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "identify": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "alphabet": "a-z0-9-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "identity",
+     "place": [
+      "identity"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    }
+   ],
+   "template": [
+    {
+     "literal": "identify"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "issue": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "alphabet": "a-z0-9",
+     "disposition": "secret",
+     "max_length": 64,
+     "name": "token",
+     "place": [
+      "token"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "disposition": "fixed",
+     "list": [
+      "issued"
+     ],
+     "name": "state",
+     "place": [
+      "state"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    }
+   ],
+   "template": [
+    {
+     "literal": "issue"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "issued": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "made",
+      "nothing"
+     ],
+     "name": "made",
+     "place": [
+      "made"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    }
+   ],
+   "template": [
+    {
+     "literal": "issued"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "noop": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "noop"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "request-status": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "made",
+      "nothing"
+     ],
+     "name": "made",
+     "place": [
+      "made"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    },
+    {
+     "alphabet": "a-z0-9",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "id"
+     ],
+     "required_in": [],
+     "type": "id"
+    }
+   ],
+   "template": [
+    {
+     "literal": "request-status"
+    },
+    {
+     "literal": "--name"
+    },
+    {
+     "param": "name"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "say": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "noop"
+    },
+    {
+     "literal": "--name"
+    },
+    {
+     "param": "words"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "set": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "active",
+      "paused",
+      "archived",
+      "connected"
+     ],
+     "name": "state",
+     "place": [
+      "state"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    }
+   ],
+   "template": [
+    {
+     "literal": "set"
+    },
+    {
+     "literal": "--name"
+    },
+    {
+     "param": "name"
+    },
+    {
+     "literal": "--state"
+    },
+    {
+     "param": "state"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "set-if": {
+   "definite": {
+    "refusals": [
+     "conflict",
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "active",
+      "paused",
+      "archived",
+      "connected"
+     ],
+     "name": "state",
+     "place": [
+      "state"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    }
+   ],
+   "template": [
+    {
+     "literal": "set"
+    },
+    {
+     "literal": "--name"
+    },
+    {
+     "param": "name"
+    },
+    {
+     "literal": "--state"
+    },
+    {
+     "param": "state"
+    },
+    {
+     "literal": "--if"
+    },
+    {
+     "param": "if"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "whoami": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "alphabet": "a-zA-Z0-9._ -",
+     "disposition": "equal",
+     "equals": {
+      "settings": "fakehost"
+     },
+     "max_length": 80,
+     "name": "account",
+     "place": [
+      "account"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    }
+   ],
+   "template": [
+    {
+     "literal": "whoami"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  },
+  "write": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [
+    {
+     "disposition": "held",
+     "name": "count",
+     "place": [
+      "count"
+     ],
+     "required_in": [],
+     "type": "count"
+    }
+   ],
+   "secret_output": "staging",
+   "template": [
+    {
+     "literal": "write"
+    },
+    {
+     "literal": "--out"
+    },
+    {
+     "param": "out"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakehost"
+  }
+ },
+ "credential_env": [
+  "FAKEHOST_TOKEN"
+ ],
+ "host": "api.fakehost.invalid",
+ "identity": {
+  "command": "whoami",
+  "field": "account"
+ },
+ "provider": "fakehost",
+ "provider_version": 1,
+ "token": {
+  "credentials": {
+   "field": "token",
+   "location": "fakehost_credentials"
+  },
+  "env": "FAKEHOST_TOKEN"
+ },
+ "trace_flags": [
+  "--debug",
+  "--verbose",
+  "--trace"
+ ]
+}

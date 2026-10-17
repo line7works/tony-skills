@@ -1,0 +1,42 @@
+{
+ "commands": {
+  "scaffold": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "4": "conflict"
+   },
+   "fields": [],
+   "repository_writes": "off",
+   "template": [
+    {
+     "literal": "scaffold"
+    },
+    {
+     "literal": "--out"
+    },
+    {
+     "param": "out"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "fakescaffold"
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "fakescaffold",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": [
+  "--verbose"
+ ]
+}

@@ -1,0 +1,34 @@
+#!/bin/sh
+# sun: the one start of sun-v2's lifecycle tool (the owner's ruling, A47; the frame's RUN-1).
+#
+# Run by /bin/sh by its full path. It starts /usr/bin/python3 by its full path with an environment that holds
+# only the names the tool reads, HOME, USER and LOGNAME; every other name of the session is cleared (among them
+# DEVELOPER_DIR, every Python setting and PATH). -I and -S: the interpreter reads no folder of packages of the
+# account and no setting of the session; the tool loads only its own files and that Python's own library.
+# A lane that declares a provider adds that provider's token variable and its passed names to the line below,
+# and `tests/test_start.py` holds the line to exactly the names the frame has the tool read.
+#
+# A start that cannot run the tool's own first code prints nothing (the owner's ruling, A50; RUN-1, SEC-12).
+# While the interpreter starts, its standard error, and with it the shell's, the stand-in's and the interpreter's
+# own lines, goes nowhere; the caller's standard output and standard error are handed to it on descriptors 1
+# and 5, and descriptor 3 is a pipe back to this shell. `sun.py`, once the first code has run and made the
+# withheld read, writes one byte on 3 and takes 5 as its standard error: from then on nothing is silenced, and
+# every line is the tool's own, passed under the read. Where that byte never comes, the start could not run the
+# first code: this shell prints nothing and ends with the fixed number. That number is written once in the tool, on
+# the next line and nowhere else, so that this shell has it whatever else of the tool is missing or broken;
+# `sun_core/exits.py` lists it in its table of the tool's exit numbers and no code of the tool uses it.
+FAILED_START=3
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+case $0 in
+*/*) here=${0%/*} ;;
+*) here=. ;;
+esac
+exec 4>&1
+ran=$(/usr/bin/env -i HOME="${HOME-}" USER="${USER-}" LOGNAME="${LOGNAME-}" /usr/bin/python3 -I -S -B "$here/sun.py" "$@" 3>&1 1>&4 4>&- 5>&2 2>/dev/null)
+code=$?
+exec 4>&-
+if [ "$ran" = r ]; then
+    exit "$code"
+fi
+exec 1>/dev/null 2>/dev/null
+exit "$FAILED_START"

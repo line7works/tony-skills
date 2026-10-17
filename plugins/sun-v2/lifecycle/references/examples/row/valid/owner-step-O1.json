@@ -1,0 +1,54 @@
+{
+ "after_check": "none",
+ "after_test": "none",
+ "answers": "none",
+ "before_test": "none",
+ "commands": "none",
+ "condition": "none",
+ "construction": "none",
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row O1",
+  "status": "the fake row O1"
+ },
+ "id": "O1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "owner step",
+ "lost_answer": "none",
+ "mode": "on his word",
+ "needs": "none",
+ "output": {
+  "fields": {},
+  "name": "connected"
+ },
+ "owner_names": "none",
+ "phase": "remote",
+ "planning_test": "none",
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": {
+  "step": "connect the fake host by hand"
+ },
+ "span": "none",
+ "thing": {
+  "identity": "provider id",
+  "role": "a thing only the owner can change"
+ },
+ "way_back": {
+  "none": "the row declares none"
+ }
+}

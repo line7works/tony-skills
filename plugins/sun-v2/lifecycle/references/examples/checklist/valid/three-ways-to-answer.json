@@ -1,0 +1,23 @@
+[
+ {
+  "answered_by": {
+   "row": "P1"
+  },
+  "item": "A2: the whole database is saved",
+  "must": {
+   "kind": "keep"
+  }
+ },
+ {
+  "answered_by": {
+   "form_line": "not saved"
+  },
+  "item": "F18: the not-saved list"
+ },
+ {
+  "answered_by": {
+   "reason": "not this lane's"
+  },
+  "item": "A4: a launch agent is unloaded and its file moved"
+ }
+]

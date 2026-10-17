@@ -1,0 +1,65 @@
+{
+ "after_check": "none",
+ "after_test": "none",
+ "answers": "none",
+ "before_test": "none",
+ "commands": "none",
+ "condition": "none",
+ "construction": "none",
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row K1",
+  "status": "the fake row K1"
+ },
+ "id": "K1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "check",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": "none",
+ "output": {
+  "fields": {},
+  "name": "preflight"
+ },
+ "owner_names": "none",
+ "phase": "prepare",
+ "planning_test": "none",
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "identity": "path",
+  "passes": [
+   {
+    "is": "dir",
+    "path": {
+     "location": "developer_root"
+    },
+    "read": "path"
+   }
+  ],
+  "place": {
+   "location": "developer_root"
+  },
+  "role": "a folder the run reads",
+  "tracked": [
+   "exists"
+  ]
+ },
+ "way_back": "none"
+}

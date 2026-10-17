@@ -1,0 +1,27 @@
+{
+ "accounts": {
+  "fakegit": [
+   "fixture-account"
+  ],
+  "fakehost": [
+   "fixture-account"
+  ]
+ },
+ "locations": {
+  "archive_root": "/home/fixture/home/dev/_archive",
+  "developer_root": "/home/fixture/home/dev",
+  "shortcut_file": "/home/fixture/home/shortcuts.txt"
+ },
+ "program_folders": [
+  "/opt/plugins/sun-v2/lifecycle/scripts/tests/fakes"
+ ],
+ "settings_version": 1,
+ "vault": {
+  "marker_file": "MARKER.md",
+  "path": "/home/fixture/home/vault",
+  "projects_dir": "projects",
+  "synced_segments": [
+   "Synced"
+  ]
+ }
+}

@@ -1,0 +1,415 @@
+{
+ "after_check": [
+  {
+   "is": "file",
+   "path": {
+    "path": [
+     {
+      "output": "project folder.path"
+     },
+     {
+      "literal": "scope.md"
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "after_test": [
+  {
+   "is": "absent",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-scope.md"
+       }
+      ]
+     }
+    ]
+   },
+   "read": "path"
+  },
+  {
+   "is": "file",
+   "path": {
+    "path": [
+     {
+      "output": "project folder.path"
+     },
+     {
+      "literal": "scope.md"
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "answers": "none",
+ "before_test": [
+  {
+   "id": "there",
+   "is": "file",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-scope.md"
+       }
+      ]
+     }
+    ]
+   },
+   "read": "path"
+  },
+  {
+   "id": "free",
+   "is": "absent",
+   "path": {
+    "path": [
+     {
+      "output": "project folder.path"
+     },
+     {
+      "literal": "scope.md"
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "commands": "none",
+ "condition": "none",
+ "construction": {
+  "id": "C7",
+  "risks": [
+   "RK4"
+  ],
+  "to": {
+   "path": [
+    {
+     "output": "project folder.path"
+    },
+    {
+     "literal": "scope.md"
+    }
+   ]
+  }
+ },
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row M1",
+  "status": "the fake row M1"
+ },
+ "id": "M1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "move",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": [
+  {
+   "level": "made",
+   "output": "project folder",
+   "treatment": "then not applicable"
+  }
+ ],
+ "output": {
+  "fields": {
+   "path": {
+    "path": [
+     {
+      "output": "project folder.path"
+     },
+     {
+      "literal": "scope.md"
+     }
+    ]
+   }
+  },
+  "name": "moved document"
+ },
+ "owner_names": "none",
+ "phase": "prepare",
+ "planning_test": [
+  {
+   "is": "file",
+   "path": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-scope.md"
+       }
+      ]
+     }
+    ]
+   },
+   "read": "path"
+  }
+ ],
+ "repo_commands": "none",
+ "reverse_inputs": [
+  {
+   "label": "where the document was taken from",
+   "read": "value",
+   "type": "line",
+   "value": {
+    "path": [
+     {
+      "location": "developer_root"
+     },
+     {
+      "text": [
+       {
+        "name": 0
+       },
+       {
+        "literal": "-scope.md"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "identity": "path",
+  "place": {
+   "path": [
+    {
+     "location": "developer_root"
+    },
+    {
+     "text": [
+      {
+       "name": 0
+      },
+      {
+       "literal": "-scope.md"
+      }
+     ]
+    }
+   ]
+  },
+  "role": "the staged document",
+  "tracked": [
+   "exists",
+   "identity"
+  ]
+ },
+ "way_back": {
+  "reverse": {
+   "after_check": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "text": [
+         {
+          "name": 0
+         },
+         {
+          "literal": "-scope.md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": "scope.md"
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "text": [
+         {
+          "name": 0
+         },
+         {
+          "literal": "-scope.md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "there",
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": "scope.md"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "id": "C7",
+    "risks": [
+     "RK4"
+    ],
+    "to": {
+     "path": [
+      {
+       "location": "developer_root"
+      },
+      {
+       "text": [
+        {
+         "name": 0
+        },
+        {
+         "literal": "-scope.md"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the fake row M1-reverse",
+    "status": "the fake row M1-reverse"
+   },
+   "id": "M1-reverse",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "move",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {},
+    "name": "out-M1-reverse"
+   },
+   "owner_names": "none",
+   "phase": "prepare",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": "scope.md"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "path": [
+      {
+       "output": "project folder.path"
+      },
+      {
+       "literal": "scope.md"
+      }
+     ]
+    },
+    "role": "the staged document",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": {
+    "none": "the row declares none: it is itself a reverse"
+   }
+  }
+ }
+}

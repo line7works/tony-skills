@@ -1,0 +1,16 @@
+{
+ "command": "go",
+ "ending": "waiting",
+ "exit": 10,
+ "forms": [
+  "/home/fixture/home/.sun-v2/runs/sunrise-d860d1415d6eb004/forms/status-1.txt"
+ ],
+ "interface_version": 1,
+ "lines": [
+  "the run now: waiting"
+ ],
+ "plugin_version": "0.1.0",
+ "position": 32,
+ "run": "sunrise-d860d1415d6eb004",
+ "tool": "sun-v2"
+}

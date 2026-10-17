@@ -1,0 +1,17 @@
+{
+ "at": "2026-01-01T00:00:01Z",
+ "closes": null,
+ "h": "2025cb6fd64f774505b3e992b1e3e59fa9f0755a3b5b01a2f8cb5c92ca62262a",
+ "inv": "i-d9beb43890487729",
+ "keys": [
+  "0d0d13b98c11bac223af322f6100a3d08726ee0b757e6459f1c659d384778c79"
+ ],
+ "kind": "open",
+ "manifest": 1,
+ "manifest_sha256": "72e29cce9f2a8c7d5e6ebc4666357d00aaa53c99e99f44a7ae7938318852b1b6",
+ "n": 0,
+ "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+ "run": "sunrise-d860d1415d6eb004",
+ "run_kind": "sunrise",
+ "word": "go"
+}

@@ -1,0 +1,119 @@
+{
+ "$id": "sun-v2/checklist.schema.json",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "items": {
+  "additionalProperties": false,
+  "properties": {
+   "answered_by": {
+    "oneOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "row": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+        "type": "string"
+       }
+      },
+      "required": [
+       "row"
+      ],
+      "type": "object"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "form_line": {
+        "maxLength": 200,
+        "type": "string"
+       }
+      },
+      "required": [
+       "form_line"
+      ],
+      "type": "object"
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "reason": {
+        "maxLength": 2000,
+        "type": "string"
+       }
+      },
+      "required": [
+       "reason"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "item": {
+    "maxLength": 2000,
+    "type": "string"
+   },
+   "must": {
+    "additionalProperties": {
+     "anyOf": [
+      {
+       "type": [
+        "string",
+        "number",
+        "boolean"
+       ]
+      },
+      {
+       "additionalProperties": {
+        "type": [
+         "string",
+         "number",
+         "boolean"
+        ]
+       },
+       "type": "object"
+      }
+     ]
+    },
+    "minProperties": 1,
+    "propertyNames": {
+     "enum": [
+      "id",
+      "kind",
+      "phase",
+      "thing",
+      "planning_test",
+      "before_test",
+      "after_test",
+      "construction",
+      "commands",
+      "repo_commands",
+      "after_check",
+      "output",
+      "needs",
+      "condition",
+      "lost_answer",
+      "way_back",
+      "reverse_inputs",
+      "span",
+      "mode",
+      "safe_content",
+      "answers",
+      "review_file",
+      "owner_names",
+      "keep_scope",
+      "keeps_required",
+      "content_classes",
+      "form_lines"
+     ]
+    },
+    "type": "object"
+   }
+  },
+  "required": [
+   "item",
+   "answered_by"
+  ],
+  "type": "object"
+ },
+ "title": "A lane's checklist of ruled obligations (the frame's ROW-3).",
+ "type": "array"
+}

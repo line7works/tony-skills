@@ -1,0 +1,71 @@
+{
+ "after_check": "none",
+ "after_test": "none",
+ "answers": "none",
+ "before_test": "none",
+ "commands": "none",
+ "condition": "none",
+ "construction": "none",
+ "content_classes": {
+  "reads": [
+   "safe"
+  ],
+  "resting_places": [],
+  "shows": [
+   "safe"
+  ],
+  "stores": [
+   "safe"
+  ],
+  "validators": []
+ },
+ "form_lines": {
+  "preview": "the fake row D1",
+  "status": "the fake row D1"
+ },
+ "id": "D1",
+ "keep_scope": "none",
+ "keeps_required": "none",
+ "kind": "adopt",
+ "lost_answer": "none",
+ "mode": "none",
+ "needs": "none",
+ "output": {
+  "fields": {
+   "path": {
+    "input": "adopt.project folder"
+   }
+  },
+  "name": "project folder"
+ },
+ "owner_names": {
+  "input": "adopt.project folder"
+ },
+ "phase": "one",
+ "planning_test": [
+  {
+   "is": "dir",
+   "path": {
+    "input": "adopt.project folder"
+   },
+   "read": "path"
+  }
+ ],
+ "repo_commands": "none",
+ "reverse_inputs": "none",
+ "review_file": "none",
+ "safe_content": "none",
+ "span": "none",
+ "thing": {
+  "identity": "path",
+  "place": {
+   "input": "adopt.project folder"
+  },
+  "role": "the project folder he named",
+  "tracked": [
+   "exists",
+   "identity"
+  ]
+ },
+ "way_back": "none"
+}

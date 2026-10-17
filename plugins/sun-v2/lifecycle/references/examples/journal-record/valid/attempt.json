@@ -1,0 +1,19 @@
+{
+ "answer": "passed",
+ "at": "2026-01-01T00:00:02Z",
+ "attempt": 1,
+ "h": "8ac225b049fa6e5e755ab185254e947a5b4e2b48cc722c2be6b68ced87a7337f",
+ "inv": "i-d9beb43890487729",
+ "kind": "attempt",
+ "n": 1,
+ "op": "K1",
+ "prev": "2025cb6fd64f774505b3e992b1e3e59fa9f0755a3b5b01a2f8cb5c92ca62262a",
+ "subject": {
+  "exists": true,
+  "path": "/home/fixture/home/dev"
+ },
+ "way_back": {
+  "offered": false,
+  "reason": "the row declares none"
+ }
+}

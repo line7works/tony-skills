@@ -1,0 +1,54 @@
+{
+ "accounts": {
+  "fakehost": "fixture-account"
+ },
+ "already_so": [],
+ "capabilities": [
+  "canary"
+ ],
+ "carried": {},
+ "form_changes": {
+  "a receipt due": "a secret may have been received and lost: operation {operation}, execution {execution}, field {field}",
+  "a safe ground disproved": "a value this run held as safe is withheld ({count} on record)",
+  "answered": "you answered: {what}",
+  "not offered": "not offered by this restore ({reason}): {what}",
+  "not proven, on his word": "runs on your word; it was not proven the retirement's: {what}",
+  "passed": "the check passed: {what}"
+ },
+ "held_things": [],
+ "inputs": {
+  "answers": {},
+  "description": "a fixture project",
+  "flags": {},
+  "input_version": 1
+ },
+ "keys": [
+  "0d0d13b98c11bac223af322f6100a3d08726ee0b757e6459f1c659d384778c79"
+ ],
+ "kind": "sunrise",
+ "locations": {
+  "archive_root": "/home/fixture/home/dev/_archive",
+  "developer_root": "/home/fixture/home/dev",
+  "shortcut_file": "/home/fixture/home/shortcuts.txt"
+ },
+ "manifest_version": 1,
+ "names": [
+  "demo"
+ ],
+ "not_applicable": [],
+ "number": 1,
+ "phases": [
+  "prepare",
+  "remote"
+ ],
+ "run": "sunrise-d860d1415d6eb004",
+ "secret_reads": [
+  {
+   "file": "/home/fixture/home/dev/demo.env",
+   "keys": [
+    "DATABASE_URL"
+   ]
+  }
+ ],
+ "settled_needs": []
+}

@@ -1,0 +1,13 @@
+{
+ "at": "2026-01-01T00:00:07Z",
+ "child": "one created, its answer lost",
+ "command": "make",
+ "h": "9ba67301493cf1f5a7e0bb4d9058eec20e744ea6fa0e4d8df357d14ebe6483a0",
+ "inv": "i-d9beb43890487729",
+ "kind": "step",
+ "n": 6,
+ "op": "C1",
+ "prev": "10f259f6cfac5980efe9a2b574b12008cb5158d31fa05c2b5730d708a700953c",
+ "refusal": "register entry",
+ "step": "send-refused"
+}

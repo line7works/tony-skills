@@ -1,0 +1,3 @@
+#!/bin/sh
+# what this fake was given, taken before the interpreter starts (the system python adds names of its own)
+FAKE_GIVEN="$(env)" exec /usr/bin/python3 -B "$(dirname "$0")/fakeprov.py" fakedump "$@"

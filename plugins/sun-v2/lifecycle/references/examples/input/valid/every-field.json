@@ -1,0 +1,17 @@
+{
+ "adopt": {
+  "project folder": "/home/fixture/home/dev/prototype"
+ },
+ "answers": {
+  "shortcut": "tide"
+ },
+ "description": "a tide table for the bay",
+ "drop_layers": [
+  "hosting"
+ ],
+ "flags": {
+  "database": true
+ },
+ "input_version": 1,
+ "type": "web app"
+}
