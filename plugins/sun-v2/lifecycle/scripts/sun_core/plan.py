@@ -55,6 +55,7 @@ class Look(object):
         self.names = names
         self.locations = locations
         self.capabilities = capabilities
+        self.date = None              # the run's date by the tool's own clock, read once by the look (`build`)
         self.facts = {"flags": inputs.get("flags") or {}, "type": inputs.get("type"), "adopt": inputs.get("adopt") or {},
                       "answers": inputs.get("answers") or {}}
 
@@ -95,7 +96,9 @@ def expand(lane, providers):
                 decl = ((providers.get(provider) or {}).get("commands") or {}).get(name)
                 if isinstance(decl, dict):
                     decl = copy.deepcopy(decl)
-                    decl["trace_flags"] = list((providers.get(provider) or {}).get("trace_flags") or [])
+                    # a command's own trace flags replace the module's for it (G19-27)
+                    decl["trace_flags"] = list(decl["trace_flags"] if isinstance(decl.get("trace_flags"), list)
+                                               else (providers.get(provider) or {}).get("trace_flags") or [])
                     decl["provider"] = provider
                     command["declaration"] = decl
         expanded.append(row)
@@ -178,6 +181,11 @@ def settle_needs(operations, already, not_applicable, impossible=None):
                     break
                 if treatment == "then not needed":
                     operation["needs"] = [n for n in operation["needs"] if n is not need] or rows.NONE
+                    # a check's pass that names the output is dropped with the need (G21-7; ORD-2)
+                    thing = operation.get("thing")
+                    if isinstance(thing, dict) and isinstance(thing.get("passes"), list):
+                        thing["passes"] = [c for c in thing["passes"]
+                                           if not any(r.partition(".")[0] == need.get("output") for r in values.refers_to(c))]
                     settled.append({"operation": operation["id"], "treatment": "the need was dropped", "need": need.get("output"),
                                     "status": cause or "nothing provides it"})
                     changed = True
@@ -436,8 +444,15 @@ def restore_offer(session, look, retiring, journal, other_held):
             # SEC-7 lets them rest, and every {"saved": n} of the reverse bound to its copy; the restore reads no record of
             # the retiring run again after its look
             copies = []
-            for reference in inputs:
+            items = operation.get("reverse_inputs") if isinstance(operation.get("reverse_inputs"), list) else []
+            held = held_outputs(retired.get("operations") or [])
+            for index, reference in enumerate(inputs):
                 content = protected.read(fs, run_dir, reference)
+                if index < len(items) and saved_from_safe(items[index], held):
+                    # an input its forward row saved from safe content (SEC-1: what the tool built from safe content) stays
+                    # usable as text: in a name check, a path and an argument (G19-3); it was searched above (`other_held`)
+                    copies.append({"literal": content.decode("utf-8")})
+                    continue
                 copies.append(protected.write(session.world, session.run_dir, session.world.new_id("p"), content,
                                               reference.get("type", "values"), reference.get("label", "an input of the reverse")))
             try:
@@ -447,6 +462,16 @@ def restore_offer(session, look, retiring, journal, other_held):
                 continue
         reverses.append(reverse)
     return reverses, not_offered, not_applicable, dict((p, t) for p, t in state.tracked.items() if isinstance(t, dict))
+
+
+def saved_from_safe(item, held):
+    """Whether a forward row's saved input was made from safe content: a `value` read whose value, as its manifest froze
+    it, holds no protected record and refers to no held or secret field of an output (SEC-1, SEC-6), saved as a type SEC-1
+    does not itself name protected: the before-image and the after-image of a span stay protected records (EV-6)."""
+    if not isinstance(item, dict) or item.get("read") != "value" or item.get("type") in ("before-image", "after-image"):
+        return False
+    text = json.dumps(item.get("value"), sort_keys=True)
+    return '"record"' not in text and not any(ref in held for ref in values.refers_to(item.get("value")))
 
 
 def keep_copy(fs, state, keep_id):
@@ -527,36 +552,51 @@ def identity_reads(session, used, causes, refusals=None, unanswered=None):
         spec = (session.providers.get(provider) or {}).get("identity")
         if not isinstance(spec, dict):
             continue
-        decl = copy.deepcopy(session.providers[provider]["commands"][spec["command"]])
-        decl["trace_flags"] = list(session.providers[provider].get("trace_flags") or [])
-        try:
-            result = calls.call(session, {"name": "identity", "declaration": decl, "params": {}}, {})
-        except runner.Refused as refused:
-            causes.append("the read failed: %s's identity" % provider)
-            if refusals is not None:
-                refusals.append((provider, refused.reason))
+        # one identity read per route (G19-26): a module may declare one for its requests and one for its runner commands,
+        # each compared with his settings; the provider's account is proven only where every route's is, and is one account
+        routes = [spec[k] for k in ("request", "runner") if isinstance(spec.get(k), dict)] if "command" not in spec else [spec]
+        found = [identity_read(session, provider, route, causes, refusals, unanswered) for route in routes]
+        if not found or any(f is None for f in found):
             continue
-        except calls.NotCallable:
-            causes.append("the read failed: %s's identity" % provider)
-            if unanswered is not None:
-                unanswered.append(provider)
-            continue
-        if result.kind != "success":
-            causes.append("%s: %s's identity" % (READ_KINDS.get(result.kind, READ_KINDS[None]), provider))
-            # OP-9 (batches 51 and 52, A120, A122): an identity read that "fails, is partial or runs out of time"; "An identity
-            # read that shows another account is RUN-10 (b)'s; one whose credentials the provider refuses shows no account at
-            # all, and is one that fails (OP-5's last row)". So `auth` is put there too; an account his settings do not name,
-            # below, is the one that shows another account, RUN-10 (b)'s. A look names each cause as before (RUN-7)
-            if unanswered is not None:
-                unanswered.append(provider)
-            continue
-        kept = result.fields.get(spec.get("field", "account"))
-        if kept is None or not kept.equal:
+        if len(set(found)) != 1:
             causes.append("the read was made as the wrong account: %s reports an account your settings do not name" % provider)
             continue
-        accounts[provider] = kept.safe
-        session.identities_read[provider] = kept.safe     # made once in this invocation (SEC-12's table; OP-9)
+        accounts[provider] = found[0]
+        session.identities_read[provider] = found[0]     # made once in this invocation (SEC-12's table; OP-9)
     return accounts
+
+
+def identity_read(session, provider, spec, causes, refusals=None, unanswered=None):
+    """One route's identity read: the account it proved equal to a name in his settings, or None with its cause named."""
+    decl = copy.deepcopy(session.providers[provider]["commands"][spec["command"]])
+    if not isinstance(decl.get("trace_flags"), list):
+        decl["trace_flags"] = list(session.providers[provider].get("trace_flags") or [])
+    try:
+        result = calls.call(session, {"name": "identity", "declaration": decl, "params": {}}, {})
+    except runner.Refused as refused:
+        causes.append("the read failed: %s's identity" % provider)
+        if refusals is not None:
+            refusals.append((provider, refused.reason))
+        return None
+    except calls.NotCallable:
+        causes.append("the read failed: %s's identity" % provider)
+        if unanswered is not None:
+            unanswered.append(provider)
+        return None
+    if result.kind != "success":
+        causes.append("%s: %s's identity" % (READ_KINDS.get(result.kind, READ_KINDS[None]), provider))
+        # OP-9 (batches 51 and 52, A120, A122): an identity read that "fails, is partial or runs out of time"; "An identity
+        # read that shows another account is RUN-10 (b)'s; one whose credentials the provider refuses shows no account at
+        # all, and is one that fails (OP-5's last row)". So `auth` is put there too; an account his settings do not name,
+        # below, is the one that shows another account, RUN-10 (b)'s. A look names each cause as before (RUN-7)
+        if unanswered is not None:
+            unanswered.append(provider)
+        return None
+    kept = result.fields.get(spec.get("field", "account"))
+    if kept is None or not kept.equal:
+        causes.append("the read was made as the wrong account: %s reports an account your settings do not name" % provider)
+        return None
+    return kept.safe
 
 
 def excluded_by_inputs(look, row):
@@ -571,6 +611,12 @@ def excluded_by_inputs(look, row):
         except values.Unsettled:
             actual = None
         if actual != condition.get("equals"):
+            try:
+                adopted = values._dig(look.facts, str(condition["fact"]).rpartition(".")[0]).get("adopted")
+            except (values.Unsettled, AttributeError):
+                adopted = None
+            if isinstance(adopted, str):
+                return "already adopted: " + adopted          # a document at its destination (G21-2; OP-6, EV-1)
             return condition.get("reason", "a flag")
     if thing.get("layer") and thing["layer"] in (look.inputs.get("drop_layers") or []):
         return "a layer the project lacks"
@@ -581,6 +627,369 @@ def excluded_by_inputs(look, row):
         except values.Unsettled:
             return "a flag"
     return None
+
+
+def lane_texts(session, look, entry, spec, findings, causes):
+    """The lane's own lines, settled by the look into safe text for the manifest (RUN-8): `fixed_text`, v1's fixed text of the
+    preview, the summary and the hand-off prompt, and `last_record_head`, the last record's head lines (G20-5), each line a
+    value the look freezes to a literal; `present_lines`, a preview line shown where a named path is present (G20-4), that
+    path read once by the look. A line that is no literal is a value the look cannot settle."""
+    def text(mark):
+        try:
+            frozen = values.freeze(mark, look)
+        except values.Unsettled:
+            frozen = None
+        if not (isinstance(frozen, dict) and "literal" in frozen and len(frozen) == 1):
+            findings.append({"row": None, "entry": entry, "finding": "a value the look cannot settle"})
+            return ""
+        return str(frozen["literal"])
+    if entry == "fixed_text":
+        # a hand-off line may name an operation (`when`): shown only where the run did it (G21-11; a layer the run lacked is
+        # left out)
+        return dict((form, [dict(line=text(m["line"]), when=m["when"]) if isinstance(m, dict) and "when" in m and "line" in m else text(m)
+                            for m in marks]) for form, marks in sorted(spec.items()))
+    if entry == "last_record_head":
+        return [text(m) for m in spec]
+    shown = []
+    for item in spec:
+        path = text(item["path"])
+        try:
+            there = bool(path) and session.world.fs.lexists(path)
+        except OSError:
+            causes.append("the read failed: the lane's preview line for %s" % path)
+            continue
+        if there:
+            shown.append(text(item["line"]))
+    return shown
+
+
+def given_answer(look, name):
+    """His answer to a lane question: the input of that name, his answer of that name, or a dotted planning fact
+    (`flags.as_is`)."""
+    if not name:
+        return None
+    found = look.inputs.get(name) or (look.inputs.get("answers") or {}).get(name)
+    if found:
+        return found
+    try:
+        return values._dig(look.facts, name)
+    except values.Unsettled:
+        return None
+
+
+def read_questions(session, look, lane, causes):
+    """The lane's questions asked only where their declared read fails (G20-4): each read once by the look, with the
+    question's own commands, which change nothing (RUN-5); a question he has answered, or whose layer he dropped, is not
+    read. A read that cannot be made is a failed read (RUN-7)."""
+    asked = []
+    for q in lane.get("questions") or []:
+        test = q.get("when_read_fails")
+        if not test or given_answer(look, q.get("input")) or (q.get("layer") and q["layer"] in (look.inputs.get("drop_layers") or [])):
+            continue
+        commands = expand({"rows": [{"commands": q.get("commands") or []}]}, session.providers)[0]["commands"]
+        if any(not isinstance(c.get("declaration"), dict) or c["declaration"].get("effects", 0) != 0 for c in commands):
+            raise BuildFailed([{"row": None, "entry": "questions", "finding": "a look that would change something (RUN-5)"}])
+        try:
+            reader = reads.Reader(session, {}, values.freeze_all(commands, look), lambda s, command, o, _op, _j: calls.call(s, command, o))
+            verdict = reader.evaluate(values.freeze_all(test, look))
+        except (runner.Refused, calls.NotCallable, values.Unsettled, OSError):
+            verdict = reads.UNREADABLE
+        if verdict == reads.UNREADABLE:
+            causes.append("the read failed: the lane's question for %s" % q.get("input"))
+        elif verdict is not True:
+            asked.append(q.get("question"))
+    return asked
+
+
+# ---- found reads, lane facts and family rows (RUN-5 to RUN-7; G19-5 to G19-7) -------------------------------------
+DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def found_items(fs, spec):
+    """The things a found read gives, each a dict of its fields, in a fixed order (a read of this machine, in-process):
+
+        {"read": "files", "folder": P, "glob": G, "holding": T, "date": true}   the files of a folder whose name fits G (a
+              name with `*` for any run of characters, it may begin with one subfolder) and whose text holds T where T is
+              given: {"path", "name", "stem" (what `*` matched, else the name), "date" (the first line's, else the name's)};
+              with `"tree": true`, the files of every folder under it too, a link never followed (G22-7, rows-set T17)
+        {"read": "lines", "path": P, "holding": T, "name_after": A}             the lines of a file that hold T:
+              {"line", "name" (the word after A up to `=` or white space, where A is given and stands in the line)}
+
+    Raises OSError or UnicodeDecodeError where a read fails."""
+    out = []
+    if spec.get("read") == "files":
+        glob = str(spec.get("glob") or "*")
+        folder = os.path.join(str(spec["folder"]), os.path.dirname(glob)) if os.path.dirname(glob) else str(spec["folder"])
+        fit = re.compile(re.escape(os.path.basename(glob)).replace("\\*", "(.*)"))
+        if spec.get("tree"):
+            paths = fs.walk(folder) if fs.isdir(folder) and not fs.islink(folder) else []
+        else:
+            paths = [os.path.join(folder, n) for n in sorted(fs.listdir(folder))] if fs.isdir(folder) else []
+        for path in paths:
+            name = os.path.basename(path)
+            matched = fit.fullmatch(name)
+            if matched is None or fs.islink(path) or not fs.isfile(path):
+                continue
+            text = fs.read_text(path) if spec.get("holding") or spec.get("date") else ""
+            if spec.get("holding") and str(spec["holding"]) not in text:
+                continue
+            item = {"path": path, "name": name, "stem": matched.group(1) if matched.groups() else name}
+            if spec.get("date"):
+                first = DATE.search(text.split("\n")[0]) or DATE.search(name)
+                if first:
+                    item["date"] = first.group(0)
+            out.append(item)
+    elif spec.get("read") == "lines":
+        path = str(spec["path"])
+        if fs.isfile(path):
+            for line in fs.read_text(path).split("\n"):
+                if spec.get("holding") and str(spec["holding"]) in line:
+                    item = {"line": line}
+                    after = spec.get("name_after")
+                    if after and after in line:
+                        item["name"] = re.split(r"[=\s]", line.split(after, 1)[1], 1)[0]
+                    out.append(item)
+    else:
+        raise ValueError("a found read of no kind this tool reads")
+    return out
+
+
+def _resolved_spec(spec, look):
+    out = dict(spec)
+    for key in ("folder", "glob", "path", "holding"):
+        if isinstance(spec.get(key), dict):
+            out[key] = values.resolve(values.freeze(spec[key], look), {})
+    return out
+
+
+def _item_marks(session, spec, item, row_id):
+    """Each field of a found thing as a value: safe where the validator the read declares for that field passes and no entry
+    of the register is in it (SEC-1's fourth source), else held in a protected record (SEC-6). A date is the tool's own
+    match of the date's form, and is safe."""
+    marks = {}
+    declared = spec.get("validators") or {}
+
+    def passes(field):
+        name = declared.get(field)
+        check = values.VALIDATORS.get(name) if name else (values.VALIDATORS["a date"] if field == "date" else None)
+        return check is not None and check.fullmatch(item[field]) is not None and not session.register.holds(item[field])
+    for field, text in sorted(item.items()):
+        # a file's path is the tool's own build from the read's folder and the file's name: safe where the name is
+        ok = passes(field) if field != "path" or "path" in declared else ("name" in item and passes("name"))
+        if ok and not session.register.holds(text):
+            marks[field] = {"literal": text}
+        else:
+            marks[field] = {"record": protected.write(session.world, session.run_dir, session.world.new_id("p"), text.encode("utf-8"),
+                                                      "line" if field == "line" else "values",
+                                                      "a field of a thing row %s was made for" % row_id)}
+    return marks
+
+
+def lane_facts(session, look, lane, causes, asked=None):
+    """The lane's facts (G19-5): each one read the look makes of a thing there before the run, put among the planning facts,
+    so that a condition and a value can name it. `path`: whether the path is present; `line`: whether a line of the file
+    holds the value; `files` and `lines`: a found read, giving `count`, `found` (exactly one) and, where there is exactly
+    one, that thing's safe fields. A read that fails is a failed read (RUN-7)."""
+    fs = session.world.fs
+    for spec in lane.get("facts") or []:
+        if not isinstance(spec, dict) or not spec.get("name"):
+            continue
+        try:
+            resolved = _resolved_spec(spec, look)
+            read = spec.get("read")
+            if read == "path":
+                value = fs.lexists(str(resolved["path"]))
+            elif read == "line":
+                path = str(resolved["path"])
+                value = fs.isfile(path) and any(str(resolved["holding"]) in line for line in fs.read_text(path).split("\n"))
+            elif isinstance(spec.get("adopted"), dict) and adopted_at(session, look, spec) is not None:
+                # G21-2 (rise's M-2): the destination is read first; a document already there is "already adopted", and its
+                # staged source is not looked for
+                value = {"count": 0, "found": False, "adopted": adopted_at(session, look, spec)}
+            else:
+                items = found_items(fs, resolved)
+                value = {"count": len(items), "found": len(items) == 1}
+                chosen = items[0] if len(items) == 1 else None
+                if spec.get("choose") and items:
+                    chosen = staged_choice(session, look, spec, items, asked if asked is not None else [])
+                    value["found"] = chosen is not None
+                if chosen is not None:
+                    for field, mark in _item_marks(session, spec, chosen, spec["name"]).items():
+                        if "literal" in mark:
+                            value[field] = mark["literal"]
+        except (OSError, UnicodeDecodeError, ValueError, KeyError, values.Unsettled):
+            causes.append("the read failed: the lane's fact %s" % spec.get("name"))
+            continue
+        node = look.facts
+        parts = str(spec["name"]).split(".")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = value
+
+
+def adopted_at(session, look, spec):
+    """A staged document's destination, read before its staged source (G21-2): the first document there whose name fits the
+    read's pattern, by its path where its name passes the read's validator, else by the private file that holds it; None
+    where none stands there."""
+    where = dict((k, values.resolve(values.freeze(v, look), {})) for k, v in spec["adopted"].items())
+    items = found_items(session.world.fs, {"read": "files", "folder": where["folder"], "glob": where["glob"]})
+    if not items:
+        return None
+    mark = _item_marks(session, spec, {"path": items[0]["path"], "name": items[0]["name"]}, spec["name"])["path"]
+    return mark["literal"] if "literal" in mark else "a document whose name is in a private file, %s" % protected.path_of(
+        session.run_dir, mark["record"]["record"])
+
+
+def filled_checks(candidates):
+    """Each value filled into a row's text that names an output (G21-6): checked in the look by what that output's field
+    holds in this plan, where an operation of it gives the field as a literal. Returns (refusals, findings)."""
+    given = {}
+    for row in candidates:
+        output = row.get("output") if isinstance(row.get("output"), dict) else {}
+        for field, value in (output.get("fields") or {}).items():
+            if isinstance(value, dict) and set(value) == {"literal"}:
+                given.setdefault(output.get("name"), {})[field] = value["literal"]
+    refusals, findings = [], []
+
+    def walk(row, node):
+        if isinstance(node, list):
+            for item in node:
+                walk(row, item)
+        elif isinstance(node, dict):
+            if values.is_mark(node) and "checked" in node:
+                try:
+                    values.check(node["checked"]["validator"], values.resolve(node["checked"]["value"], given))
+                except values.Refused as refused:
+                    refusals.append(texts.PART_REFUSED.format(row=row["id"], validator=refused.validator))
+                except values.Unsettled:
+                    findings.append(rows.finding(row, "thing", "a value the look cannot settle"))
+                return
+            for item in node.values():
+                walk(row, item)
+    for row in candidates:
+        walk(row, row)
+    return refusals, findings
+
+
+def staged_choice(session, look, spec, items, asked):
+    """A staged document chosen in the look (G20-7; A150, the control room's reading, his to change by a word): where several
+    match, the look lists them by the tool's own numbers and asks which one; where the one taken has no date, it asks for
+    one. His answers (`answers.<fact>`, a number of the list; `answers.<fact>.date`, a date he types) choose before the
+    preview. Returns the chosen thing with its date, or None with the question put in `asked`."""
+    name = spec["name"]
+    answers = look.inputs.get("answers") or {}
+    chosen = items[0]
+    if len(items) > 1:
+        number = answers.get(name)
+        if not (isinstance(number, str) and number.isdigit() and 1 <= int(number) <= len(items)):
+            listing = []
+            for n, item in enumerate(items, 1):
+                mark = _item_marks(session, spec, {"name": item["name"]}, name)["name"]
+                listing.append("%d: %s" % (n, mark["literal"] if "literal" in mark else "its name is in a private file, %s"
+                                           % protected.path_of(session.run_dir, mark["record"]["record"])))
+            asked.append(texts.CHOOSE_STAGED.format(fact=name, listing="; ".join(listing)))
+            return None
+        chosen = items[int(number) - 1]
+    if "date" not in chosen:
+        typed = answers.get(name + ".date")
+        if not (isinstance(typed, str) and values.VALIDATORS["a date"].fullmatch(typed)):
+            asked.append(texts.DATE_STAGED.format(fact=name))
+            return None
+        chosen = dict(chosen, date=typed)
+    return chosen
+
+
+EACH_TOKEN = re.compile(r"\{each\.([A-Za-z_]+)\}")
+
+
+def _records_in(node):
+    """Every protected record a value refers to, at any depth of its marks."""
+    if isinstance(node, list):
+        return [r for v in node for r in _records_in(v)]
+    if isinstance(node, dict):
+        if isinstance(node.get("record"), dict) and len(node) == 1:
+            return [node["record"]]
+        return [r for v in node.values() for r in _records_in(v)]
+    return []
+
+
+def issuer_findings(candidates, issuers):
+    """SEC-2 for every held value a request of the frame's own carries, a protected record's reference among them (the
+    reviewer's F2, G22-2): "Preserve and enforce issuer provenance for every held request value, including family members
+    and protected-record references." `issuers` maps a record the look made from a provider's held value to that provider;
+    a record it does not map, or maps to another provider, goes in no request, and the build fails naming the row."""
+    out = []
+    for row in candidates:
+        for command in row.get("commands") if isinstance(row.get("commands"), list) else []:
+            if not isinstance(command, dict) or (command.get("declaration") or {}).get("via") != "request":
+                continue
+            provider = command["use"].partition(".")[0] if isinstance(command.get("use"), str) else None
+            if any(issuers.get(r.get("record")) != provider for r in _records_in(command.get("params") or {})):
+                out.append(rows.finding(row, "commands", "a held value goes back only to the provider that issued it (SEC-2)"))
+    return out
+
+
+def expand_family(session, look, row):
+    """A family row (G19-7): one ordinary operation per thing its found read gives, each with its own id (`<id>-<n>`), its
+    `{"each": f}` marks the thing's fields, and each `{each.f}` in its texts (its output's name, its needs, its form lines)
+    the field where it is safe and the member's number where it is held. Nothing downstream changes."""
+    spec = row["thing"]["family"]
+    if spec.get("read") == "command":
+        # a look read's held list (the control room's item 7): the fixed members the row writes (`also`, safe), then one
+        # member per value of the list, each held
+        command = [c for c in row.get("commands") or [] if isinstance(c, dict) and c.get("name") == spec.get("command")][0]
+        issuer = command["use"].partition(".")[0]
+        result = calls.call(session, values.freeze_all(command, look), {})
+        listed = result.held(spec.get("field")) if result.kind == "success" else None
+        if not isinstance(listed, list):
+            raise OSError("the list could not be read")
+        # a member found in the list stays held; the row carries the tool's own label, `custom-<n>`, its place in the list,
+        # for its id, its paths and its forms (the control room's G19-7 widened; SEC-2, SEC-3)
+        items = ([{"member": str(v), "label": str(v)} for v in spec.get("also") or []]
+                 + [{"member": str(v), "label": "custom-%d" % i, "_held": True} for i, v in enumerate(listed, 1)])
+    else:
+        items = found_items(session.world.fs, _resolved_spec(spec, look))
+    members = []
+    for n, item in enumerate(items, 1):
+        held = item.pop("_held", False)
+        marks = _item_marks(session, dict(spec, validators={"label": "a launch agent's label"} if held else
+                                          {"member": "one line of plain words", "label": "a launch agent's label"})
+                            if spec.get("read") == "command" else spec, item, row["id"])
+        label = marks.get("label", {}).get("literal") if spec.get("read") == "command" else None
+        if spec.get("read") == "command":
+            # the issuer of each held member (G22-1's sibling, her F2): the provider of the family's own read
+            for mark in marks.values():
+                if isinstance(mark.get("record"), dict):
+                    look.issuers[mark["record"]["record"]] = issuer
+        within = spec.get("within") if isinstance(spec.get("within"), dict) else None
+        if within and "path" in marks:
+            # G21-12 (RUN-6): a thing inside a folder a move of this plan moves is placed by that move's output
+            moved = str(values.resolve(values.freeze(within["folder"], look), {}))
+            literal = marks["path"].get("literal")
+            if isinstance(literal, str) and literal.startswith(moved.rstrip(os.sep) + os.sep):
+                marks["place"] = {"path": [{"output": within["output"]}, {"literal": os.path.relpath(literal, moved)}]}
+            else:
+                marks["place"] = copy.deepcopy(marks["path"])
+        shown = dict((f, m["literal"] if "literal" in m else (label or "#%d" % n)) for f, m in marks.items())
+        shown["n"] = str(n)        # the member's index, carried by its outputs and needs (G21-9; a reverse keeps its row's)
+
+        def put(node):
+            if isinstance(node, list):
+                return [put(v) for v in node]
+            if isinstance(node, dict):
+                if values.is_mark(node) and "each" in node:
+                    if node["each"] not in marks:
+                        raise values.Unsettled("a field the found thing does not have")
+                    return copy.deepcopy(marks[node["each"]])
+                return dict((k, put(v)) for k, v in node.items())
+            if isinstance(node, str) and "{each." in node:
+                return EACH_TOKEN.sub(lambda found: shown.get(found.group(1), "#%d" % n), node)
+            return node
+        member = put(copy.deepcopy(row))
+        del member["thing"]["family"]
+        member["id"] = "%s-%s" % (row["id"], label) if label else "%s-%d" % (row["id"], n)
+        members.append(member)
+    return members
 
 
 class LocalUnreadable(values.Unsettled):
@@ -660,8 +1069,9 @@ def plan_row(session, look, row, state, causes, held_things, resend=False, prese
         # a thing inside a thing a move of this plan moves: the look reads it where it is now (RUN-6); the manifest keeps
         # the reference, and the probe reads it where the move's record says it went
         outputs = present
+    connection = []                 # SEC-2's password file, for a look's command that declares its slot (G20-1; G9)
     reader = reads.Reader(session, outputs, row.get("commands") if isinstance(row.get("commands"), list) else [],
-                          lambda s, command, o, _op, _j: calls.call(s, command, o))
+                          lambda s, command, o, _op, _j: calls.call(s, command, o, connection=connection[0] if connection else None))
 
     def unreadable(what):
         causes.append("%s: %s of row %s" % (READ_KINDS.get(reader.last_kind, READ_KINDS[None]), what, op))
@@ -677,6 +1087,8 @@ def plan_row(session, look, row, state, causes, held_things, resend=False, prese
             return "stop", {}
         session.register.add(address, channels.address_components(address), None, "channel")
         row["_secret_read"] = {"file": path, "keys": list(secret.get("keys") or [])}
+        built = (row.get("construction") or {}).get("connection") if isinstance(row.get("construction"), dict) else None
+        connection.append((address, (built or {}).get("slot", "passfile") if isinstance(built, dict) else "passfile", op))
     try:
         if kind in ("build", "keep", "create"):
             tests = row.get("planning_test") if isinstance(row.get("planning_test"), list) else []
@@ -865,11 +1277,29 @@ def build(session, kind, look, number, state=None, journal_count=0):
     findings = admit_all(lane, expanded, session.providers)
     if findings:
         raise BuildFailed(findings)
-    lacking = [q.get("question") for q in lane.get("questions") or []
-               if q.get("required") and not look.inputs.get(q.get("input")) and not (look.inputs.get("answers") or {}).get(q.get("input"))]
+    kept = lane.get("types")
+    if isinstance(kept, list) and look.inputs.get("type") is not None and look.inputs.get("type") not in kept:
+        # G20-3: a type off the lane's list of kept types is refused before the look reads anything, in plain words
+        raise PlanningStop([texts.TYPE_NOT_KEPT.format(type=look.inputs.get("type"), kept=", ".join(kept))])
+    lacking = []
+    for q in lane.get("questions") or []:
+        if q.get("layer") and q["layer"] in (look.inputs.get("drop_layers") or []):
+            continue
+        given = given_answer(look, q.get("input"))
+        if q.get("required") and not given and not q.get("when_read_fails"):
+            lacking.append(q.get("question"))
+        elif given and q.get("validator"):
+            check = values.VALIDATORS.get(q["validator"])
+            if check is None:
+                raise BuildFailed([{"row": None, "entry": "questions", "finding": "a validator this tool does not have"}])
+            if not isinstance(given, str) or check.fullmatch(given) is None:
+                lacking.append(texts.ANSWER_REFUSED.format(question=q.get("question"), validator=q["validator"]))
     if lacking:
         raise Questions(lacking)
     causes = []
+    look.project_memory = lambda folder: session.facts.project_memory(session.world.fs, folder)      # G21-10 (E16-12)
+    look.tables = lane.get("tables") or {}       # the lane's own tables, keyed by a planning fact (G21-1)
+    look.date = session.world.now()[:10]       # the run's date, by the tool's own clock, read once here and frozen (RUN-8)
     earlier = earlier_runs(session)
     journals, other_held = read_other_runs(session, earlier)
     session.other_held = other_held
@@ -900,7 +1330,31 @@ def build(session, kind, look, number, state=None, journal_count=0):
             retiring = None
     candidates, excluded = [], list(unoffered)
     look.local = lambda path, validator: local_value(session, path, validator)
+    asked = []
+    lane_facts(session, look, lane, causes, asked)
+    asked += read_questions(session, look, lane, causes)
+    if asked and not causes:
+        raise Questions(asked)
+    flat = []
+    look.issuers = {}               # a protected record the look made from a provider's held value: its issuer (G22-2)
     for row in expanded:
+        family = (row.get("thing") or {}).get("family") if isinstance(row.get("thing"), dict) else None
+        if isinstance(family, dict) and excluded_by_inputs(look, row) is None:
+            try:
+                members = expand_family(session, look, row)
+            except (OSError, UnicodeDecodeError, ValueError, KeyError, IndexError, runner.Refused, calls.NotCallable):
+                causes.append("the read failed: the things row %s is made for" % row["id"])
+                continue
+            except values.Unsettled:
+                findings.append(rows.finding(row, "thing", "a value the look cannot settle"))
+                continue
+            if not members:
+                excluded.append({"row": row["id"], "reason": "none found", "what": row["id"]})
+            flat += members
+            continue
+        flat.append(row)
+    refusals = []
+    for row in flat:
         reason = excluded_by_inputs(look, row)
         if reason is not None:
             excluded.append({"row": row["id"], "reason": reason, "what": (row.get("form_lines") or {}).get("preview") or row["id"]})
@@ -912,10 +1366,15 @@ def build(session, kind, look, number, state=None, journal_count=0):
         except LocalUnreadable:
             causes.append("the read failed: a file on this machine of row %s" % row["id"])
             continue
+        except values.Refused as refused:
+            refusals.append(texts.PART_REFUSED.format(row=row["id"], validator=refused.validator))
+            continue
         except values.Unsettled:
             findings.append(rows.finding(row, "thing", "a value the look cannot settle"))
             continue
         candidates.append(frozen)
+    if refusals:
+        raise Questions(refusals)
     if findings:
         raise BuildFailed(findings)
     search = session.facts.search_list(session.world.fs, session.world.system_folders)
@@ -926,6 +1385,23 @@ def build(session, kind, look, number, state=None, journal_count=0):
     if causes:
         raise PlanningStop(causes)
     accounts = identity_reads(session, providers_used(candidates), causes)
+    # an account mark is settled once the identity reads have proved each account (SEC-4's ground C): the second freeze
+    look.accounts = accounts
+    for index, row in enumerate(candidates):
+        try:
+            again = values.freeze_all(dict((k, v) for k, v in row.items() if k != "owner_names"), look)
+        except values.Unsettled:
+            if not causes:
+                findings.append(rows.finding(row, "thing", "a value the look cannot settle"))
+            continue
+        again["owner_names"] = row.get("owner_names")
+        candidates[index] = again
+    refusals, more = filled_checks(candidates)
+    if refusals:
+        raise Questions(refusals)
+    findings += more + issuer_findings(candidates, look.issuers)
+    if findings:
+        raise BuildFailed(findings)
     operations, already, not_applicable, held_things, secret_reads = [], [], list(excluded), [], []
     carried = dict((op, status) for op, status in (state.finals.items() if state is not None else []))
     earlier_outstanding = set()
@@ -1015,6 +1491,10 @@ def build(session, kind, look, number, state=None, journal_count=0):
                     impossible[(operation["id"], need["output"])] = status
     operations, settled, more = settle_needs(operations, already, not_applicable, impossible)
     findings = more + shape_findings(kind, lane, operations)
+    lane_lines = {}
+    for entry in ("fixed_text", "last_record_head", "present_lines"):
+        if entry in lane:
+            lane_lines[entry] = lane_texts(session, look, entry, lane[entry], findings, causes)
     if findings:
         raise BuildFailed(findings)
     for text in texts_in(look.inputs):
@@ -1029,6 +1509,7 @@ def build(session, kind, look, number, state=None, journal_count=0):
                 "already_so": already, "not_applicable": not_applicable, "held_things": held_things,
                 "settled_needs": settled, "secret_reads": secret_reads, "form_changes": lane.get("form_changes") or {},
                 "carried": carried}
+    manifest.update(lane_lines)
     if session.alias_names:
         # the name forms this look's alias reads showed are content read from the owner's files and not validated
         # (protected, SEC-1): they rest in a protected record the manifest refers to, so that a later go whose alias reads

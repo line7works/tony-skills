@@ -88,6 +88,15 @@ INPUT_REFUSED = "Refused: an input may not be used. It was stored nowhere."
 INPUT_REFUSED_REPLAN = "Stopped: an input of the re-plan may not be used. The manifest in force is unchanged."
 QUESTIONS = "An answer the look needs is lacking; nothing is approved. The questions:"
 PLANNING_STOP = "The look ended before any preview. Each cause:"
+# G20-3: a type off the lane's kept list, refused before the look's reads; an answer his question's declared validator refuses
+TYPE_NOT_KEPT = "the project type {type} is not one this tool keeps; the kept types: {kept}. Summon again with one of them."
+PART_REFUSED = "A value filled into row {row} fails its check, {validator}; summon again with another."
+ANSWER_REFUSED = "{question} (the answer given fails its check, {validator}; answer again)"
+# G20-7 (A150, the control room's reading): a staged document chosen in the look, by the tool's own numbers and his date
+CHOOSE_STAGED = ("Several staged documents match for {fact}; answer with the number of the one to take, as answers.{fact}: "
+                 "{listing}")
+DATE_STAGED = ("The staged document for {fact} has no date in its first line or its name; type its date (YYYY-MM-DD) as "
+               "answers.{fact}.date")
 PROGRAM_NOT_FOUND = ("the program {program} is in no folder of the search list; a folder is put on the list only by your "
                      "naming it in your settings file, {settings}")
 DISPROVED_BEFORE_GO = "Refused: a value this run holds as safe may not be shown. No go was recorded and no run is open; look again."

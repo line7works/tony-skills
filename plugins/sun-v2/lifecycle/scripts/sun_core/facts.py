@@ -24,6 +24,7 @@ decided on his behalf, his to change by a word (A48, A49). No other folder is on
 consulted. A folder he names is taken with no check of the folder or of what stands in it (RK11, A48).
 """
 import os
+import re
 
 TOOL_FOLDER = ".sun-v2"
 SETTINGS_REL = os.path.join(".config", "sun-v2", "settings.json")
@@ -71,6 +72,15 @@ class Facts(object):
         settings = self.settings(fs) or {}
         found = settings.get("locations")
         return dict(found) if isinstance(found, dict) else {}
+
+    def project_memory(self, fs, folder):
+        """The harness's memory store of a project folder (E16-12; G21-10): the folder he names in his settings as
+        `memory_projects`, then the project folder's path with every character but a letter or a digit made `-`, then
+        `memory`. None where his settings name no such folder or the path is not absolute."""
+        root = self.locations(fs).get("memory_projects")
+        if not isinstance(root, str) or not os.path.isabs(root) or not os.path.isabs(folder):
+            return None
+        return os.path.join(root, re.sub(r"[^A-Za-z0-9]", "-", folder), "memory")
 
     def search_list(self, fs, system=None):
         """The tool's search list: the system folders, then his folders in the order he writes them. An entry that

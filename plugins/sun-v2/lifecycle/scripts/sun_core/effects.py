@@ -14,7 +14,7 @@ Seven constructions and no other. For each the probe decides what "the same thin
 """
 import os
 
-from . import channels, engine as enginemod, forms, fsio, protected, reads, rundir, runner, values
+from . import channels, engine as enginemod, forms, fsio, protected, reads, runner, values
 
 Stop = enginemod.Stop
 UNCONFIRMED = "the entry is at its place and unconfirmed"
@@ -153,8 +153,24 @@ def held_thing(engine, operation, other, role):
 
 
 def target_state(engine, operation, after=False):
+    state = _target_state(engine, operation, after)
+    spec = operation["thing"].get("commit_of")
+    if after and isinstance(spec, dict):
+        # a branch's commit, read by the tool from the repository itself (SEC-4's hash row), observed with the completion so
+        # that an output field `{"observed": "commit"}` binds it (G19-10)
+        from . import commitscan, gitread
+        try:
+            found = commitscan.repository(engine.session, engine.value(spec["repo"], operation["id"])).ref("refs/heads/" + str(spec["ref"]))
+        except (commitscan.Unreadable, gitread.Unreadable, OSError, ValueError):
+            found = None
+        if found:
+            state["commit"] = found
+    return state
+
+
+def _target_state(engine, operation, after=False):
     thing = operation["thing"]
-    cid = operation["construction"]["id"]
+    cid = (operation.get("construction") or {}).get("id") if isinstance(operation.get("construction"), dict) else None
     if cid == "C7" and after:
         return reads.tracked_state(engine.fs, engine.value(operation["construction"]["to"], operation["id"]),
                                    thing.get("tracked") or ("exists", "identity"))
@@ -194,6 +210,8 @@ def probe(engine, operation):
             return "landed" if staged and staged[-1].get("identity") == at else "foreign"
         if cid == "C3":
             path = start["thing"]["path"]
+            if start["thing"].get("exists") is False and not engine.fs.lexists(path):
+                return "not landed"                # a change of an absent file: the before-state is the absence (A147)
             if not engine.fs.isfile(path):
                 return "foreign"
             now = fsio.sha256_hex(engine.fs.read(path))
@@ -403,6 +421,8 @@ def c1(engine, operation, answer):
             if len(data) != copy["size"] or fsio.sha256_hex(data) != copy["sha256"]:
                 raise Stop("a keep it needs is missing or fails its fingerprint", op)
             engine.fs.write_new(staged, data)
+        elif construction.get("copy_folder") is not None:
+            extra = copy_folder(engine, operation, staged)
         elif "files" in construction:
             root = staged
             single = construction.get("single_file")
@@ -432,20 +452,35 @@ def c1(engine, operation, answer):
                 if spans and not engine.session.register.hit(address).ref:
                     engine.log("disproof", **disproof.owed_for_channel(spans, "connection"))
                     raise Stop("a safe ground disproved", op)
-                # a file a kill left here was removed by this invocation once its startup checks had passed (SEC-12)
-                password_file = os.path.join(engine.run_dir, "private", rundir.PASSWORD_PREFIX + op)
-                engine.fs.write_new(password_file, (address + "\n").encode("utf-8"))
-                params[connection.get("slot", "passfile")] = password_file
-            try:
-                result = engine.call(command, op, extra=params, cwd=folder)
-            finally:
-                if password_file is not None:           # removed when the tool ends, however the call ended (SEC-2)
-                    engine.fs.remove(password_file)
-                    password_file = None
+                # SEC-2's private password file, built for each command that declares its slot and removed when that command
+                # ends, however it ends (G20-1, `calls.call`); a file a kill left here was removed by this invocation once its
+                # startup checks had passed (SEC-12)
+                password_file = (address, connection.get("slot", "passfile"), op)
+            keep_reads = before_the_copy(engine, operation, password_file) if operation["kind"] == "keep" else {}
+            run_in = folder
+            if construction.get("in_folder"):
+                # G21-4 (rise's M-6): the staged object is an empty folder, and the build's program runs in it
+                engine.fs.mkdir(staged)
+                run_in = staged
+            result = engine.call(command, op, extra=params, cwd=run_in, connection=password_file,
+                                 hosting_env=operation["kind"] == "keep" and construction.get("hosting_env") is True)
+            if keep_reads.get("inventory_spec"):
+                keep_reads["after"], _apart = returned_keys(engine, operation, keep_reads["inventory_spec"])
             if result.definite != "success":
                 raise Stop("a command failed", op, command=result.shown, result=result.kind)
+            scope = operation.get("keep_scope") if isinstance(operation.get("keep_scope"), dict) else {}
+            pairs_spec = (scope.get("inventory_from") or {}).get("pairs") if isinstance(scope.get("inventory_from"), dict) else None
+            if operation["kind"] == "keep" and pairs_spec:
+                pairs = result.held(pairs_spec)
+                if not isinstance(pairs, list):
+                    raise Stop("the keep is not whole", op)
+                if engine.fs.lexists(staged):
+                    engine.fs.remove(staged)
+                engine.fs.write_new(staged, encode_pairs(pairs))       # the frame writes the held values, in staging (SEC-7)
             if operation["kind"] == "keep":
-                extra = keep_whole(engine, operation, staged, result)
+                extra = keep_whole(engine, operation, staged, result, keep_reads)
+            if construction.get("in_folder"):
+                no_repository(engine, staged)
         owner_only_tree(engine, folder)
     except OSError:
         raise Stop("the build failed", op)
@@ -467,6 +502,19 @@ def c1(engine, operation, answer):
     engine.fs.rmdir(folder)
     after_check(engine, operation)
     complete(engine, operation, "a", [], extra)
+
+
+def no_repository(engine, staged):
+    """Every `.git` the build's program made in staging, removed before the publish: none is ever published, so no
+    scaffolder repository write reaches the project (G21-4; the control room's reading, A153)."""
+    while True:
+        found = [p for p in engine.fs.walk(staged) if os.path.basename(p) == ".git"]
+        if not found:
+            return
+        if engine.fs.isdir(found[0]) and not engine.fs.islink(found[0]):
+            engine.fs.rmtree(found[0])
+        else:
+            engine.fs.remove(found[0])
 
 
 def settle_mode(engine, operation, place):
@@ -495,17 +543,141 @@ def held_text(engine, mark, op):
 def last_record(engine):
     """A run's last record, rendered from the journal alone (KEEP-5)."""
     state, manifest = engine.state, engine.manifest
-    lines = ["%s: the record of run %s" % (manifest.get("kind", "").upper(), manifest.get("run"))]
+    # wrapped in the lane's fixed head lines, settled by the look (v1's frontmatter and title; G20-5)
+    lines = list(manifest.get("last_record_head") or [])
+    lines.append("%s: the record of run %s" % (manifest.get("kind", "").upper(), manifest.get("run")))
     body = forms.status_lines(manifest, state, engine.run_dir, "ended", None, engine.journal.count(),
                               manifest.get("kind") == "sunset")
     lines += [l for l in body[4:] if not l.startswith("position: ")]
     return "\n".join(l for l in lines if not l.startswith("to go on")) + "\n"
 
 
-def keep_whole(engine, operation, staged, result):
+def held_list(engine, operation, spec):
+    """A read command's held list field (G19-25), or a stop where it cannot be read."""
+    result = engine.call(engine.command(operation, spec["command"]), operation["id"])
+    found = result.held(spec.get("field")) if result.kind == "success" else None
+    if not isinstance(found, list):
+        raise Stop("the keep is not whole", operation["id"])
+    return found
+
+
+def returned_keys(engine, operation, spec):
+    """(the keys whose values the provider returns, the keys it never returns): the read's held list of keys, split by its
+    parallel list of types where the row names the type of a key listed apart (`apart`: {"field", "equals"})."""
+    result = engine.call(engine.command(operation, spec["command"]), operation["id"])
+    keys = result.held(spec.get("field")) if result.kind == "success" else None
+    if not isinstance(keys, list):
+        raise Stop("the keep is not whole", operation["id"])
+    apart = spec.get("apart") if isinstance(spec.get("apart"), dict) else None
+    if apart is None:
+        return keys, []
+    types = result.held(apart.get("field"))
+    if not isinstance(types, list) or len(types) != len(keys):
+        raise Stop("the keep is not whole", operation["id"])
+    return ([k for k, t in zip(keys, types) if t != apart.get("equals")], [k for k, t in zip(keys, types) if t == apart.get("equals")])
+
+
+def before_the_copy(engine, operation, connection=None):
+    """What a keep reads just before its builder runs: the inventory, where the row has it read by a command before and
+    after the builder (G19-25; A148), and the source's identity, where the copying tool reports none, read over the same
+    connection or link immediately before the copy (KEEP-1 as A147 words it; G19-18)."""
+    scope = operation.get("keep_scope") or {}
+    out = {}
+    spec = scope.get("inventory_from")
+    if isinstance(spec, dict) and spec.get("command"):
+        out["inventory_spec"] = spec
+        out["before"], out["apart"] = returned_keys(engine, operation, spec)
+    read = scope.get("source_identity_read")
+    if not scope.get("source_field") and isinstance(read, dict):
+        result = engine.call(engine.command(operation, read["command"]), operation["id"], connection=connection)
+        out["source"] = result.held(read.get("field")) if result.kind == "success" else None
+    return out
+
+
+BREAKS = "\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029"
+
+
+def encode_pairs(pairs):
+    """Key and text pairs as one `KEY="value"` line each (G19-29; the reviewer's N3): the value double-quoted, a backslash, a
+    double quote and every line break escaped, so that one entry is always one line and the file decodes back whole."""
+    out = []
+    for key, value in pairs:
+        text = []
+        for ch in value:
+            if ch in ("\\", '"'):
+                text.append("\\" + ch)
+            elif ch == "\n":
+                text.append("\\n")
+            elif ch == "\r":
+                text.append("\\r")
+            elif ch in BREAKS:
+                text.append("\\u%04x" % ord(ch))
+            else:
+                text.append(ch)
+        out.append('%s="%s"\n' % (key, "".join(text)))
+    return "".join(out).encode("utf-8")
+
+
+def decode_pairs(data):
+    """The pairs a file `encode_pairs` wrote holds, or None where it is not such a file."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    if text and not text.endswith("\n"):
+        return None
+    out = []
+    for line in text.split("\n")[:-1]:
+        key, eq, rest = line.partition("=")
+        if not eq or not key or len(rest) < 2 or rest[0] != '"' or rest[-1] != '"':
+            return None
+        body, value, i = rest[1:-1], [], 0
+        while i < len(body):
+            ch = body[i]
+            if ch == '"':
+                return None
+            if ch == "\\":
+                nxt = body[i + 1:i + 2]
+                if nxt in ("\\", '"'):
+                    value.append(nxt)
+                    i += 2
+                elif nxt == "n":
+                    value.append("\n")
+                    i += 2
+                elif nxt == "r":
+                    value.append("\r")
+                    i += 2
+                elif nxt == "u" and len(body) >= i + 6:
+                    try:
+                        value.append(chr(int(body[i + 2:i + 6], 16)))
+                    except ValueError:
+                        return None
+                    i += 6
+                else:
+                    return None
+                continue
+            value.append(ch)
+            i += 1
+        out.append([key, "".join(value)])
+    return out
+
+
+def copy_keys(data, mark):
+    """A copy's own keys: the text before `mark` on each line that holds it and is no comment."""
+    out = []
+    for line in data.decode("utf-8", "replace").split("\n"):
+        if mark in line and not line.lstrip().startswith("#"):
+            out.append(line.split(mark, 1)[0].strip())
+    return out
+
+
+def keep_whole(engine, operation, staged, result, reads_before=None):
     """KEEP-1: the copy is compared with the inventory taken in the same state; what the provider
-    returned of it is held, and the size and the fingerprint are the tool's own measure."""
+    returned of it is held, and the size and the fingerprint are the tool's own measure. The inventory may come from the
+    copy's own lines with a declared prefix, or from a read made just before and again just after the builder, equal both
+    times and equal to the copy's own keys; any difference fails the keep (G19-25)."""
     op, scope = operation["id"], operation.get("keep_scope") or {}
+    reads_before = reads_before or {}
     data = engine.fs.read(staged)
     for check in scope.get("content_checks") or []:
         if check.get("check") == "count-lines":
@@ -516,13 +688,79 @@ def keep_whole(engine, operation, staged, result):
             if reported != own:
                 raise Stop("the keep is not whole", op)
     extra = {"size": len(data), "sha256": fsio.sha256_hex(data)}
+    spec = scope.get("inventory_from") if isinstance(scope.get("inventory_from"), dict) else {}
+    taken = {}
+    if spec.get("lines") is not None:
+        taken["inventory"] = [l for l in data.decode("utf-8", "replace").split("\n") if l.startswith(str(spec["lines"]))]
+    elif spec.get("pairs"):
+        # a keep built from an answer's key and text pairs (G19-29): its inventory is that answer's keys, and the staged copy
+        # decodes back to the answer's pairs whole, or the keep fails
+        pairs = result.held(spec["pairs"])
+        if not isinstance(pairs, list) or decode_pairs(data) != [list(p) for p in pairs]:
+            raise Stop("the keep is not whole", op)
+        taken["inventory"] = [p[0] for p in pairs]
+    elif spec.get("command"):
+        # a hosting environment's variables alone (KEEP-1 as A148 and A149 word it): the returned-value keys read just before
+        # and again just after the pull, the two equal, and each of them present in the copy; a key whose value the provider
+        # never returns (`apart`) is listed apart and fails nothing; any other key of the copy fails the keep
+        before, after = reads_before.get("before"), reads_before.get("after")
+        apart = sorted(set(reads_before.get("apart") or []))
+        own = copy_keys(data, spec.get("copy_keys", "="))
+        if (before is None or after is None or sorted(before) != sorted(after) or not set(before) <= set(own)
+                or not set(own) <= set(before) | set(apart)):
+            raise Stop("the keep is not whole", op)
+        taken["inventory"] = before
+        if apart:
+            extra["apart"] = engine.protect(op, fsio.canonical_json(apart).encode("utf-8"), "values", "the keys whose values the provider never returns")
+    if "source" in reads_before:
+        taken["source"] = reads_before["source"]
     for key, field in (("inventory", scope.get("inventory_field")), ("source", scope.get("source_field"))):
-        held = result.held(field) if field else None
+        held = taken[key] if key in taken else (result.held(field) if field else None)
         if held is None:
             raise Stop("the keep is not whole", op)
         extra[key] = engine.protect(op, fsio.canonical_json(held).encode("utf-8"), "values" if key == "inventory" else "held field",
                                     "the %s of a keep" % key)
     return {"keep": extra}
+
+
+def folder_listing(engine, folder, op=None):
+    """A folder of this machine by its files' names and fingerprints, in a fixed order ([[name, sha256], ...]), and their size
+    in bytes, the tool's own measure; a link in it is no file the keep can copy whole."""
+    listing, size = [], 0
+    for path in engine.fs.walk(folder):
+        if engine.fs.islink(path):
+            raise Stop("the keep is not whole", op)
+        if engine.fs.isfile(path):
+            data = engine.fs.read(path)
+            listing.append([os.path.relpath(path, folder), fsio.sha256_hex(data)])
+            size += len(data)
+    return sorted(listing), size
+
+
+def copy_folder(engine, operation, staged):
+    """A keep of a folder of this machine copied whole by the tool, in a row RK18 names (G21-10; KEEP-1 as A151 words it): the
+    folder's file names and fingerprints read just before and again just after the copy, the two equal and equal to the
+    copy's own, and the folder's identity the same before and after. The inventory is that listing, in a protected record;
+    the size and the fingerprint (of the listing) are the tool's own measure."""
+    op = operation["id"]
+    source = engine.value(operation["construction"]["copy_folder"], op)
+    identity = engine.fs.identity(source)
+    if identity is None or not engine.fs.isdir(source):
+        raise Stop("the keep is not whole", op)
+    before, size = folder_listing(engine, source, op)
+    engine.fs.mkdir(staged)
+    for rel, _digest in before:
+        target = os.path.join(staged, rel)
+        engine.fs.makedirs(os.path.dirname(target))
+        engine.fs.write_new(target, engine.fs.read(os.path.join(source, rel)))
+    after, _ = folder_listing(engine, source, op)
+    own, _ = folder_listing(engine, staged, op)
+    if before != after or own != before or engine.fs.identity(source) != identity:
+        raise Stop("the keep is not whole", op)
+    text = fsio.canonical_json(before).encode("utf-8")
+    return {"keep": {"size": size, "sha256": fsio.sha256_hex(text),
+                     "inventory": engine.protect(op, text, "values", "the names and fingerprints of a folder kept whole"),
+                     "source": engine.protect(op, fsio.canonical_json(identity).encode("utf-8"), "values", "the identity of the folder kept")}}
 
 
 def keep_fields(engine, operation):
@@ -543,6 +781,15 @@ def recheck_keep(engine, operation):
     completion = engine.state.completions.get(op) or {}
     kept = completion.get("keep") or {}
     place = engine.value(operation["thing"]["place"], op)
+    if (operation.get("construction") or {}).get("copy_folder") is not None:
+        # a folder kept whole (G21-10): owner-only throughout, and its listing and size as recorded
+        try:
+            if engine.fs.islink(place) or not engine.fs.isdir(place) or any(engine.fs.mode(p) & 0o077 for p in [place] + engine.fs.walk(place)):
+                return False
+            listing, size = folder_listing(engine, place, op)
+        except (OSError, Stop):
+            return False
+        return size == kept.get("size") and fsio.sha256_hex(fsio.canonical_json(listing).encode("utf-8")) == kept.get("sha256")
     try:
         if not engine.fs.isfile(place) or engine.fs.mode(place) & 0o077:
             return False
@@ -674,13 +921,77 @@ def resolve_outstanding(engine, operation):
 
 
 # ---- C3: swap ------------------------------------------------------------------------------------------------
-def edited(data, edit, value_of):
-    """The new bytes of a file after one declared edit; None where the edit does not apply."""
-    text = data.decode("utf-8")
+def edited(data, edit, value_of, read_other=None):
+    """The new bytes of a file after one declared edit; None where the edit does not apply. `data` is None where the file is
+    absent (OP-2, A147: a change whose before-state is its absence is published as C1 publishes); `read_other` reads another
+    file's text in memory, for the kit's lift (G19-13)."""
     kind = edit.get("kind")
+    if data is None:
+        return str(value_of(edit["text"])).encode("utf-8") if kind == "kit" else None
+    text = data.decode("utf-8")
+    if kind == "kit":
+        # the kit in place (rows-rise 3.5): kept where it stands; or its text added below what stands, the other lines of
+        # the file it lifts from (all but its stub line) added under a heading; or the file made the stub, only where each
+        # of its other lines stands in the file it was lifted into
+        stands = edit.get("where_it_stands")
+        if stands == "append":
+            out = text + ("" if text.endswith("\n") or not text else "\n") + str(value_of(edit["text"]))
+            if edit.get("lift_from") is not None:
+                other = read_other(value_of(edit["lift_from"])) if read_other else None
+                stub = str(value_of(edit["stub"])) if edit.get("stub") is not None else None
+                lifted = [l for l in (other or "").split("\n") if l.strip() and l != stub]
+                if lifted:
+                    out += ("" if out.endswith("\n") else "\n") + str(value_of(edit["lift_heading"])) + "\n" + "".join(l + "\n" for l in lifted)
+            return out.encode("utf-8")
+        if stands == "stub":
+            stub = str(value_of(edit["stub"]))
+            into = read_other(value_of(edit["lift_from"])) if read_other else None
+            if into is None:
+                return None
+            have = into.split("\n")
+            if any(l.strip() and l != stub and l not in have for l in text.split("\n")):
+                return None
+            return str(value_of(edit["text"])).encode("utf-8")
+        return None
+    if kind == "replace-all":
+        old, new = str(value_of(edit["old"])), str(value_of(edit["new"]))
+        if not old or text.count(old) < 1:
+            return None
+        return text.replace(old, new).encode("utf-8")
+    if kind == "move-line":
+        # the one line holding a text, a replacement made in it where the edit names one, moved just under a heading line
+        # (the heading added at the end where it is missing), or, for its reverse, back between its recorded neighbours
+        holding = str(value_of(edit["holding"]))
+        lines, ended = reads.file_lines(text)
+        at = [i for i, l in enumerate(lines) if holding in l]
+        if len(at) != 1:
+            return None
+        line = lines.pop(at[0])
+        if edit.get("old") is not None:
+            line = line.replace(str(value_of(edit["old"])), str(value_of(edit["new"])))
+        if edit.get("under") is not None:
+            heading = str(value_of(edit["under"]))
+            heads = [i for i, l in enumerate(lines) if l == heading]
+            if len(heads) > 1:
+                return None
+            if not heads:
+                lines.append(heading)
+                heads = [len(lines) - 1]
+            lines.insert(heads[0] + 1, line)
+            return reads.join_lines(lines, True).encode("utf-8")
+        back = edited(reads.join_lines(lines, ended).encode("utf-8"),
+                      {"kind": "insert-between", "line": {"literal": line}, "above": edit["above"], "below": edit["below"]},
+                      lambda mark: mark["literal"] if isinstance(mark, dict) and "literal" in mark and len(mark) == 1 else value_of(mark))
+        return back
     if kind == "append-line":
         line = str(value_of(edit["line"]))
         return (text + ("" if text.endswith("\n") or not text else "\n") + line + "\n").encode("utf-8")
+    if kind == "remove-line" and edit.get("holding") is not None:
+        # every line that holds a text taken out (rows-set T10d's table, G21-8); none is no edit
+        holding = str(value_of(edit["holding"]))
+        lines, ended = reads.file_lines(text)
+        kept = [l for l in lines if holding not in l]
+        return reads.join_lines(kept, ended).encode("utf-8") if len(kept) != len(lines) else None
     if kind == "remove-line":
         span = str(value_of(edit["line"])).split("\n")
         lines, ended = reads.file_lines(text)
@@ -736,7 +1047,7 @@ def placement_cannot_be_met(engine, operation):
     path = engine.value(operation["thing"]["place"], op)
     if not engine.fs.isfile(path):
         return None
-    if edited(engine.fs.read(path), construction["edit"], lambda mark: held_text(engine, mark, op)) is not None:
+    if edited(engine.fs.read(path), construction["edit"], lambda mark: held_text(engine, mark, op), lambda p: other_text(engine, p)) is not None:
         return None
     return placement_unmet(engine.value, operation, path, op)
 
@@ -759,21 +1070,48 @@ def placement_unmet(value, operation, path, op):
     walk(edit)
     place = {"replace": "where its recorded after-image occurs exactly once", "insert-between": "between its recorded neighbours, "
              "next to each other exactly once" + (", the head before them as recorded" if edit.get("ordered") else ""),
-             "append-line": "at the end"}.get(edit.get("kind"), "its declared placement")
+             "append-line": "at the end", "move-line": "between its recorded neighbours, next to each other exactly once",
+             "replace-all": "where its recorded text occurs"}.get(edit.get("kind"), "its declared placement")
     return "the declared placement cannot be met: the file %s; the place: %s; the records: %s" % (path, place, ", ".join(records) or "none")
+
+
+def make_parents(engine, operation, path):
+    """C3 and C7 make a missing parent folder of their target inside the folder the construction names (the project
+    folder), and no other (G19-13): owner's folders, made one by one, never through a link."""
+    spec = operation["construction"].get("make_parents")
+    parent = os.path.dirname(path)
+    if not isinstance(spec, dict) or engine.fs.lexists(parent):
+        return
+    op = operation["id"]
+    within = os.path.abspath(str(engine.value(spec["within"], op)))
+    if not engine.fs.isdir(within) or engine.fs.islink(within) or not os.path.abspath(parent).startswith(within + os.sep):
+        return
+    missing = []
+    while not engine.fs.lexists(parent) and parent != within:
+        missing.insert(0, parent)
+        parent = os.path.dirname(parent)
+    for folder in missing:
+        try:
+            engine.fs.mkdir(folder)
+            engine.fs.chmod(folder, int(spec.get("mode", 0o755)))
+        except OSError:
+            raise Stop("the folder could not be made", op, what=folder)
 
 
 def c3(engine, operation, answer):
     op, construction = operation["id"], operation["construction"]
     path = engine.value(operation["thing"]["place"], op)
+    make_parents(engine, operation, path)
     no_link_on_the_way(engine, path, op)
+    if not engine.fs.lexists(path):
+        return c3_absent(engine, operation, answer, path)
     try:
         before = engine.fs.read(path)
         mode = engine.fs.mode(path)
         identity = engine.fs.identity(path)
     except OSError:
         raise Stop("unreadable", op)
-    new = edited(before, construction["edit"], lambda mark: held_text(engine, mark, op))
+    new = edited(before, construction["edit"], lambda mark: held_text(engine, mark, op), lambda p: other_text(engine, p))
     if new is None:
         raise Stop("foreign", op, what=placement_unmet(engine.value, operation, path, op))
     inputs = engine.save_reverse_inputs(operation)
@@ -807,17 +1145,84 @@ def c3(engine, operation, answer):
     complete(engine, operation, "a", inputs)
 
 
+def other_text(engine, path):
+    """Another file's text, read in memory for an edit (the kit's lift); None where it cannot be read."""
+    try:
+        return engine.fs.read_text(path) if isinstance(path, str) and engine.fs.isfile(path) else None
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def c3_absent(engine, operation, answer, path):
+    """OP-2 (A147): a change of a file whose recorded before-state is its absence is published as C1 publishes: built in
+    staging, its step record durable before the publish, put at its place by a rename that fails if anything is there."""
+    op, construction = operation["id"], operation["construction"]
+    new = edited(None, construction["edit"], lambda mark: held_text(engine, mark, op), lambda p: other_text(engine, p))
+    if new is None:
+        raise Stop("foreign", op, what=placement_unmet(engine.value, operation, path, op))
+    start_record(engine, operation, answer, {"path": path, "exists": False}, {"path": path, "exists": True, "sha256": fsio.sha256_hex(new)})
+    folder = enginemod.staging_of(engine.run_dir, op)
+    clear_staging(engine, op)
+    engine.fs.mkdir(folder)
+    staged = os.path.join(folder, "object")
+    engine.fs.write_new(staged, new)
+    engine.log("step", op=op, step="staged", identity=engine.fs.identity(staged), sha256=fsio.sha256_hex(new))
+    if engine.fs.volume(staged) != engine.fs.volume(os.path.dirname(path)):
+        raise Stop("the place is on another volume", op)
+    try:
+        engine.fs.rename_noreplace(staged, path)
+    except fsio.Exists:
+        raise Stop("something is at the place", op)
+    except OSError:
+        raise Stop("the publish failed", op)
+    settle_mode(engine, operation, path)
+    engine.fs.rmdir(folder)
+    after_check(engine, operation)
+    complete(engine, operation, "a", [])
+
+
 # ---- C4, C5, C6: one request of a store or a provider ----------------------------------------------------------
 def c456(engine, operation, answer):
     op, construction, thing = operation["id"], operation["construction"], operation["thing"]
-    inputs = engine.save_reverse_inputs(operation)
+    spec = construction.get("computed") if isinstance(construction.get("computed"), dict) else None
+    # the computed text read once, before the reverse's inputs are saved, so that a before-image of its read and an
+    # after-image of the computed text are the texts the effect starts from and sends (G22-7, rows-set T10d)
+    read = computed_text(engine, operation, spec) if spec else None
+    inputs = engine.save_reverse_inputs(operation, read)
     start_record(engine, operation, answer, {"word": str(thing.get("before_word", "before"))[:64]},
                  {"word": str(thing.get("after_word", "after"))[:64]}, inputs)
-    result = engine.call(engine.command(operation, construction["command"]), op)
+    computed = None
+    if spec:
+        record = engine.protect(op, read[2], spec.get("type", "after-image"), spec.get("label", "a protected input made from a computed text"))
+        computed = {spec["param"]: {"record": record}}
+    result = engine.call(engine.command(operation, construction["command"]), op, extra=computed)
     if result.definite != "success":
         raise Stop("a command failed", op, command=result.shown, result=result.kind)
     after_check(engine, operation)
     complete(engine, operation, "a", inputs)
+
+
+def computed_text(engine, operation, spec):
+    """A C6 command's protected input made from a computed text (G21-8; SEC-3): the protected text its read gave (a command
+    whose answer is declared `protected text`), or a saved record, with the row's edit applied in memory. Returns (the
+    command read, or None; the text read; the computed text); `c456` writes the computed text owner-only in the protected
+    folder as a record of the declared type, and hands it to the command's slot by its parameter."""
+    op, source = operation["id"], spec.get("from") or {}
+    if "command" in source:
+        result = engine.call(engine.command(operation, source["command"]), op)
+        text = getattr(result, "protected_text", None)
+        if result.kind != "success" or text is None:
+            raise Stop("an input the command needs could not be read", op)
+        data = text.encode("utf-8")
+    else:
+        found = engine.value(source.get("value"), op)
+        data = protected.read(engine.fs, engine.run_dir, found.reference) if isinstance(found, values.Held) else str(found).encode("utf-8")
+    out = data
+    if spec.get("edit"):
+        out = edited(data, spec["edit"], lambda mark: held_text(engine, mark, op))
+        if out is None:
+            raise Stop("the edit does not apply", op)
+    return source.get("command"), data, out
 
 
 # ---- C7: exclusive move of an identified thing -------------------------------------------------------------------
@@ -825,6 +1230,7 @@ def c7(engine, operation, answer):
     op, construction = operation["id"], operation["construction"]
     source = engine.value(operation["thing"]["place"], op)
     target = engine.value(construction["to"], op)
+    make_parents(engine, operation, target)
     no_link_on_the_way(engine, target, op)
     identity = engine.fs.identity(source)
     if identity is None:

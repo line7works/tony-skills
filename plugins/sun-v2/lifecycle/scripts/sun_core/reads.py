@@ -6,11 +6,20 @@ must show:
     {"read": "path", "path": V, "is": "absent" | "file" | "dir" | "present"}
     {"read": "sha256", "path": V, "equals": V}
     {"read": "line", "path": V, "line": V, "present": true | false, "count": n}
+    {"read": "line", "path": V, "line": V, "number": n}   the file's line number n is that line (G21-5)
     {"read": "identity", "path": V, "equals": V}
     {"read": "mode", "path": V, "at_most": 0o600}
-    {"read": "name-free", "name": V}                 no program, alias, shell function, builtin or reserved word of
+    {"read": "name-free", "name": V, "free": false}  no program, alias, shell function, builtin or reserved word of
                                                      that name, as his login zsh holds them (RK5's check; RUN-7,
-                                                     SEC-3, A55, A63)
+                                                     SEC-3, A55, A63); `"free": false` asks that the name is now taken,
+                                                     as an after-check (G19-11)
+    {"read": "text", "path": V, "text": V, "count": n | "present": B}   how many lines of a file hold a safe value
+    {"read": "text", "command": NAME, ...}           the same over a command's answer declared `protected text`, counted in
+                                                     memory and kept nowhere (SEC-4, A147; G19-8)
+    {"read": "index-current", "repo": V, "is": B}    nothing left for `git add --all` to stage: every path of the index
+                                                     stands with its content, and every other file is one git ignores
+    {"read": "ref", "repo": V, "ref": WORD, "exists": B | "equals": V}   a branch's commit, read by the tool from the
+                                                     repository itself (SEC-4's hash row; G19-10)
     {"read": "command", "command": NAME, "result": KIND, "field": F, "equals": WORD}
     {"read": "commit-scan", "repo": V, "env_file": V, "link_file": V, "fixed_words": {VAR: [WORD]}}
     {"read": "push-scan", ..., "branch": WORD, "base": REF}   SEC-10's check before a commit and before a push
@@ -20,7 +29,7 @@ must show:
 wrong account, or ran out of time. A probe only reads: a command used in a test is one whose
 declaration says it changes nothing.
 """
-from . import commitscan, fsio, shellcheck, values
+from . import commitscan, fsio, gitread, shellcheck, values
 
 UNREADABLE = "unreadable"
 
@@ -39,6 +48,7 @@ class Reader(object):
         self.last_command = None      # the last command read, as a form may show it
         self.last_kind = None
         self.last_safe = {}           # what the last command read may show: the tool's own words and copies
+        self.seen_safe = {}           # the same, of every command read so far: what a form line's `<field>` may show (G19-28)
         self.last_hit = None          # SEC-10: (the file named, why) of the last scan that found a hit
 
     def value(self, mark):
@@ -59,7 +69,7 @@ class Reader(object):
         read = c.get("read")
         try:
             if read == "path":
-                path = self.value(c["path"])
+                path = self.text(c["path"])
                 exists = self.fs.lexists(path)
                 want = c.get("is")
                 if want == "absent":
@@ -70,23 +80,30 @@ class Reader(object):
                     return False
                 return self.fs.isdir(path) if want == "dir" else self.fs.isfile(path)
             if read == "sha256":
-                path = self.value(c["path"])
+                path = self.text(c["path"])
                 if not self.fs.isfile(path):
                     return False
                 return fsio.sha256_hex(self.fs.read(path)) == self.value(c["equals"])
             if read == "line":
-                path = self.value(c["path"])
+                path = self.text(c["path"])
                 if not self.fs.isfile(path):
-                    return False          # no file is there: it is in neither state a row names by its lines
+                    # no file is there: it is in neither state a row names by its lines, but where the row says that its
+                    # absence is a state of its own (`or_absent`: a kit file absent or lacking its line, G19-13)
+                    return bool(c.get("or_absent")) and not self.fs.lexists(path)
                 lines = self.fs.read_text(path).split("\n")
+                if "number" in c:
+                    # one line at a given line number (G21-5, rise's M-7): that line is the row's line, or it is not
+                    n = int(c["number"])
+                    at = lines[n - 1] if 0 < n <= len(lines) else None
+                    return (at == str(self.text(c["line"]))) == bool(c.get("present", True))
                 count = len(span_at(lines, str(self.text(c["line"])).split("\n")))     # a span of one line or more (EV-6)
                 if "count" in c:
                     return count == c["count"]
                 return (count > 0) == bool(c.get("present", True))
             if read == "identity":
-                return self.fs.identity(self.value(c["path"])) == self.value(c["equals"])
+                return self.fs.identity(self.text(c["path"])) == self.value(c["equals"])
             if read == "mode":
-                path = self.value(c["path"])
+                path = self.text(c["path"])
                 return self.fs.lexists(path) and (self.fs.mode(path) & ~int(c.get("at_most", 0o600)) & 0o777) == 0
             if read == "name-free":
                 # RK5's check, as the owner ruled it (A55): his login zsh is asked, through the runner (`shellcheck`)
@@ -95,7 +112,37 @@ class Reader(object):
                 # runner's refusal (A112, A113, A125, A126); in a look, as before, a read that could not be made
                 free, self.last_kind = shellcheck.name_free(self.session, str(self.value(c["name"])), of_operation=self.op is not None)
                 self.last_command = None
-                return UNREADABLE if free is None else free
+                return UNREADABLE if free is None else free == bool(c.get("free", True))
+            if read == "text":
+                text = self.value(c["text"])
+                if not isinstance(text, str) or not text:
+                    return UNREADABLE              # a safe value the row names, and no other (SEC-4, A147)
+                if c.get("command"):
+                    command = self.commands.get(c["command"])
+                    if command is None or (command.get("declaration") or {}).get("answer") != "protected text":
+                        return UNREADABLE
+                    result = self.caller(self.session, command, self.outputs, self.op, self.journal)
+                    self.last_command, self.last_kind = getattr(result, "shown", None), result.kind
+                    body = getattr(result, "protected_text", None)
+                    if result.kind != "success" or body is None:
+                        return UNREADABLE
+                    lines = body.split("\n")
+                else:
+                    path = self.text(c["path"])
+                    if not self.fs.isfile(path):
+                        return bool(c.get("or_absent")) and not self.fs.lexists(path)
+                    lines = self.fs.read_text(path).split("\n")
+                count = sum(1 for line in lines if text in line)
+                if "count" in c:
+                    return count == c["count"]
+                return (count > 0) == bool(c.get("present", True))
+            if read == "index-current":
+                return index_current(self.session, self.value(c["repo"]), self.op is not None) == bool(c.get("is", True))
+            if read == "ref":
+                found = commitscan.repository(self.session, self.value(c["repo"])).ref("refs/heads/" + str(c["ref"]))
+                if "equals" in c:
+                    return found is not None and found == self.value(c["equals"])
+                return (found is not None) == bool(c.get("exists", True))
             if read in ("commit-scan", "push-scan"):
                 where = dict((k, self.value(c[k]) if c.get(k) is not None else None) for k in ("repo", "env_file", "link_file"))
                 if read == "commit-scan":
@@ -113,6 +160,7 @@ class Reader(object):
                 result = self.caller(self.session, command, self.outputs, self.op, self.journal)
                 self.last_command, self.last_kind = getattr(result, "shown", None), result.kind
                 self.last_safe = result.safe()
+                self.seen_safe.update((k, v) for k, v in self.last_safe.items() if isinstance(v, str) and len(v) <= 200)
                 if result.kind in ("malformed", "timeout", "auth", "other"):
                     return UNREADABLE
                 if result.kind != c.get("result", "success"):
@@ -120,13 +168,19 @@ class Reader(object):
                 if "field" not in c:
                     return True
                 kept = result.fields.get(c["field"])
+                if "present" in c:
+                    return (kept is not None) == bool(c["present"])      # an optional field that stood nowhere (G19-9)
                 if kept is None:
                     return UNREADABLE
                 if "equals" in c:
                     want = c["equals"]
                     want = self.value(want) if isinstance(want, dict) else want
                     if kept.is_held:
-                        return kept.held == want if c.get("compare_held") else False
+                        # a held field compared in memory with a held output: the protected record's content (SEC-4)
+                        if not c.get("compare_held"):
+                            return False
+                        expected = self.text(c["equals"]) if isinstance(c["equals"], dict) else want
+                        return str(kept.held) == str(expected)
                     return kept.safe == want
                 if "is_equal" in c:
                     return bool(kept.equal) == bool(c["is_equal"])
@@ -136,6 +190,8 @@ class Reader(object):
         except values.Unsettled:
             return UNREADABLE
         except commitscan.Unreadable:
+            return UNREADABLE
+        except (ValueError, gitread.Unreadable):
             return UNREADABLE
         return UNREADABLE
 
@@ -149,6 +205,40 @@ class Reader(object):
             if answer is False:
                 verdict = False
         return verdict
+
+
+def index_current(session, repo_path, of_operation):
+    """Whether nothing is left for `git add --all` to stage (G19-10): every path of the index stands in the working tree with
+    the content the index holds for it, and every other file is one git ignores, as git itself answers (`commitscan`)."""
+    import os
+    from . import commitscan, gitread
+    fs = session.world.fs
+    repo = commitscan.repository(session, repo_path)
+    try:
+        index = repo.index()
+    except gitread.Unreadable:
+        raise commitscan.Unreadable(repo_path)
+    folders = set()
+    for name, stages in index.items():
+        path = os.path.join(repo.top, name)
+        if fs.islink(path) or not fs.isfile(path) or gitread.blob_id(fs.read(path)) != stages[0][1]:
+            return False
+        parts = name.split("/")
+        folders.update("/".join(parts[:i]) for i in range(1, len(parts)))
+    pending = [""]
+    while pending:
+        rel = pending.pop(0)
+        for entry in sorted(fs.listdir(os.path.join(repo.top, rel) if rel else repo.top)):
+            sub = rel + "/" + entry if rel else entry
+            if sub == ".git" or sub in index:
+                continue
+            full = os.path.join(repo.top, sub)
+            if fs.isdir(full) and not fs.islink(full):
+                if sub in folders or not commitscan.git_ignores(session, repo.top, sub, of_operation):
+                    pending.append(sub)
+            elif not commitscan.git_ignores(session, repo.top, sub, of_operation):
+                return False
+    return True
 
 
 def tracked_state(fs, path, facts=("exists", "identity", "sha256", "mode")):

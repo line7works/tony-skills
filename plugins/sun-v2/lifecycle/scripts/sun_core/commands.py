@@ -183,9 +183,19 @@ def end_run(session, engine, manifest, stop=None, lines=None):
     state = engine.refresh()
     position = session.journal.count()
     try:
-        form = forms.write(session, "status", forms.status_lines(manifest, state, session.run_dir, ending, reason, position, retirement))
+        status_lines = forms.status_lines(manifest, state, session.run_dir, ending, reason, position, retirement)
+        form = forms.write(session, "status", status_lines)
     except forms.NoLine as missing:
         raise Ended(ending, [texts.NO_FORM_LINE + missing.status], run=session.run_id, position=position)
+    written = [form]
+    fixed = manifest.get("fixed_text") if isinstance(manifest.get("fixed_text"), dict) else {}
+    if ending == "complete":
+        # G21-11 (FORM-1 to FORM-3; A153): at a run's `complete` ending, the summary (the status form's lines under the lane's
+        # fixed summary text) and the hand-off prompt, a lane form of its own from the manifest and the journal
+        if "summary" in fixed:
+            written.append(forms.write(session, "summary", list(fixed["summary"]) + status_lines))
+        if "handoff" in fixed:
+            written.append(forms.write(session, "handoff", forms.handoff_lines(fixed["handoff"], state)))
     out = list(lines or []) + ["the run now: %s" % ending]
     if reason:
         out.append("stopped: %s" % reason.get("kind"))
@@ -195,7 +205,7 @@ def end_run(session, engine, manifest, stop=None, lines=None):
             out.append("the command you can run: %s" % reason["command"])
         if reason.get("kind") in (texts.SEC10_HIT, texts.SEC10_IGNORE) and reason.get("what"):
             out.append(reason["what"])                       # SEC-10: a hit names the file and shows nothing
-    raise Ended(ending, out, run=session.run_id, position=position, forms=[form])
+    raise Ended(ending, out, run=session.run_id, position=position, forms=written)
 
 
 def as_it_stood(session, engine, manifest, lines, form_says=()):

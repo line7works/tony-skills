@@ -13,6 +13,7 @@ operations: `NoLine` is raised and no form is written. A waiting step that OP-9 
 (`NOT_SHOWN`) is such a status: its line is the lane's list's, never FORM-2's `waiting` line (A120).
 """
 import os
+import re
 
 from . import protected
 
@@ -88,16 +89,62 @@ def step_text(run_dir, step):
     return step if isinstance(step, str) else None
 
 
-def what_of(operation, form):
+# RK18's form line (A147; G19-17): a line FORM-2's table lacks, the lane's list of form changes gives it, under this key
+RK18_KEY = "the RK18 mark"
+
+
+def rk18_line(operation):
+    construction = operation.get("construction") if isinstance(operation.get("construction"), dict) else {}
+    return construction.get("risk_line") if "RK18" in (construction.get("risks") or []) else None
+
+
+TOKEN = re.compile(r"<([A-Za-z_][A-Za-z0-9_ ]*)>")
+
+
+def known_values(operation, state=None):
+    """What may fill a `<field>` of an operation's form line (G19-23, G19-28): the row's own frozen safe values (its
+    commands' literal values by their names, its output's literal fields, its place where it is a literal) and, from the
+    journal, the safe fields on record for that operation (its latest attempt's fixed words and safe copies, its completion's
+    observed facts that the tool measured). A held or protected value is no literal and fills nothing (SEC-1, FORM-1)."""
+    known = {}
+    place = (operation.get("thing") or {}).get("place") if isinstance(operation.get("thing"), dict) else None
+    if isinstance(place, dict) and "literal" in place:
+        known["place"] = str(place["literal"])
+    for command in operation.get("commands") if isinstance(operation.get("commands"), list) else []:
+        for name, value in ((command.get("params") or {}) if isinstance(command, dict) else {}).items():
+            if isinstance(value, dict) and "literal" in value and len(value) == 1:
+                known.setdefault(name, str(value["literal"]))
+    output = operation.get("output") if isinstance(operation.get("output"), dict) else {}
+    for name, value in (output.get("fields") or {}).items():
+        if isinstance(value, dict) and "literal" in value and len(value) == 1:
+            known[name] = str(value["literal"])
+    if state is not None:
+        op = operation.get("id")
+        attempts = (getattr(state, "attempts", {}) or {}).get(op) or []
+        if attempts and isinstance(attempts[-1].get("safe"), dict):
+            known.update((k, str(v)) for k, v in attempts[-1]["safe"].items())
+        observed = ((getattr(state, "completions", {}) or {}).get(op) or {}).get("observed") or {}
+        known.update((k, str(v)) for k, v in observed.items() if k in ("word", "path", "target", "commit") and isinstance(v, str))
+    return known
+
+
+def fill(text, operation, state=None):
+    known = known_values(operation, state)
+    return TOKEN.sub(lambda found: known.get(found.group(1), found.group(0)), text) if isinstance(text, str) else text
+
+
+def what_of(operation, form, state=None):
     lines = operation.get("form_lines") if isinstance(operation.get("form_lines"), dict) else {}
-    return lines.get(form) or lines.get("preview") or operation.get("id")
+    return fill(lines.get(form) or lines.get("preview") or operation.get("id"), operation, state)
 
 
 def preview_lines(manifest):
     """The preview, from the manifest and from nothing else (RUN-8)."""
     changes = manifest.get("form_changes") or {}
     kind = manifest.get("kind", "")
-    out = ["%s PREVIEW" % kind.upper(), "run: %s" % manifest.get("run")]
+    # v1's fixed text of the preview, from the lane's slot, settled by the look (FORM-1; G20-5)
+    out = list((manifest.get("fixed_text") or {}).get("preview") or [])
+    out += ["%s PREVIEW" % kind.upper(), "run: %s" % manifest.get("run")]
     names = manifest.get("names") or []
     if names:
         out.append("names: %s" % ", ".join(names))
@@ -130,6 +177,8 @@ def preview_lines(manifest):
             if operation.get("not_proven"):
                 head += "; " + line_for("not proven, on his word", changes, what=what)     # EV-5: on every form
             out.append(head)
+            if rk18_line(operation):
+                out.append("      " + line_for(RK18_KEY, changes, what=rk18_line(operation)))
             for name in operation.get("repo_commands") if isinstance(operation.get("repo_commands"), list) else []:
                 out.append("      changes a repository: %s" % name)
     for item in manifest.get("already_so") or []:
@@ -137,6 +186,7 @@ def preview_lines(manifest):
     for item in manifest.get("not_applicable") or []:
         step = "; you can do it yourself: %s" % item["step"] if item.get("step") else ""
         out.append(line_for("not applicable", changes, reason=item.get("reason"), what=item.get("what"), step=step))
+    out += list(manifest.get("present_lines") or [])           # a preview line where a named path is present (G20-4)
     for item in manifest.get("not_offered") or []:
         # EV-5: everything a restore does not offer it lists, with the reason EV-4 recorded; FORM-2 has no line for it,
         # so the lane's list of form changes gives it (ROW-3)
@@ -162,7 +212,7 @@ def status_lines(manifest, state, run_dir, ending, reason, position, retirement)
         out.append("in your words: %s" % manifest["inputs"]["description"])
     for operation in manifest.get("operations") or []:
         op = operation["id"]
-        what = what_of(operation, "status")
+        what = what_of(operation, "status", state)
         status = state.finals.get(op)
         if status == "done":
             out.append("[%s] %s" % (op, line_for("done", changes, what=what)))
@@ -202,6 +252,8 @@ def status_lines(manifest, state, run_dir, ending, reason, position, retirement)
             out.append("[%s] not started: %s" % (op, what))
         if operation.get("not_proven"):
             out[-1] += "; " + line_for("not proven, on his word", changes, what=what)        # EV-5: on every form
+        if rk18_line(operation):
+            out.append("      " + line_for(RK18_KEY, changes, what=rk18_line(operation)))
         for reference in state.records_of.get(op, []):
             out.append("      " + record_line(run_dir, reference))
     for item in manifest.get("already_so") or []:
@@ -225,6 +277,22 @@ def status_lines(manifest, state, run_dir, ending, reason, position, retirement)
         out.append(line_for("stop", changes, reason=reason.get("kind"), what=what, operation=operation, command=command, need=need, ways=ways))
     if ending in ("waiting", "stopped"):
         out.append("to go on, give your word with position %d" % position)
+    return out
+
+
+DID = ("done", "already so", "passed", "adopted")
+
+
+def handoff_lines(lines, state):
+    """The hand-off prompt (G21-11): the lane's fixed lines, frozen to safe text by the look, each line that names an
+    operation (`when`) kept only where the run did that operation (a layer the run lacked is left out)."""
+    out = []
+    for line in lines:
+        if isinstance(line, dict):
+            if state.finals.get(line.get("when")) in DID:
+                out.append(line.get("line", ""))
+        else:
+            out.append(line)
     return out
 
 

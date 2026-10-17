@@ -56,6 +56,9 @@
            }
           ]
          },
+         "exists": {
+          "type": "boolean"
+         },
          "field": {
           "maxLength": 200,
           "type": "string"
@@ -73,16 +76,26 @@
           },
           "type": "object"
          },
+         "free": {
+          "type": "boolean"
+         },
          "id": {
           "maxLength": 200,
           "type": "string"
          },
          "is": {
-          "enum": [
-           "absent",
-           "file",
-           "dir",
-           "present"
+          "anyOf": [
+           {
+            "enum": [
+             "absent",
+             "file",
+             "dir",
+             "present"
+            ]
+           },
+           {
+            "type": "boolean"
+           }
           ]
          },
          "is_equal": {
@@ -97,11 +110,18 @@
          "name": {
           "$ref": "#/$defs/value"
          },
+         "number": {
+          "minimum": 1,
+          "type": "integer"
+         },
          "on": {
           "enum": [
            "target",
            "other"
           ]
+         },
+         "or_absent": {
+          "type": "boolean"
          },
          "path": {
           "$ref": "#/$defs/value"
@@ -119,8 +139,15 @@
            "name-free",
            "command",
            "commit-scan",
-           "push-scan"
+           "push-scan",
+           "text",
+           "index-current",
+           "ref"
           ]
+         },
+         "ref": {
+          "maxLength": 200,
+          "type": "string"
          },
          "repo": {
           "$ref": "#/$defs/value"
@@ -128,6 +155,9 @@
          "result": {
           "maxLength": 200,
           "type": "string"
+         },
+         "text": {
+          "$ref": "#/$defs/value"
          }
         },
         "required": [
@@ -193,6 +223,9 @@
            }
           ]
          },
+         "exists": {
+          "type": "boolean"
+         },
          "field": {
           "maxLength": 200,
           "type": "string"
@@ -210,16 +243,26 @@
           },
           "type": "object"
          },
+         "free": {
+          "type": "boolean"
+         },
          "id": {
           "maxLength": 200,
           "type": "string"
          },
          "is": {
-          "enum": [
-           "absent",
-           "file",
-           "dir",
-           "present"
+          "anyOf": [
+           {
+            "enum": [
+             "absent",
+             "file",
+             "dir",
+             "present"
+            ]
+           },
+           {
+            "type": "boolean"
+           }
           ]
          },
          "is_equal": {
@@ -234,11 +277,18 @@
          "name": {
           "$ref": "#/$defs/value"
          },
+         "number": {
+          "minimum": 1,
+          "type": "integer"
+         },
          "on": {
           "enum": [
            "target",
            "other"
           ]
+         },
+         "or_absent": {
+          "type": "boolean"
          },
          "path": {
           "$ref": "#/$defs/value"
@@ -256,8 +306,15 @@
            "name-free",
            "command",
            "commit-scan",
-           "push-scan"
+           "push-scan",
+           "text",
+           "index-current",
+           "ref"
           ]
+         },
+         "ref": {
+          "maxLength": 200,
+          "type": "string"
          },
          "repo": {
           "$ref": "#/$defs/value"
@@ -265,6 +322,9 @@
          "result": {
           "maxLength": 200,
           "type": "string"
+         },
+         "text": {
+          "$ref": "#/$defs/value"
          }
         },
         "required": [
@@ -345,6 +405,9 @@
            }
           ]
          },
+         "exists": {
+          "type": "boolean"
+         },
          "field": {
           "maxLength": 200,
           "type": "string"
@@ -362,16 +425,26 @@
           },
           "type": "object"
          },
+         "free": {
+          "type": "boolean"
+         },
          "id": {
           "maxLength": 200,
           "type": "string"
          },
          "is": {
-          "enum": [
-           "absent",
-           "file",
-           "dir",
-           "present"
+          "anyOf": [
+           {
+            "enum": [
+             "absent",
+             "file",
+             "dir",
+             "present"
+            ]
+           },
+           {
+            "type": "boolean"
+           }
           ]
          },
          "is_equal": {
@@ -386,11 +459,18 @@
          "name": {
           "$ref": "#/$defs/value"
          },
+         "number": {
+          "minimum": 1,
+          "type": "integer"
+         },
          "on": {
           "enum": [
            "target",
            "other"
           ]
+         },
+         "or_absent": {
+          "type": "boolean"
          },
          "path": {
           "$ref": "#/$defs/value"
@@ -408,8 +488,15 @@
            "name-free",
            "command",
            "commit-scan",
-           "push-scan"
+           "push-scan",
+           "text",
+           "index-current",
+           "ref"
           ]
+         },
+         "ref": {
+          "maxLength": 200,
+          "type": "string"
          },
          "repo": {
           "$ref": "#/$defs/value"
@@ -417,6 +504,9 @@
          "result": {
           "maxLength": 200,
           "type": "string"
+         },
+         "text": {
+          "$ref": "#/$defs/value"
          }
         },
         "required": [
@@ -447,6 +537,85 @@
              "type": "string"
             },
             "type": "array"
+           },
+           "answer": {
+            "const": "protected text"
+           },
+           "body": {
+            "additionalProperties": {
+             "anyOf": [
+              {
+               "oneOf": [
+                {
+                 "additionalProperties": false,
+                 "properties": {
+                  "literal": {
+                   "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                   ]
+                  }
+                 },
+                 "required": [
+                  "literal"
+                 ],
+                 "type": "object"
+                },
+                {
+                 "additionalProperties": false,
+                 "properties": {
+                  "param": {
+                   "maxLength": 200,
+                   "type": "string"
+                  }
+                 },
+                 "required": [
+                  "param"
+                 ],
+                 "type": "object"
+                }
+               ]
+              },
+              {
+               "additionalProperties": {
+                "oneOf": [
+                 {
+                  "additionalProperties": false,
+                  "properties": {
+                   "literal": {
+                    "type": [
+                     "string",
+                     "number",
+                     "boolean"
+                    ]
+                   }
+                  },
+                  "required": [
+                   "literal"
+                  ],
+                  "type": "object"
+                 },
+                 {
+                  "additionalProperties": false,
+                  "properties": {
+                   "param": {
+                    "maxLength": 200,
+                    "type": "string"
+                   }
+                  },
+                  "required": [
+                   "param"
+                  ],
+                  "type": "object"
+                 }
+                ]
+               },
+               "type": "object"
+              }
+             ]
+            },
+            "type": "object"
            },
            "changes_repository": {
             "type": "boolean"
@@ -595,6 +764,9 @@
                },
                "type": "array"
               },
+              "many": {
+               "type": "boolean"
+              },
               "max_length": {
                "minimum": 1,
                "type": "integer"
@@ -603,6 +775,24 @@
                "maxLength": 200,
                "type": "string"
               },
+              "pairs": {
+               "additionalProperties": false,
+               "properties": {
+                "key": {
+                 "maxLength": 200,
+                 "type": "string"
+                },
+                "value": {
+                 "maxLength": 200,
+                 "type": "string"
+                }
+               },
+               "required": [
+                "key",
+                "value"
+               ],
+               "type": "object"
+              },
               "place": {
                "items": {
                 "type": [
@@ -610,7 +800,6 @@
                  "integer"
                 ]
                },
-               "minItems": 1,
                "type": "array"
               },
               "required_in": {
@@ -687,6 +876,56 @@
            "provider": {
             "maxLength": 200,
             "type": "string"
+           },
+           "query": {
+            "items": {
+             "additionalProperties": false,
+             "properties": {
+              "name": {
+               "maxLength": 200,
+               "type": "string"
+              },
+              "value": {
+               "oneOf": [
+                {
+                 "additionalProperties": false,
+                 "properties": {
+                  "literal": {
+                   "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                   ]
+                  }
+                 },
+                 "required": [
+                  "literal"
+                 ],
+                 "type": "object"
+                },
+                {
+                 "additionalProperties": false,
+                 "properties": {
+                  "param": {
+                   "maxLength": 200,
+                   "type": "string"
+                  }
+                 },
+                 "required": [
+                  "param"
+                 ],
+                 "type": "object"
+                }
+               ]
+              }
+             },
+             "required": [
+              "name",
+              "value"
+             ],
+             "type": "object"
+            },
+            "type": "array"
            },
            "repository_writes": {
             "enum": [
@@ -867,10 +1106,18 @@
          "type": "string"
         },
         "reason": {
-         "enum": [
-          "a flag",
-          "the project type",
-          "a layer the project lacks"
+         "anyOf": [
+          {
+           "enum": [
+            "a flag",
+            "the project type",
+            "a layer the project lacks"
+           ]
+          },
+          {
+           "maxLength": 200,
+           "type": "string"
+          }
          ]
         },
         "result": {
@@ -907,6 +1154,122 @@
         "command": {
          "maxLength": 200,
          "type": "string"
+        },
+        "computed": {
+         "additionalProperties": false,
+         "properties": {
+          "edit": {
+           "additionalProperties": false,
+           "properties": {
+            "above": {
+             "$ref": "#/$defs/value"
+            },
+            "before_sha256": {
+             "pattern": "^[0-9a-f]{64}$",
+             "type": "string"
+            },
+            "below": {
+             "$ref": "#/$defs/value"
+            },
+            "head": {
+             "$ref": "#/$defs/value"
+            },
+            "holding": {
+             "$ref": "#/$defs/value"
+            },
+            "kind": {
+             "enum": [
+              "append-line",
+              "remove-line",
+              "replace",
+              "insert-between",
+              "kit",
+              "replace-all",
+              "move-line"
+             ]
+            },
+            "lift_from": {
+             "$ref": "#/$defs/value"
+            },
+            "lift_heading": {
+             "$ref": "#/$defs/value"
+            },
+            "line": {
+             "$ref": "#/$defs/value"
+            },
+            "new": {
+             "$ref": "#/$defs/value"
+            },
+            "old": {
+             "$ref": "#/$defs/value"
+            },
+            "ordered": {
+             "type": "boolean"
+            },
+            "stub": {
+             "$ref": "#/$defs/value"
+            },
+            "text": {
+             "$ref": "#/$defs/value"
+            },
+            "under": {
+             "$ref": "#/$defs/value"
+            },
+            "where_it_stands": {
+             "enum": [
+              "keep",
+              "append",
+              "stub"
+             ]
+            }
+           },
+           "required": [
+            "kind"
+           ],
+           "type": "object"
+          },
+          "from": {
+           "additionalProperties": false,
+           "maxProperties": 1,
+           "minProperties": 1,
+           "properties": {
+            "command": {
+             "maxLength": 200,
+             "type": "string"
+            },
+            "value": {
+             "$ref": "#/$defs/value"
+            }
+           },
+           "required": [],
+           "type": "object"
+          },
+          "label": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "param": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "type": {
+           "enum": [
+            "before-image",
+            "after-image",
+            "definition",
+            "line",
+            "values",
+            "copy",
+            "held field",
+            "secret field"
+           ]
+          }
+         },
+         "required": [
+          "param",
+          "from"
+         ],
+         "type": "object"
         },
         "conditions": {
          "items": {
@@ -963,6 +1326,9 @@
          ],
          "type": "object"
         },
+        "copy_folder": {
+         "$ref": "#/$defs/value"
+        },
         "document": {
          "maxLength": 2000,
          "type": "string"
@@ -983,13 +1349,25 @@
           "head": {
            "$ref": "#/$defs/value"
           },
+          "holding": {
+           "$ref": "#/$defs/value"
+          },
           "kind": {
            "enum": [
             "append-line",
             "remove-line",
             "replace",
-            "insert-between"
+            "insert-between",
+            "kit",
+            "replace-all",
+            "move-line"
            ]
+          },
+          "lift_from": {
+           "$ref": "#/$defs/value"
+          },
+          "lift_heading": {
+           "$ref": "#/$defs/value"
           },
           "line": {
            "$ref": "#/$defs/value"
@@ -1002,6 +1380,22 @@
           },
           "ordered": {
            "type": "boolean"
+          },
+          "stub": {
+           "$ref": "#/$defs/value"
+          },
+          "text": {
+           "$ref": "#/$defs/value"
+          },
+          "under": {
+           "$ref": "#/$defs/value"
+          },
+          "where_it_stands": {
+           "enum": [
+            "keep",
+            "append",
+            "stub"
+           ]
           }
          },
          "required": [
@@ -1051,6 +1445,9 @@
          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
          "type": "string"
         },
+        "hosting_env": {
+         "type": "boolean"
+        },
         "id": {
          "maxLength": 200,
          "type": "string"
@@ -1059,14 +1456,36 @@
          "maxLength": 200,
          "type": "string"
         },
+        "in_folder": {
+         "type": "boolean"
+        },
         "last_record": {
          "type": "boolean"
+        },
+        "make_parents": {
+         "additionalProperties": false,
+         "properties": {
+          "mode": {
+           "type": "integer"
+          },
+          "within": {
+           "$ref": "#/$defs/value"
+          }
+         },
+         "required": [
+          "within"
+         ],
+         "type": "object"
         },
         "mode": {
          "type": "integer"
         },
         "out_param": {
          "maxLength": 200,
+         "type": "string"
+        },
+        "risk_line": {
+         "maxLength": 2000,
          "type": "string"
         },
         "risks": {
@@ -1076,7 +1495,8 @@
            "RK3",
            "RK4",
            "RK5",
-           "RK13"
+           "RK13",
+           "RK18"
           ]
          },
          "type": "array"
@@ -1222,6 +1642,51 @@
          "maxLength": 200,
          "type": "string"
         },
+        "inventory_from": {
+         "additionalProperties": false,
+         "properties": {
+          "apart": {
+           "additionalProperties": false,
+           "properties": {
+            "equals": {
+             "maxLength": 200,
+             "type": "string"
+            },
+            "field": {
+             "maxLength": 200,
+             "type": "string"
+            }
+           },
+           "required": [
+            "field",
+            "equals"
+           ],
+           "type": "object"
+          },
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "copy_keys": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "field": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "lines": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "pairs": {
+           "maxLength": 200,
+           "type": "string"
+          }
+         },
+         "required": [],
+         "type": "object"
+        },
         "same_state": {
          "maxLength": 2000,
          "type": "string"
@@ -1295,7 +1760,6 @@
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
         "type": "string"
        },
-       "minItems": 1,
        "type": "array"
       }
      ]
@@ -1540,6 +2004,9 @@
            }
           ]
          },
+         "exists": {
+          "type": "boolean"
+         },
          "field": {
           "maxLength": 200,
           "type": "string"
@@ -1557,16 +2024,26 @@
           },
           "type": "object"
          },
+         "free": {
+          "type": "boolean"
+         },
          "id": {
           "maxLength": 200,
           "type": "string"
          },
          "is": {
-          "enum": [
-           "absent",
-           "file",
-           "dir",
-           "present"
+          "anyOf": [
+           {
+            "enum": [
+             "absent",
+             "file",
+             "dir",
+             "present"
+            ]
+           },
+           {
+            "type": "boolean"
+           }
           ]
          },
          "is_equal": {
@@ -1581,11 +2058,18 @@
          "name": {
           "$ref": "#/$defs/value"
          },
+         "number": {
+          "minimum": 1,
+          "type": "integer"
+         },
          "on": {
           "enum": [
            "target",
            "other"
           ]
+         },
+         "or_absent": {
+          "type": "boolean"
          },
          "path": {
           "$ref": "#/$defs/value"
@@ -1603,8 +2087,15 @@
            "name-free",
            "command",
            "commit-scan",
-           "push-scan"
+           "push-scan",
+           "text",
+           "index-current",
+           "ref"
           ]
+         },
+         "ref": {
+          "maxLength": 200,
+          "type": "string"
          },
          "repo": {
           "$ref": "#/$defs/value"
@@ -1612,6 +2103,9 @@
          "result": {
           "maxLength": 200,
           "type": "string"
+         },
+         "text": {
+          "$ref": "#/$defs/value"
          }
         },
         "required": [
@@ -1656,12 +2150,19 @@
           "maxLength": 200,
           "type": "string"
          },
+         "holding": {
+          "$ref": "#/$defs/value"
+         },
          "label": {
           "maxLength": 200,
           "type": "string"
          },
          "line": {
           "$ref": "#/$defs/value"
+         },
+         "out_param": {
+          "maxLength": 200,
+          "type": "string"
          },
          "path": {
           "$ref": "#/$defs/value"
@@ -1673,7 +2174,8 @@
            "command",
            "line-above",
            "line-below",
-           "head"
+           "head",
+           "computed"
           ]
          },
          "type": {
@@ -1884,6 +2386,100 @@
          "maxLength": 200,
          "type": "string"
         },
+        "commit_of": {
+         "additionalProperties": false,
+         "properties": {
+          "ref": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "repo": {
+           "$ref": "#/$defs/value"
+          }
+         },
+         "required": [
+          "repo",
+          "ref"
+         ],
+         "type": "object"
+        },
+        "family": {
+         "additionalProperties": false,
+         "properties": {
+          "also": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "date": {
+           "type": "boolean"
+          },
+          "field": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "folder": {
+           "$ref": "#/$defs/value"
+          },
+          "glob": {
+           "$ref": "#/$defs/value"
+          },
+          "holding": {
+           "$ref": "#/$defs/value"
+          },
+          "name_after": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "path": {
+           "$ref": "#/$defs/value"
+          },
+          "read": {
+           "enum": [
+            "files",
+            "lines",
+            "command"
+           ]
+          },
+          "tree": {
+           "type": "boolean"
+          },
+          "validators": {
+           "additionalProperties": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "object"
+          },
+          "within": {
+           "additionalProperties": false,
+           "properties": {
+            "folder": {
+             "$ref": "#/$defs/value"
+            },
+            "output": {
+             "pattern": "^[^.]+\\.[^.]+$",
+             "type": "string"
+            }
+           },
+           "required": [
+            "folder",
+            "output"
+           ],
+           "type": "object"
+          }
+         },
+         "required": [
+          "read"
+         ],
+         "type": "object"
+        },
         "found_things": {
          "additionalProperties": false,
          "properties": {
@@ -2006,6 +2602,9 @@
              }
             ]
            },
+           "exists": {
+            "type": "boolean"
+           },
            "field": {
             "maxLength": 200,
             "type": "string"
@@ -2023,16 +2622,26 @@
             },
             "type": "object"
            },
+           "free": {
+            "type": "boolean"
+           },
            "id": {
             "maxLength": 200,
             "type": "string"
            },
            "is": {
-            "enum": [
-             "absent",
-             "file",
-             "dir",
-             "present"
+            "anyOf": [
+             {
+              "enum": [
+               "absent",
+               "file",
+               "dir",
+               "present"
+              ]
+             },
+             {
+              "type": "boolean"
+             }
             ]
            },
            "is_equal": {
@@ -2047,11 +2656,18 @@
            "name": {
             "$ref": "#/$defs/value"
            },
+           "number": {
+            "minimum": 1,
+            "type": "integer"
+           },
            "on": {
             "enum": [
              "target",
              "other"
             ]
+           },
+           "or_absent": {
+            "type": "boolean"
            },
            "path": {
             "$ref": "#/$defs/value"
@@ -2069,8 +2685,15 @@
              "name-free",
              "command",
              "commit-scan",
-             "push-scan"
+             "push-scan",
+             "text",
+             "index-current",
+             "ref"
             ]
+           },
+           "ref": {
+            "maxLength": 200,
+            "type": "string"
            },
            "repo": {
             "$ref": "#/$defs/value"
@@ -2078,6 +2701,9 @@
            "result": {
             "maxLength": 200,
             "type": "string"
+           },
+           "text": {
+            "$ref": "#/$defs/value"
            }
           },
           "required": [
@@ -2426,6 +3052,112 @@
      },
      "required": [
       "local"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "clock": {
+       "const": "date"
+      }
+     },
+     "required": [
+      "clock"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "account": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "account"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "each": {
+       "maxLength": 200,
+       "type": "string"
+      }
+     },
+     "required": [
+      "each"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "table": {
+       "additionalProperties": false,
+       "properties": {
+        "by": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "cut": {
+         "const": "line"
+        },
+        "name": {
+         "maxLength": 200,
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "by"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "table"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "project_memory": {
+       "$ref": "#/$defs/value"
+      }
+     },
+     "required": [
+      "project_memory"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "checked": {
+       "additionalProperties": false,
+       "properties": {
+        "validator": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "value": {
+         "$ref": "#/$defs/value"
+        }
+       },
+       "required": [
+        "value",
+        "validator"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "checked"
      ],
      "type": "object"
     },
