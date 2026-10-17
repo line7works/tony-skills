@@ -821,7 +821,7 @@ completion record; in every other run of the kill sweep, at most one.
 | check | reads and decides | none | none | no |
 | build | makes a new file or folder where there is nothing, complete on arrival | the publish of a staged object | C1 | no |
 | create | makes a new thing at a provider | one create request | C2 | no |
-| change | takes an identified existing thing from a recorded before-state to a computed after-state, in place | one swap, one compare-and-swap, one refusing call, or one read-then-ask | C3, C4, C5, C6 | yes |
+| change | takes an identified existing thing from a recorded before-state to a computed after-state, in place; a file whose recorded before-state is its absence is published as C1 publishes (A147) | one swap, one compare-and-swap, one refusing call, or one read-then-ask | C3, C4, C5, C6 | yes |
 | move | puts an identified existing thing at another place | one rename | C7 | yes |
 | keep | makes a checked copy of a named scope at a place with no clock | the publish of the staged copy | C1 | no |
 | owner step | the owner acts; the tool shows the exact step | none by the tool | none | yes, as an owner step |
@@ -845,7 +845,7 @@ operation the tool performs. The last column is decided by RISK-1 and RISK-2.
 | C3 | swap: under the file's own lock, a new file is built in staging and put in the old file's place only if the old file's hash is the one in the start record; at the swap the new file takes the old file's permissions | the whole file is as recorded | a writer that ignores the lock, between the hash check and the swap | yes, under RK2 |
 | C4 | compare-and-swap enforced by the store: the request names every value that must hold now, on the thing changed and on any related thing the store checks in the same request, each of which may be "none" (a local branch or tag updated only from its recorded value; a remote branch pushed only if the remote holds the value named), and the store refuses otherwise | every named value | none | yes |
 | C5 | a refusing call: a call that the tool or the provider, by its own document cited in the row, refuses when the before-state does not hold; the row lists each condition the refusal covers | each listed condition | none, as far as the cited refusal goes; a condition of the before-test that is not listed is a window | yes |
-| C6 | read, then ask: the state is read, then a request is sent that would also succeed if the state were already so | the state as of the read | the same change made by another between the read and the request | only for the four rows RK3 names |
+| C6 | read, then ask: the state is read, then a request is sent that would also succeed if the state were already so | the state as of the read | the same change made by another between the read and the request | only for the four rows RK3 names, and for the rows RK18 names (the owner's pick, A147) |
 | C7 | exclusive move of an identified thing: its identity is read; it is renamed by a rename that fails if anything is at the target; the identity at the target is read again, and a difference stops the run with both places named and no completion recorded | nothing is at the target | the thing at the source replaced by another between the first read and the rename | yes, under RK4 |
 
 Test on fakes: for each construction, and for each condition its row's before-test names in turn, a
@@ -1517,7 +1517,8 @@ records.
 with no clock. What "whole" means is read from the same consistent state that is copied: the
 inventory is taken inside the same snapshot or hold as the copy, the copy is compared with it, and
 the completion record holds the inventory, the copy's size and fingerprint, and the identity of the
-source as read inside that same state. What of these a provider returned (the inventory, the
+source as read inside that same state, or, where the copying tool reports none, as read over the
+same connection or link immediately before the copy (A147). What of these a provider returned (the inventory, the
 source's identity) is held (SEC-4): it rests in a protected record and the completion record refers
 to it; the size and the fingerprint are the tool's own measure. Where the whole scope cannot be read
 or established, the keep fails and the run stops; where the look can already see that, it is a
@@ -1832,7 +1833,11 @@ and whose value is a complete text, stands at that field's place, and the custod
 below holds for it; where a name stands more than once, the last before the damage is the one. No
 other member of such an answer is kept, a member of another name is decoded only to step past it,
 the text is never searched for a value-shaped string, and the result stays `malformed`. Where no such
-member stands, nothing stands at the place.
+member stands, nothing stands at the place. One more reading bends the same sentence (the owner's
+pick, A147): a command whose declaration names its whole answer `protected text`, the schedule
+table's own listing among them, is read whole as protected content. It is kept only as a protected
+record (SEC-6), the lines that hold a safe value the row names are counted in memory, and nothing of
+it is read as a field, shown, or searched for a value-shaped string.
 
 | Disposition | What the frame does with the value |
 |---|---|
@@ -2451,7 +2456,7 @@ value.
 | a command of the look | arguments and environment of safe content only; a held value by a protected input or not at all | this rule; SEC-3 |
 | a command of an operation | the same | this rule; SEC-3 |
 | a command that reads for one of his steps | the same | this rule; SEC-3, OP-9 |
-| a file the tool publishes outside the run directory | a secret, a held value or protected content only at a place SEC-7 names for it, by the construction SEC-7 gives, and at every one of those: the pulled env file, the hosting link file, each keep in the sunset folder (the dump, the saved hosting env values, the memory copy, a moved launch agent's file), and each thing a restore puts back at its place. Every other file the tool publishes holds safe content only | this rule; SEC-7 |
+| a file the tool publishes outside the run directory | a secret, a held value or protected content only at a place SEC-7 names for it, by the construction SEC-7 gives, and at every one of those: the pulled env file, the hosting link file, each keep in the sunset folder (the dump, the saved hosting env values, the memory copy, a moved launch agent's file), and each thing a restore puts back at its place. Every other file the tool publishes holds safe content only, but for what already stood in that file, which a C3 swap carries unchanged and shows nowhere (A147) | this rule; SEC-7 |
 | the cue | no value: a fixed sound and a fixed line | this rule |
 | an input saved for the run | what SEC-9 has passed | SEC-9 |
 | a protected record | held, secret and protected content | SEC-6, SEC-7 |
@@ -2851,8 +2856,8 @@ unanswered or names a row that does not exist.
 ## Part 4. The risk that is left
 
 **RISK-1. The accepted risks stand as the catalog's Part 6 states them.** The owner accepted
-sixteen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
-A48, A55, A63, A68, A89, A103 and A107): RK1;
+seventeen risks and one assumption (the contract's section 18, A4, A6, A18, A26, A30, A32, A33, A40,
+A48, A55, A63, A68, A89, A103, A107 and A147): RK1;
 RK2, which by his word covers every swap, C3; RK3, for the four rows it names; RK4, for a move, C7;
 RK5, for a
 shortcut's name being free, in the add and in the put-back; RK6, for a channel secret replaced
@@ -2866,12 +2871,14 @@ secret of the pulled env file under eight bytes committed and pushed (SEC-10); R
 whose send is a request of the frame's own, refused before any connection to the host is opened,
 left outstanding with no record of the refusal (LOG-2, OP-7); RK17, for a false line that a secret
 may have been received and lost, where the frame refuses a request of its own that has a secret
-field before any connection to the host is opened (SEC-12); and the run directory's assumption
-(RUN-4). RK10, RK11, RK12, RK13, RK14, RK15, RK16 and RK17 are the ninth, the tenth, the eleventh,
-the twelfth, the thirteenth, the fourteenth, the fifteenth and the sixteenth: no risk bears the
+field before any connection to the host is opened (SEC-12); RK18, for a step v1 did itself, in the
+rows a lane names under it (OP-3, RISK-2); and the run directory's assumption
+(RUN-4). RK10, RK11, RK12, RK13, RK14, RK15, RK16, RK17 and RK18 are the ninth, the tenth, the
+eleventh, the twelfth, the thirteenth, the fourteenth, the fifteenth, the sixteenth and the
+seventeenth: no risk bears the
 number nine, RK9 being merged into RK7. Their wording is in the catalog's Part 6 and
 is not restated here. This frame removes none of them and accepts none itself. An operation carried
-under RK2, RK3, RK4, RK5 or RK13 is marked so in the journal, once for each of those risks it is
+under RK2, RK3, RK4, RK5, RK13 or RK18 is marked so in the journal, once for each of those risks it is
 carried under. RK13's window is the one RK5's is, between the check and the add, so a shortcut's add
 and its put-back are carried under both. RK1, RK6, RK7, RK8, RK10, RK11, RK12, RK14, RK15, RK16
 and RK17 belong to no one operation, and no mark is recorded for any of them.
@@ -2902,7 +2909,10 @@ How far RK8 reaches is Part 6's to say, and this test line does not narrow it.
 no accepted risk names is written as an owner step (OP-9), and a manifest that holds it as a tool's
 effect fails its build. Two such windows were put to the owner and ruled no (A6), and stay his
 steps: C6 outside the four rows RK3 names; and a schedule table that can only be read and then
-replaced through its own tool, which no construction of OP-3 covers. A before-test condition on
+replaced through its own tool, which no construction of OP-3 covers. Each is the tool's in a row
+RK18 names, a step v1 did itself (the owner's pick, A147): there the read-then-ask is C6, and the
+schedule table is read through its listing as SEC-4's protected text and replaced through its own
+tool. A before-test condition on
 something the effect does not change, which the row's construction does not enforce, stays closed in
 every case but the one RK5 names.
 
@@ -2910,7 +2920,8 @@ Test on fakes: a manifest that holds, as a tool's effect, a read-then-ask on a r
 name, an edit of a schedule table, or a row whose before-test names something its effect does not
 change and whose construction does not enforce it, other than a shortcut's name, fails its build and
 names the row; the same condition enforced in the same request by a C4, or covered by a C5's cited
-refusal, builds; and a manifest of rows whose every window is named by an accepted risk builds.
+refusal, builds; and a manifest of rows whose every window is named by an accepted risk builds; a read-then-ask, and
+an edit of a schedule table, on a row RK18 names builds and carries RK18's mark.
 
 ## Part 5. Worked examples (illustration only; the rules are the source)
 
