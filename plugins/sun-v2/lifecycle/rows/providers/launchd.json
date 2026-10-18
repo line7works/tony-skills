@@ -1,0 +1,143 @@
+{
+ "commands": {
+  "label": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "1": "not-found"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9._-",
+     "disposition": "equal",
+     "equals": {
+      "param": "label"
+     },
+     "max_length": 200,
+     "name": "label",
+     "place": [],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    }
+   ],
+   "template": [
+    {
+     "literal": "-extract"
+    },
+    {
+     "literal": "Label"
+    },
+    {
+     "literal": "json"
+    },
+    {
+     "literal": "-o"
+    },
+    {
+     "literal": "-"
+    },
+    {
+     "param": "plist"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "plutil",
+   "trace_flags": []
+  },
+  "listed": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "113": "not-found"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "list"
+    },
+    {
+     "param": "label"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "launchctl",
+   "trace_flags": []
+  },
+  "load": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "load"
+    },
+    {
+     "param": "plist"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "launchctl",
+   "trace_flags": []
+  },
+  "unload": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "unload"
+    },
+    {
+     "param": "plist"
+    }
+   ],
+   "time_limit": 20,
+   "tool": "launchctl",
+   "trace_flags": []
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "launchd",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": []
+}

@@ -1,0 +1,6632 @@
+{
+ "alias_reads": [],
+ "checklist": [
+  {
+   "answered_by": {
+    "form_line": "passed"
+   },
+   "item": "F18 passed / answered: form lines `passed`, `answered`"
+  },
+  {
+   "answered_by": {
+    "reason": "FORM-2's own `not applicable` line carries slice 1's EV-7 reason words"
+   },
+   "item": "F18 EV-7's missing keep or record"
+  },
+  {
+   "answered_by": {
+    "reason": "slice 3's lines, which the sunset's last record renders; no test load is ruled (A2)"
+   },
+   "item": "F18 clocks and what expires; no test load"
+  },
+  {
+   "answered_by": {
+    "row": "T02"
+   },
+   "item": "F18 the not-saved list"
+  },
+  {
+   "answered_by": {
+    "reason": "no row here takes a type or names Notion; backup is slice 3's; the tombstone says the database is not paused"
+   },
+   "item": "D20 R3/R4, A1 P6/P7/P8"
+  },
+  {
+   "answered_by": {
+    "row": "T12"
+   },
+   "item": "D20 A1 P9/P10 inventory (T12, T13, T14, T16, T17, T05, T18, T19, T11, T10a to T10d, T30; the hand-off prompt)"
+  },
+  {
+   "answered_by": {
+    "reason": "the reason is the required input `description`; dirty work is the look question G8; loose ends are the lane's preview lines, never acted on; other trackers are the skill's summary line (A152); the rest is sunrise's"
+   },
+   "item": "D20 E16-1"
+  },
+  {
+   "answered_by": {
+    "row": "T02"
+   },
+   "item": "D20 A1 P11, A2"
+  },
+  {
+   "answered_by": {
+    "row": "T10a"
+   },
+   "item": "D20 A4 (a launch agent unloaded and its file moved)"
+  },
+  {
+   "answered_by": {
+    "row": "T30"
+   },
+   "item": "D20 A6 (restore on the machine holding the run directory; owner steps carried; private schedule records named)"
+  },
+  {
+   "answered_by": {
+    "reason": "the phases of rows-set 3.2 and 3.3, as the lane declares them"
+   },
+   "item": "D20 C1's phase order"
+  },
+  {
+   "answered_by": {
+    "reason": "slice 1's (G19 to G22); launchctl's exit is not definite, so C6 with an after-check"
+   },
+   "item": "D20 shared schemas; provider primitives"
+  }
+ ],
+ "facts": [
+  {
+   "name": "present.archive_root",
+   "path": {
+    "location": "archive_root"
+   },
+   "read": "path"
+  },
+  {
+   "name": "present.vault_archive",
+   "path": {
+    "location": "vault_archive"
+   },
+   "read": "path"
+  }
+ ],
+ "fixed_text": {
+  "handoff": [
+   {
+    "text": [
+     {
+      "literal": "Heads up: I have sunset (archived) my project \""
+     },
+     {
+      "name": 0
+     },
+     {
+      "literal": "\" as of "
+     },
+     {
+      "clock": "date"
+     },
+     {
+      "literal": "."
+     }
+    ]
+   },
+   {
+    "text": [
+     {
+      "literal": "Reason: "
+     },
+     {
+      "input": "description"
+     },
+     {
+      "literal": "."
+     }
+    ]
+   },
+   {
+    "literal": ""
+   },
+   {
+    "literal": "It is now retired across all my systems:"
+   },
+   {
+    "line": {
+     "text": [
+      {
+       "literal": "- Vault: moved to "
+      },
+      {
+       "text": [
+        {
+         "location": "vault_archive_rel"
+        },
+        {
+         "literal": "/"
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      {
+       "literal": "/ (status: archived)"
+      }
+     ]
+    },
+    "when": "T13"
+   },
+   {
+    "line": {
+     "text": [
+      {
+       "literal": "- Local repo: "
+      },
+      {
+       "path": [
+        {
+         "location": "archive_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      }
+     ]
+    },
+    "when": "T12"
+   },
+   {
+    "line": {
+     "literal": "- GitHub: archived (read-only)"
+    },
+    "when": "T20"
+   },
+   {
+    "line": {
+     "literal": "- Hosting: paused"
+    },
+    "when": "T21"
+   },
+   {
+    "line": {
+     "literal": "- Database: backed up, not paused"
+    },
+    "when": "T03"
+   },
+   {
+    "line": {
+     "literal": "- Scheduled crontab lines: taken out"
+    },
+    "when": "T10d"
+   },
+   {
+    "literal": ""
+   },
+   {
+    "text": [
+     {
+      "literal": "Going forward, treat \""
+     },
+     {
+      "name": 0
+     },
+     {
+      "literal": "\" as inactive: do not suggest new work on it, do not include it in active-project lists, and if you keep any project context or memory about it, mark it archived. If you can reach my vault, note it now lives under "
+     },
+     {
+      "location": "vault_archive_rel"
+     },
+     {
+      "literal": "/. If you have a saved Project or space for it, archive that too. Acknowledge and update accordingly."
+     }
+    ]
+   }
+  ],
+  "summary": [
+   {
+    "text": [
+     {
+      "literal": "SUNSET COMPLETE: "
+     },
+     {
+      "name": 0
+     }
+    ]
+   }
+  ]
+ },
+ "form_changes": {
+  "a loose end": "loose end, yours to handle, never acted on: {file} in {REPO}",
+  "a receipt due": "a secret may have been received and lost: operation {operation}, execution {execution}, field {field}",
+  "a safe ground disproved": "a value this run held as safe is withheld ({count} on record)",
+  "answered": "you answered: {what}",
+  "not offered": "not offered by this restore ({reason}): {what}",
+  "not proven, on his word": "runs on your word; it was not proven the retirement's: {what}",
+  "passed": "the check passed: {what}",
+  "the RK18 mark": "carried under v1's own risk for this step (RK18): {what}",
+  "waiting, not shown": "waiting on you: {what}; its read was not made or got no answer, so its step is not shown"
+ },
+ "kind": "sunset",
+ "lane_version": 1,
+ "last_record_head": [
+  {
+   "literal": "---"
+  },
+  {
+   "text": [
+    {
+     "literal": "created: "
+    },
+    {
+     "clock": "date"
+    }
+   ]
+  },
+  {
+   "literal": "source: sun-v2"
+  },
+  {
+   "literal": "type: sunset"
+  },
+  {
+   "literal": "status: archived"
+  },
+  {
+   "literal": "tags: [meta, archived]"
+  },
+  {
+   "literal": "---"
+  },
+  {
+   "literal": ""
+  },
+  {
+   "text": [
+    {
+     "literal": "# Sunset: "
+    },
+    {
+     "name": 0
+    }
+   ]
+  },
+  {
+   "literal": ""
+  },
+  {
+   "text": [
+    {
+     "literal": "- Date: "
+    },
+    {
+     "clock": "date"
+    }
+   ]
+  },
+  {
+   "text": [
+    {
+     "literal": "- Reason: "
+    },
+    {
+     "input": "description"
+    }
+   ]
+  },
+  {
+   "literal": ""
+  }
+ ],
+ "phases": [
+  "keeping",
+  "retiring on this machine",
+  "retiring at the providers",
+  "the last record"
+ ],
+ "present_lines": [
+  {
+   "line": {
+    "text": [
+     {
+      "literal": "loose end, yours to handle, never acted on: "
+     },
+     {
+      "literal": "wrangler.toml"
+     },
+     {
+      "literal": " in "
+     },
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    ]
+   },
+   "path": {
+    "path": [
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     {
+      "literal": "wrangler.toml"
+     }
+    ]
+   }
+  },
+  {
+   "line": {
+    "text": [
+     {
+      "literal": "loose end, yours to handle, never acted on: "
+     },
+     {
+      "literal": "wrangler.jsonc"
+     },
+     {
+      "literal": " in "
+     },
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    ]
+   },
+   "path": {
+    "path": [
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     {
+      "literal": "wrangler.jsonc"
+     }
+    ]
+   }
+  },
+  {
+   "line": {
+    "text": [
+     {
+      "literal": "loose end, yours to handle, never acted on: "
+     },
+     {
+      "literal": "netlify.toml"
+     },
+     {
+      "literal": " in "
+     },
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    ]
+   },
+   "path": {
+    "path": [
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     {
+      "literal": "netlify.toml"
+     }
+    ]
+   }
+  },
+  {
+   "line": {
+    "text": [
+     {
+      "literal": "loose end, yours to handle, never acted on: "
+     },
+     {
+      "literal": "fly.toml"
+     },
+     {
+      "literal": " in "
+     },
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    ]
+   },
+   "path": {
+    "path": [
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     {
+      "literal": "fly.toml"
+     }
+    ]
+   }
+  },
+  {
+   "line": {
+    "text": [
+     {
+      "literal": "loose end, yours to handle, never acted on: "
+     },
+     {
+      "literal": "render.yaml"
+     },
+     {
+      "literal": " in "
+     },
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    ]
+   },
+   "path": {
+    "path": [
+     {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     {
+      "literal": "render.yaml"
+     }
+    ]
+   }
+  }
+ ],
+ "questions": [
+  {
+   "commands": [
+    {
+     "name": "tracked",
+     "params": {
+      "repo": {
+       "path": [
+        {
+         "location": "developer_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      }
+     },
+     "use": "git.tracked_clean"
+    },
+    {
+     "name": "untracked",
+     "params": {
+      "repo": {
+       "path": [
+        {
+         "location": "developer_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      }
+     },
+     "use": "git.untracked_none"
+    },
+    {
+     "name": "unpushed",
+     "params": {
+      "repo": {
+       "path": [
+        {
+         "location": "developer_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      }
+     },
+     "use": "git.unpushed_count"
+    }
+   ],
+   "input": "flags.archive_as_is",
+   "layer": "repository",
+   "question": "The repository has uncommitted changes or unpushed commits. Commit and push them and summon again, or summon again with --as-is to archive it as it is.",
+   "required": true,
+   "when_read_fails": [
+    {
+     "command": "tracked",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "untracked",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "unpushed",
+     "field": "count",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ]
+  }
+ ],
+ "rows": [
+  {
+   "after_check": [
+    {
+     "is": "dir",
+     "path": {
+      "location": "archive_root"
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "dir",
+     "path": {
+      "location": "archive_root"
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "location": "archive_root"
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": {
+    "equals": false,
+    "fact": "present.archive_root",
+    "on": "fact",
+    "reason": "already there"
+   },
+   "construction": {
+    "files": [],
+    "id": "C1",
+    "mode": 493
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "make <path>",
+    "status": "made <path>"
+   },
+   "id": "T02a",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "build",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {
+     "path": {
+      "location": "archive_root"
+     }
+    },
+    "name": "archive folder"
+   },
+   "owner_names": "none",
+   "phase": "keeping",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "location": "archive_root"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "location": "archive_root"
+    },
+    "role": "the archive folder",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "text": [
+         {
+          "name": 0
+         },
+         {
+          "literal": ".sunset-"
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "at_most": 448,
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "text": [
+         {
+          "name": 0
+         },
+         {
+          "literal": ".sunset-"
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "mode"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "text": [
+         {
+          "name": 0
+         },
+         {
+          "literal": ".sunset-"
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "text": [
+         {
+          "name": 0
+         },
+         {
+          "literal": ".sunset-"
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "files": [],
+    "id": "C1",
+    "mode": 448
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [
+     "the sunset folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "make <path>, owner-only, for the copies; Not saved: files in the database provider's storage, and GitHub's issues, pull requests and releases",
+    "status": "Saved copies: <path>; Not saved: files in the database provider's storage, and GitHub's issues, pull requests and releases"
+   },
+   "id": "T02",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "build",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "archive folder",
+     "treatment": "then not needed"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "text": [
+         {
+          "name": 0
+         },
+         {
+          "literal": ".sunset-"
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "name": "sunset folder"
+   },
+   "owner_names": "none",
+   "phase": "keeping",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "text": [
+         {
+          "name": 0
+         },
+         {
+          "literal": ".sunset-"
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "path": [
+      {
+       "location": "archive_root"
+      },
+      {
+       "text": [
+        {
+         "name": 0
+        },
+        {
+         "literal": ".sunset-"
+        },
+        {
+         "clock": "date"
+        }
+       ]
+      }
+     ]
+    },
+    "role": "the sunset folder",
+    "tracked": [
+     "exists",
+     "identity",
+     "mode"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "literal": "memory"
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "at_most": 448,
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "literal": "memory"
+       }
+      ]
+     },
+     "read": "mode"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "literal": "memory"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "literal": "memory"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "copy_folder": {
+     "project_memory": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    },
+    "id": "C1",
+    "mode": 448,
+    "risk_line": "a note changed and changed back while it is copied is kept as it stood mid-change, and nothing sees it",
+    "risks": [
+     "RK18"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "protected"
+    ],
+    "resting_places": [
+     "the sunset folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "protected"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "copy the project's memory store whole into the sunset folder, under memory",
+    "status": "memory copy checked whole: <path>; the store is left in place"
+   },
+   "id": "T05",
+   "keep_scope": {
+    "content_checks": [],
+    "same_state": "the same holds of the folder's file names and fingerprints read just before and again just after the copy, the two equal and equal to the copy's own",
+    "scope": "every file of the project's own memory store"
+   },
+   "keeps_required": "none",
+   "kind": "keep",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "sunset folder",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "literal": "memory"
+       }
+      ]
+     }
+    },
+    "name": "memory copy"
+   },
+   "owner_names": "none",
+   "phase": "keeping",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "literal": "memory"
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "id": "scope",
+     "is": "dir",
+     "path": {
+      "project_memory": {
+       "path": [
+        {
+         "location": "developer_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      }
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "capability": "memory stores",
+    "identity": "path",
+    "layer": "memory store",
+    "place": {
+     "path": [
+      {
+       "output": "sunset folder.path"
+      },
+      {
+       "literal": "memory"
+      }
+     ]
+    },
+    "role": "the copy of the project's own memory store",
+    "tracked": [
+     "exists",
+     "identity",
+     "sha256",
+     "mode"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "is": "dir",
+     "path": {
+      "location": "vault_archive"
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "dir",
+     "path": {
+      "location": "vault_archive"
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "location": "vault_archive"
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": {
+    "equals": false,
+    "fact": "present.vault_archive",
+    "on": "fact",
+    "reason": "already there"
+   },
+   "construction": {
+    "files": [],
+    "id": "C1",
+    "mode": 493
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "make <path>",
+    "status": "made <path>"
+   },
+   "id": "T13a",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "build",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {
+     "path": {
+      "location": "vault_archive"
+     }
+    },
+    "name": "vault archive folder"
+   },
+   "owner_names": "none",
+   "phase": "keeping",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "location": "vault_archive"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "location": "vault_archive"
+    },
+    "role": "the vault's archive folder",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "listed",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "listed",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "listed",
+     "id": "loaded",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "label",
+     "field": "label",
+     "id": "same job",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "name": "label",
+     "params": {
+      "label": {
+       "each": "stem"
+      },
+      "plist": {
+       "each": "path"
+      }
+     },
+     "use": "launchd.label"
+    },
+    {
+     "name": "listed",
+     "params": {
+      "label": {
+       "each": "stem"
+      }
+     },
+     "use": "launchd.listed"
+    },
+    {
+     "name": "unload",
+     "params": {
+      "plist": {
+       "each": "path"
+      }
+     },
+     "use": "launchd.unload"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "unload",
+    "id": "C6",
+    "risk_line": "another loads or unloads the agent between the read and the unload, and the run takes the unload as its own",
+    "risks": [
+     "RK18"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": [
+     "a launch agent's label"
+    ]
+   },
+   "form_lines": {
+    "preview": "unload the launch agent {each.stem}",
+    "status": "unloaded the launch agent {each.stem}"
+   },
+   "id": "T10a",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {},
+    "name": "agent unloaded {each.n}"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "command": "label",
+     "field": "label",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "listed",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "its label",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "each": "stem"
+     }
+    },
+    {
+     "label": "its file",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "each": "path"
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "after_word": "unloaded",
+    "before_word": "loaded",
+    "family": {
+     "folder": {
+      "location": "launch_agents"
+     },
+     "glob": {
+      "literal": "*.plist"
+     },
+     "holding": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "files",
+     "validators": {
+      "name": "a launch agent's label",
+      "stem": "a launch agent's label"
+     }
+    },
+    "identity": "named value",
+    "layer": "schedules",
+    "retires": true,
+    "role": "the job launchd holds",
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "command": "listed",
+       "read": "command",
+       "result": "success"
+      }
+     ],
+     "after_test": [
+      {
+       "command": "listed",
+       "read": "command",
+       "result": "success"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "command": "listed",
+       "id": "unloaded",
+       "read": "command",
+       "result": "not-found"
+      },
+      {
+       "command": "label",
+       "field": "label",
+       "id": "same job",
+       "is_equal": true,
+       "read": "command",
+       "result": "success"
+      },
+      {
+       "id": "repository back",
+       "is": "dir",
+       "on": "other",
+       "path": {
+        "output": "repository back.path"
+       },
+       "read": "path"
+      }
+     ],
+     "commands": [
+      {
+       "name": "label",
+       "params": {
+        "label": {
+         "saved": 0
+        },
+        "plist": {
+         "saved": 1
+        }
+       },
+       "use": "launchd.label"
+      },
+      {
+       "name": "listed",
+       "params": {
+        "label": {
+         "saved": 0
+        }
+       },
+       "use": "launchd.listed"
+      },
+      {
+       "name": "load",
+       "params": {
+        "plist": {
+         "saved": 1
+        }
+       },
+       "use": "launchd.load"
+      }
+     ],
+     "condition": "none",
+     "construction": {
+      "command": "load",
+      "id": "C6",
+      "risk_line": "another loads or unloads the agent between the read and the load, and the run takes the load as its own",
+      "risks": [
+       "RK18"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "safe"
+      ],
+      "resting_places": [],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "safe"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "load the launch agent {each.stem}",
+      "status": "loaded"
+     },
+     "id": "V14a",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": [
+      {
+       "level": "state",
+       "output": "agent file back {each.n}",
+       "treatment": "then not applicable"
+      }
+     ],
+     "output": {
+      "fields": {},
+      "name": "agent loaded {each.n}"
+     },
+     "owner_names": "none",
+     "phase": "starting again",
+     "planning_test": [
+      {
+       "command": "label",
+       "field": "label",
+       "is_equal": true,
+       "read": "command",
+       "result": "success"
+      },
+      {
+       "command": "listed",
+       "read": "command",
+       "result": "not-found"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "after_word": "loaded",
+      "before_word": "unloaded",
+      "identity": "named value",
+      "role": "the job launchd holds",
+      "runs_on": [
+       "repository back",
+       "agent file back {each.n}"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "text": [
+         {
+          "each": "stem"
+         },
+         {
+          "literal": ".plist"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "absent",
+     "path": {
+      "each": "path"
+     },
+     "read": "path"
+    },
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "text": [
+         {
+          "each": "stem"
+         },
+         {
+          "literal": ".plist"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "there",
+     "is": "file",
+     "path": {
+      "each": "path"
+     },
+     "read": "path"
+    },
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "text": [
+         {
+          "each": "stem"
+         },
+         {
+          "literal": ".plist"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "id": "C7",
+    "risks": [
+     "RK4"
+    ],
+    "to": {
+     "path": [
+      {
+       "output": "sunset folder.path"
+      },
+      {
+       "text": [
+        {
+         "each": "stem"
+        },
+        {
+         "literal": ".plist"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [
+     "the sunset folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": [
+     "a launch agent's label"
+    ]
+   },
+   "form_lines": {
+    "preview": "move {each.name} into the sunset folder",
+    "status": "moved into the sunset folder: <path>"
+   },
+   "id": "T10b",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "move",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "agent unloaded {each.n}",
+     "treatment": "then not applicable"
+    },
+    {
+     "level": "made",
+     "output": "sunset folder",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "text": [
+         {
+          "each": "stem"
+         },
+         {
+          "literal": ".plist"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "name": "agent file archived {each.n}"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "each": "path"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "where it stood",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "each": "path"
+     }
+    },
+    {
+     "label": "where it was put",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "path": [
+       {
+        "output": "sunset folder.path"
+       },
+       {
+        "text": [
+         {
+          "each": "stem"
+         },
+         {
+          "literal": ".plist"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "family": {
+     "folder": {
+      "location": "launch_agents"
+     },
+     "glob": {
+      "literal": "*.plist"
+     },
+     "holding": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "files",
+     "validators": {
+      "name": "a launch agent's label",
+      "stem": "a launch agent's label"
+     }
+    },
+    "identity": "path",
+    "layer": "schedules",
+    "place": {
+     "each": "path"
+    },
+    "retires": true,
+    "role": "the agent's file",
+    "tracked": [
+     "exists",
+     "identity",
+     "mode"
+    ],
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "is": "file",
+       "path": {
+        "saved": 0
+       },
+       "read": "path"
+      }
+     ],
+     "after_test": [
+      {
+       "is": "absent",
+       "path": {
+        "saved": 1
+       },
+       "read": "path"
+      },
+      {
+       "is": "file",
+       "path": {
+        "saved": 0
+       },
+       "read": "path"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "id": "there",
+       "is": "file",
+       "path": {
+        "saved": 1
+       },
+       "read": "path"
+      },
+      {
+       "id": "free",
+       "is": "absent",
+       "path": {
+        "saved": 0
+       },
+       "read": "path"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "id": "C7",
+      "risks": [
+       "RK4"
+      ],
+      "to": {
+       "saved": 0
+      }
+     },
+     "content_classes": {
+      "reads": [
+       "safe"
+      ],
+      "resting_places": [],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "safe"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the agent's file back: {each.name}",
+      "status": "the agent's file back: <path>"
+     },
+     "id": "V14b",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "move",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": "none",
+     "output": {
+      "fields": {
+       "path": {
+        "saved": 0
+       }
+      },
+      "name": "agent file back {each.n}"
+     },
+     "owner_names": "none",
+     "phase": "putting back on this machine",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "saved": 1
+       },
+       "read": "path"
+      },
+      {
+       "is": "absent",
+       "path": {
+        "saved": 0
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "saved": 1
+      },
+      "role": "the agent's file",
+      "tracked": [
+       "exists",
+       "identity",
+       "mode"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "command": "routine",
+     "equals": "disabled",
+     "field": "state",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "routine",
+     "equals": "disabled",
+     "field": "state",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "routine",
+     "equals": "active",
+     "field": "state",
+     "id": "active",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "name": "routines",
+     "params": {
+      "text": {
+       "path": [
+        {
+         "location": "developer_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      }
+     },
+     "use": "adapter.routines"
+    },
+    {
+     "name": "routine",
+     "params": {
+      "id": {
+       "each": "member"
+      },
+      "out": {
+       "literal": "/dev/null"
+      }
+     },
+     "use": "adapter.routine"
+    },
+    {
+     "name": "definition",
+     "params": {
+      "id": {
+       "each": "member"
+      }
+     },
+     "use": "adapter.routine"
+    },
+    {
+     "name": "disable",
+     "params": {
+      "id": {
+       "each": "member"
+      }
+     },
+     "use": "adapter.routine_disable"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "disable",
+    "id": "C6",
+    "risk_line": "another enables or disables the routine between the read and the request, and the run takes it as its own",
+    "risks": [
+     "RK18"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "held"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "records by label and path"
+    ],
+    "stores": [
+     "protected records"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "disable the routine {each.label} tied to the project, its definition saved first to a private file",
+    "status": "disabled the routine {each.label}; its definition and its id are in the private files below"
+   },
+   "id": "T10c",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {
+     "id": {
+      "each": "member"
+     }
+    },
+    "name": "routine disabled {each.n}"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "command": "routine",
+     "equals": "active",
+     "field": "state",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "command": "definition",
+     "label": "the routine's definition",
+     "out_param": "out",
+     "read": "command",
+     "type": "definition"
+    },
+    {
+     "label": "the routine's id",
+     "read": "value",
+     "type": "held field",
+     "value": {
+      "each": "member"
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "after_word": "disabled",
+    "before_word": "active",
+    "capability": "routines",
+    "family": {
+     "command": "routines",
+     "field": "routines",
+     "read": "command"
+    },
+    "identity": "provider id",
+    "layer": "schedules",
+    "retires": true,
+    "role": "the harness routine",
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "command": "routine",
+       "equals": "active",
+       "field": "state",
+       "read": "command",
+       "result": "success"
+      }
+     ],
+     "after_test": [
+      {
+       "command": "routine",
+       "equals": "active",
+       "field": "state",
+       "read": "command",
+       "result": "success"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "command": "routine",
+       "equals": "disabled",
+       "field": "state",
+       "id": "disabled",
+       "read": "command",
+       "result": "success"
+      }
+     ],
+     "commands": [
+      {
+       "name": "routine",
+       "params": {
+        "id": {
+         "saved": 1
+        },
+        "out": {
+         "literal": "/dev/null"
+        }
+       },
+       "use": "adapter.routine"
+      },
+      {
+       "name": "enable",
+       "params": {
+        "id": {
+         "saved": 1
+        }
+       },
+       "use": "adapter.routine_enable"
+      }
+     ],
+     "condition": "none",
+     "construction": {
+      "command": "enable",
+      "id": "C6",
+      "risk_line": "another enables or disables it between the read and the request, and the run takes it as its own",
+      "risks": [
+       "RK18"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "held"
+      ],
+      "resting_places": [
+       "the protected folder"
+      ],
+      "shows": [
+       "records by label and path"
+      ],
+      "stores": [
+       "protected records"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "enable the routine {each.label} again; its definition is in a private file",
+      "status": "enabled the routine {each.label} again"
+     },
+     "id": "V14c",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": [
+      {
+       "level": "state",
+       "output": "repository back",
+       "treatment": "then not applicable"
+      }
+     ],
+     "output": {
+      "fields": {},
+      "name": "routine enabled {each.n}"
+     },
+     "owner_names": "none",
+     "phase": "starting again",
+     "planning_test": [
+      {
+       "command": "routine",
+       "equals": "disabled",
+       "field": "state",
+       "read": "command",
+       "result": "success"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "after_word": "active",
+      "before_word": "disabled",
+      "capability": "routines",
+      "identity": "provider id",
+      "role": "the harness routine",
+      "runs_on": [
+       "repository back"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "command": "read",
+     "present": false,
+     "read": "text",
+     "text": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    }
+   ],
+   "after_test": [
+    {
+     "command": "read",
+     "or_refused": true,
+     "present": false,
+     "read": "text",
+     "text": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "read",
+     "id": "holds",
+     "present": true,
+     "read": "text",
+     "text": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    }
+   ],
+   "commands": [
+    {
+     "name": "read",
+     "params": {},
+     "use": "cron.read"
+    },
+    {
+     "name": "replace",
+     "params": {},
+     "use": "cron.replace"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "replace",
+    "computed": {
+     "edit": {
+      "holding": {
+       "path": [
+        {
+         "location": "developer_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      },
+      "kind": "remove-line"
+     },
+     "from": {
+      "command": "read"
+     },
+     "label": "the crontab after",
+     "param": "table",
+     "type": "after-image"
+    },
+    "id": "C6",
+    "risk_line": "a line another writes to the crontab between the read and the replace is lost from it",
+    "risks": [
+     "RK18"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "protected"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "records by label and path"
+    ],
+    "stores": [
+     "protected records"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "take the crontab lines that name the project out, the whole table saved first",
+    "status": "removed; the table before and after are in the private files below"
+   },
+   "id": "T10d",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {},
+    "name": "cron lines removed"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "command": "read",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "command": "read",
+     "label": "the crontab before",
+     "read": "command",
+     "type": "before-image"
+    },
+    {
+     "label": "the crontab after",
+     "read": "computed",
+     "type": "after-image"
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": {
+    "ordered": true,
+    "placement": "in place"
+   },
+   "thing": {
+    "after_word": "no line holds the project",
+    "before_word": "a line holds the project",
+    "identity": "named value",
+    "layer": "schedules",
+    "retires": true,
+    "role": "the account's crontab",
+    "span": true,
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "command": "read",
+       "present": true,
+       "read": "text",
+       "text": {
+        "path": [
+         {
+          "location": "developer_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       }
+      }
+     ],
+     "after_test": [
+      {
+       "command": "read",
+       "present": true,
+       "read": "text",
+       "text": {
+        "path": [
+         {
+          "location": "developer_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       }
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "command": "read",
+       "id": "none",
+       "present": false,
+       "read": "text",
+       "text": {
+        "path": [
+         {
+          "location": "developer_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       }
+      }
+     ],
+     "commands": [
+      {
+       "name": "read",
+       "params": {},
+       "use": "cron.read"
+      },
+      {
+       "name": "replace",
+       "params": {},
+       "use": "cron.replace"
+      }
+     ],
+     "condition": "none",
+     "construction": {
+      "command": "replace",
+      "computed": {
+       "edit": {
+        "kind": "replace",
+        "new": {
+         "saved": 0
+        },
+        "old": {
+         "saved": 1
+        }
+       },
+       "from": {
+        "command": "read"
+       },
+       "label": "the crontab put back",
+       "param": "table",
+       "type": "after-image"
+      },
+      "id": "C6",
+      "risk_line": "a line another writes between the read and the replace is lost from the table",
+      "risks": [
+       "RK18"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "protected"
+      ],
+      "resting_places": [
+       "the protected folder"
+      ],
+      "shows": [
+       "records by label and path"
+      ],
+      "stores": [
+       "protected records"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the crontab as it was before the sunset, only where its table after the sunset still stands in it exactly once",
+      "status": "the crontab put back"
+     },
+     "id": "V14d",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": [
+      {
+       "level": "state",
+       "output": "repository back",
+       "treatment": "then not applicable"
+      }
+     ],
+     "output": {
+      "fields": {},
+      "name": "cron lines back"
+     },
+     "owner_names": "none",
+     "phase": "starting again",
+     "planning_test": [
+      {
+       "command": "read",
+       "read": "command",
+       "result": "success"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "after_word": "the table as it was",
+      "before_word": "no line holds the project",
+      "identity": "named value",
+      "role": "the account's crontab",
+      "runs_on": [
+       "repository back"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "line": {
+      "each": "line"
+     },
+     "path": {
+      "location": "shortcut_file"
+     },
+     "present": false,
+     "read": "line"
+    }
+   ],
+   "after_test": [
+    {
+     "line": {
+      "each": "line"
+     },
+     "path": {
+      "location": "shortcut_file"
+     },
+     "present": false,
+     "read": "line"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "count": 1,
+     "id": "has",
+     "line": {
+      "each": "line"
+     },
+     "path": {
+      "location": "shortcut_file"
+     },
+     "read": "line"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "edit": {
+     "kind": "remove-line",
+     "line": {
+      "each": "line"
+     }
+    },
+    "id": "C3",
+    "risks": [
+     "RK2"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "protected",
+     "safe"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe",
+     "records by label and path"
+    ],
+    "stores": [
+     "protected records"
+    ],
+    "validators": [
+     "a shortcut name"
+    ]
+   },
+   "form_lines": {
+    "preview": "remove the shortcut {each.name} that opens the project's folder, its line saved first",
+    "status": "removed the shortcut {each.name}; its line and its name are in the private files below"
+   },
+   "id": "T11",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {
+     "file": {
+      "location": "shortcut_file"
+     }
+    },
+    "name": "shortcut removed {each.n}"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "location": "shortcut_file"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "the shortcut line",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "each": "line"
+     }
+    },
+    {
+     "label": "the shortcut's name",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "each": "name"
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": {
+    "ordered": false,
+    "placement": "at the end"
+   },
+   "thing": {
+    "family": {
+     "holding": {
+      "text": [
+       {
+        "literal": "cd "
+       },
+       {
+        "location": "shortcut_root_text"
+       },
+       {
+        "literal": "/"
+       },
+       {
+        "name": 0
+       },
+       {
+        "literal": "\""
+       }
+      ]
+     },
+     "name_after": "alias ",
+     "no_way_back_if_held": "name",
+     "path": {
+      "location": "shortcut_file"
+     },
+     "read": "lines",
+     "validators": {
+      "name": "a shortcut name"
+     }
+    },
+    "identity": "path",
+    "layer": "shortcut",
+    "place": {
+     "location": "shortcut_file"
+    },
+    "retires": true,
+    "role": "the shortcut file",
+    "span": true,
+    "tracked": [
+     "exists",
+     "sha256"
+    ],
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 0
+       },
+       "path": {
+        "location": "shortcut_file"
+       },
+       "read": "line"
+      }
+     ],
+     "after_test": [
+      {
+       "line": {
+        "saved": 0
+       },
+       "path": {
+        "location": "shortcut_file"
+       },
+       "present": true,
+       "read": "line"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "id": "lacks",
+       "line": {
+        "saved": 0
+       },
+       "path": {
+        "location": "shortcut_file"
+       },
+       "present": false,
+       "read": "line"
+      },
+      {
+       "id": "name",
+       "name": {
+        "saved": 1
+       },
+       "on": "other",
+       "read": "name-free"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "edit": {
+       "kind": "append-line",
+       "line": {
+        "saved": 0
+       }
+      },
+      "id": "C3",
+      "risks": [
+       "RK2",
+       "RK5",
+       "RK13"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "protected",
+       "safe"
+      ],
+      "resting_places": [
+       "the protected folder"
+      ],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "protected records"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the shortcut {each.name} back at the end of the shortcut file; open a new tab",
+      "status": "the shortcut {each.name} is back; open a new tab"
+     },
+     "id": "V13",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": [
+      {
+       "level": "state",
+       "output": "repository back",
+       "treatment": "then not applicable"
+      }
+     ],
+     "output": {
+      "fields": {
+       "file": {
+        "location": "shortcut_file"
+       }
+      },
+      "name": "shortcut back {each.n}"
+     },
+     "owner_names": "none",
+     "phase": "putting back on this machine",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "location": "shortcut_file"
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "location": "shortcut_file"
+      },
+      "role": "the shortcut file",
+      "span": true,
+      "tracked": [
+       "exists",
+       "sha256"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "there",
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "id": "C7",
+    "risks": [
+     "RK4"
+    ],
+    "to": {
+     "path": [
+      {
+       "location": "archive_root"
+      },
+      {
+       "name": 0
+      }
+     ]
+    }
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "move the repository to <path>",
+    "status": "the repository is at <path>"
+   },
+   "id": "T12",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "move",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "archive folder",
+     "treatment": "then not needed"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    },
+    "name": "repository archived"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "archive_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "where it stood",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "path": [
+       {
+        "location": "developer_root"
+       },
+       {
+        "name": 0
+       }
+      ]
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "layer": "repository",
+    "place": {
+     "path": [
+      {
+       "location": "developer_root"
+      },
+      {
+       "name": 0
+      }
+     ]
+    },
+    "retires": true,
+    "role": "the repository",
+    "tracked": [
+     "exists",
+     "identity"
+    ],
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "is": "dir",
+       "path": {
+        "path": [
+         {
+          "location": "developer_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "after_test": [
+      {
+       "is": "absent",
+       "path": {
+        "path": [
+         {
+          "location": "archive_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       },
+       "read": "path"
+      },
+      {
+       "is": "dir",
+       "path": {
+        "path": [
+         {
+          "location": "developer_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "id": "there",
+       "is": "dir",
+       "path": {
+        "path": [
+         {
+          "location": "archive_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       },
+       "read": "path"
+      },
+      {
+       "id": "free",
+       "is": "absent",
+       "path": {
+        "path": [
+         {
+          "location": "developer_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "id": "C7",
+      "risks": [
+       "RK4"
+      ],
+      "to": {
+       "path": [
+        {
+         "location": "developer_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      }
+     },
+     "content_classes": {
+      "reads": [
+       "safe"
+      ],
+      "resting_places": [],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "safe"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "move the repository back to <path>",
+      "status": "the repository is back at <path>"
+     },
+     "id": "V01",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "move",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": "none",
+     "output": {
+      "fields": {
+       "path": {
+        "path": [
+         {
+          "location": "developer_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       }
+      },
+      "name": "repository back"
+     },
+     "owner_names": "none",
+     "phase": "putting back on this machine",
+     "planning_test": [
+      {
+       "is": "dir",
+       "path": {
+        "path": [
+         {
+          "location": "archive_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       },
+       "read": "path"
+      },
+      {
+       "is": "absent",
+       "path": {
+        "path": [
+         {
+          "location": "developer_root"
+         },
+         {
+          "name": 0
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "path": [
+        {
+         "location": "archive_root"
+        },
+        {
+         "name": 0
+        }
+       ]
+      },
+      "role": "the archived repository",
+      "tracked": [
+       "exists",
+       "identity"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": "none",
+   "after_test": "none",
+   "answers": "none",
+   "before_test": "none",
+   "commands": "none",
+   "condition": "none",
+   "construction": "none",
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "the repository stands moved, for the providers' steps",
+    "status": "the repository stands moved"
+   },
+   "id": "T12m",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "check",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "repository archived",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {},
+    "name": "repository moved"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": "none",
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "passes": [
+     {
+      "is": "dir",
+      "path": {
+       "output": "repository archived.path"
+      },
+      "read": "path"
+     }
+    ],
+    "place": {
+     "output": "repository archived.path"
+    },
+    "role": "the moved repository",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "vault_archive"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "vault_archive"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "there",
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "vault_archive"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "id": "C7",
+    "risks": [
+     "RK4"
+    ],
+    "to": {
+     "path": [
+      {
+       "location": "vault_archive"
+      },
+      {
+       "name": 1
+      }
+     ]
+    }
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "move the vault folder to <path>",
+    "status": "the vault folder is at <path>"
+   },
+   "id": "T13",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "move",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "vault archive folder",
+     "treatment": "then not needed"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "location": "vault_archive"
+       },
+       {
+        "name": 1
+       }
+      ]
+     }
+    },
+    "name": "vault folder archived"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "dir",
+     "path": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "vault_archive"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "where it stood",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       }
+      ]
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "layer": "vault",
+    "place": {
+     "path": [
+      {
+       "location": "vault_projects"
+      },
+      {
+       "name": 1
+      }
+     ]
+    },
+    "retires": true,
+    "role": "the vault folder",
+    "tracked": [
+     "exists",
+     "identity"
+    ],
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "is": "dir",
+       "path": {
+        "path": [
+         {
+          "location": "vault_projects"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "after_test": [
+      {
+       "is": "absent",
+       "path": {
+        "path": [
+         {
+          "location": "vault_archive"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       "read": "path"
+      },
+      {
+       "is": "dir",
+       "path": {
+        "path": [
+         {
+          "location": "vault_projects"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "id": "there",
+       "is": "dir",
+       "path": {
+        "path": [
+         {
+          "location": "vault_archive"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       "read": "path"
+      },
+      {
+       "id": "free",
+       "is": "absent",
+       "path": {
+        "path": [
+         {
+          "location": "vault_projects"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "id": "C7",
+      "risks": [
+       "RK4"
+      ],
+      "to": {
+       "path": [
+        {
+         "location": "vault_projects"
+        },
+        {
+         "name": 1
+        }
+       ]
+      }
+     },
+     "content_classes": {
+      "reads": [
+       "safe"
+      ],
+      "resting_places": [],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "safe"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the vault folder back to <path>; the tombstone stays in it",
+      "status": "the vault folder is back at <path>; the tombstone stays in it"
+     },
+     "id": "V02",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "move",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": "none",
+     "output": {
+      "fields": {
+       "path": {
+        "path": [
+         {
+          "location": "vault_projects"
+         },
+         {
+          "name": 1
+         }
+        ]
+       }
+      },
+      "name": "vault folder back"
+     },
+     "owner_names": "none",
+     "phase": "putting back on this machine",
+     "planning_test": [
+      {
+       "is": "dir",
+       "path": {
+        "path": [
+         {
+          "location": "vault_archive"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       "read": "path"
+      },
+      {
+       "is": "absent",
+       "path": {
+        "path": [
+         {
+          "location": "vault_projects"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "path": [
+        {
+         "location": "vault_archive"
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "role": "the archived vault folder",
+      "tracked": [
+       "exists",
+       "identity"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "count": 1,
+     "line": {
+      "text": [
+       {
+        "literal": "status: archived\narchived: "
+       },
+       {
+        "clock": "date"
+       }
+      ]
+     },
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "literal": "_index.md"
+       }
+      ]
+     },
+     "read": "line"
+    }
+   ],
+   "after_test": [
+    {
+     "count": 1,
+     "line": {
+      "text": [
+       {
+        "literal": "status: archived\narchived: "
+       },
+       {
+        "clock": "date"
+       }
+      ]
+     },
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "literal": "_index.md"
+       }
+      ]
+     },
+     "read": "line"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "count": 1,
+     "id": "has",
+     "line": {
+      "literal": "status: active"
+     },
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "literal": "_index.md"
+       }
+      ]
+     },
+     "read": "line"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "edit": {
+     "kind": "replace",
+     "new": {
+      "text": [
+       {
+        "literal": "\n"
+       },
+       {
+        "text": [
+         {
+          "literal": "status: archived\narchived: "
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       },
+       {
+        "literal": "\n"
+       }
+      ]
+     },
+     "old": {
+      "text": [
+       {
+        "literal": "\n"
+       },
+       {
+        "literal": "status: active"
+       },
+       {
+        "literal": "\n"
+       }
+      ]
+     }
+    },
+    "id": "C3",
+    "risks": [
+     "RK2"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "protected records"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "mark the index file archived",
+    "status": "marked the index file archived: <path>"
+   },
+   "id": "T14",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "vault folder archived",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "file": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "literal": "_index.md"
+       }
+      ]
+     }
+    },
+    "name": "index archived"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "literal": "_index.md"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "the index file's status before",
+     "read": "value",
+     "type": "before-image",
+     "value": {
+      "text": [
+       {
+        "literal": "\n"
+       },
+       {
+        "literal": "status: active"
+       },
+       {
+        "literal": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "label": "the index file's status after",
+     "read": "value",
+     "type": "after-image",
+     "value": {
+      "text": [
+       {
+        "literal": "\n"
+       },
+       {
+        "text": [
+         {
+          "literal": "status: archived\narchived: "
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       },
+       {
+        "literal": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "label": "the index file's status before, its lines",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "literal": "status: active"
+     }
+    },
+    {
+     "label": "the index file's status after, its lines",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "text": [
+       {
+        "literal": "status: archived\narchived: "
+       },
+       {
+        "clock": "date"
+       }
+      ]
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": {
+    "ordered": true,
+    "placement": "in place"
+   },
+   "thing": {
+    "identity": "path",
+    "layer": "vault",
+    "place": {
+     "path": [
+      {
+       "output": "vault folder archived.path"
+      },
+      {
+       "literal": "_index.md"
+      }
+     ]
+    },
+    "retires": true,
+    "role": "the index file",
+    "span": true,
+    "tracked": [
+     "exists",
+     "sha256"
+    ],
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 2
+       },
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "literal": "_index.md"
+         }
+        ]
+       },
+       "read": "line"
+      }
+     ],
+     "after_test": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 2
+       },
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "literal": "_index.md"
+         }
+        ]
+       },
+       "read": "line"
+      },
+      {
+       "line": {
+        "saved": 3
+       },
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "literal": "_index.md"
+         }
+        ]
+       },
+       "present": false,
+       "read": "line"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "count": 1,
+       "id": "once",
+       "line": {
+        "saved": 3
+       },
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "literal": "_index.md"
+         }
+        ]
+       },
+       "read": "line"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "edit": {
+       "kind": "replace",
+       "new": {
+        "saved": 0
+       },
+       "old": {
+        "saved": 1
+       }
+      },
+      "id": "C3",
+      "risks": [
+       "RK2"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "protected"
+      ],
+      "resting_places": [
+       "the protected folder"
+      ],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "protected records"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "status back to active",
+      "status": "the index file's status is back to active"
+     },
+     "id": "V03",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": [
+      {
+       "level": "state",
+       "output": "vault folder back",
+       "treatment": "then not applicable"
+      }
+     ],
+     "output": {
+      "fields": {
+       "file": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "literal": "_index.md"
+         }
+        ]
+       }
+      },
+      "name": "index active"
+     },
+     "owner_names": "none",
+     "phase": "putting back the indexes",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "literal": "_index.md"
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "path": [
+        {
+         "output": "vault folder back.path"
+        },
+        {
+         "literal": "_index.md"
+        }
+       ]
+      },
+      "role": "the file put back",
+      "span": true,
+      "tracked": [
+       "exists",
+       "sha256"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "path": {
+      "location": "vault_index"
+     },
+     "present": false,
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/_index"
+       }
+      ]
+     }
+    },
+    {
+     "count": 1,
+     "path": {
+      "location": "vault_index"
+     },
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_archive_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/_index"
+       }
+      ]
+     },
+     "under": {
+      "literal": "## Archived"
+     }
+    }
+   ],
+   "after_test": [
+    {
+     "path": {
+      "location": "vault_index"
+     },
+     "present": false,
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/_index"
+       }
+      ]
+     }
+    },
+    {
+     "count": 1,
+     "path": {
+      "location": "vault_index"
+     },
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_archive_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/_index"
+       }
+      ]
+     },
+     "under": {
+      "literal": "## Archived"
+     }
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "count": 1,
+     "id": "has",
+     "path": {
+      "location": "vault_index"
+     },
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/_index"
+       }
+      ]
+     }
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "edit": {
+     "holding": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/_index"
+       }
+      ]
+     },
+     "kind": "move-line",
+     "new": {
+      "text": [
+       {
+        "location": "vault_archive_rel"
+       },
+       {
+        "literal": "/"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "old": {
+      "text": [
+       {
+        "location": "vault_projects_rel"
+       },
+       {
+        "literal": "/"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "under": {
+      "literal": "## Archived"
+     }
+    },
+    "id": "C3",
+    "risks": [
+     "RK2"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "protected"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "protected records"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "move the project's line under ## Archived, linking the archived vault folder",
+    "status": "the project's line stands under ## Archived"
+   },
+   "id": "T16",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "vault folder archived",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "file": {
+      "location": "vault_index"
+     }
+    },
+    "name": "root index archived"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "location": "vault_index"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "the root index before",
+     "path": {
+      "location": "vault_index"
+     },
+     "read": "file",
+     "type": "before-image"
+    },
+    {
+     "label": "the root index after",
+     "read": "computed",
+     "type": "after-image"
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": {
+    "ordered": true,
+    "placement": "in place"
+   },
+   "thing": {
+    "identity": "path",
+    "layer": "vault",
+    "place": {
+     "location": "vault_index"
+    },
+    "retires": true,
+    "role": "the root index",
+    "span": true,
+    "tracked": [
+     "exists",
+     "sha256"
+    ],
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 0
+       },
+       "path": {
+        "location": "vault_index"
+       },
+       "read": "line"
+      }
+     ],
+     "after_test": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 0
+       },
+       "path": {
+        "location": "vault_index"
+       },
+       "read": "line"
+      },
+      {
+       "line": {
+        "saved": 1
+       },
+       "path": {
+        "location": "vault_index"
+       },
+       "present": false,
+       "read": "line"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "count": 1,
+       "id": "once",
+       "line": {
+        "saved": 1
+       },
+       "path": {
+        "location": "vault_index"
+       },
+       "read": "line"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "edit": {
+       "kind": "replace",
+       "new": {
+        "saved": 0
+       },
+       "old": {
+        "saved": 1
+       }
+      },
+      "id": "C3",
+      "risks": [
+       "RK2"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "protected"
+      ],
+      "resting_places": [
+       "the protected folder"
+      ],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "protected records"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the root index as it was",
+      "status": "the root index is back as it was"
+     },
+     "id": "V05",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": [
+      {
+       "level": "state",
+       "output": "vault folder back",
+       "treatment": "then not applicable"
+      }
+     ],
+     "output": {
+      "fields": {
+       "file": {
+        "location": "vault_index"
+       }
+      },
+      "name": "root index active"
+     },
+     "owner_names": "none",
+     "phase": "putting back the indexes",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "location": "vault_index"
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "location": "vault_index"
+      },
+      "role": "the file put back",
+      "span": true,
+      "tracked": [
+       "exists",
+       "sha256"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "path": {
+      "each": "place"
+     },
+     "present": false,
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/"
+       }
+      ]
+     }
+    }
+   ],
+   "after_test": [
+    {
+     "path": {
+      "each": "place"
+     },
+     "present": false,
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/"
+       }
+      ]
+     }
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "links",
+     "path": {
+      "each": "place"
+     },
+     "present": true,
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/"
+       }
+      ]
+     }
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "edit": {
+     "kind": "replace-all",
+     "new": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_archive_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/"
+       }
+      ]
+     },
+     "old": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/"
+       }
+      ]
+     }
+    },
+    "id": "C3",
+    "risks": [
+     "RK2"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "protected"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "protected records"
+    ],
+    "validators": [
+     "a path a shell line may hold"
+    ]
+   },
+   "form_lines": {
+    "preview": "repoint the links to the old vault folder in {each.path}",
+    "status": "repointed the links to the old vault folder: <path>"
+   },
+   "id": "T17",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "vault folder archived",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "file": {
+      "each": "place"
+     }
+    },
+    "name": "note repointed {each.n}"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "each": "place"
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "the note before",
+     "path": {
+      "each": "place"
+     },
+     "read": "file",
+     "type": "before-image"
+    },
+    {
+     "label": "the note after",
+     "read": "computed",
+     "type": "after-image"
+    },
+    {
+     "label": "where it was taken from",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "each": "rel"
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": {
+    "ordered": true,
+    "placement": "in place"
+   },
+   "thing": {
+    "family": {
+     "folder": {
+      "location": "vault_root"
+     },
+     "glob": {
+      "literal": "*.md"
+     },
+     "holding": {
+      "text": [
+       {
+        "text": [
+         {
+          "location": "vault_projects_rel"
+         },
+         {
+          "literal": "/"
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "/"
+       }
+      ]
+     },
+     "read": "files",
+     "tree": true,
+     "validators": {
+      "path": "a path a shell line may hold"
+     },
+     "within": {
+      "folder": {
+       "path": [
+        {
+         "location": "vault_projects"
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "output": "vault folder archived.path"
+     }
+    },
+    "identity": "path",
+    "layer": "vault",
+    "place": {
+     "each": "place"
+    },
+    "role": "a note that links the old folder",
+    "span": true,
+    "tracked": [
+     "exists",
+     "sha256"
+    ]
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 0
+       },
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       },
+       "read": "line"
+      }
+     ],
+     "after_test": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 0
+       },
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       },
+       "read": "line"
+      },
+      {
+       "line": {
+        "saved": 1
+       },
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       },
+       "present": false,
+       "read": "line"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "count": 1,
+       "id": "once",
+       "line": {
+        "saved": 1
+       },
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       },
+       "read": "line"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "edit": {
+       "kind": "replace",
+       "new": {
+        "saved": 0
+       },
+       "old": {
+        "saved": 1
+       }
+      },
+      "id": "C3",
+      "risks": [
+       "RK2"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "protected"
+      ],
+      "resting_places": [
+       "the protected folder"
+      ],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "protected records"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the note as it was: {each.path}",
+      "status": "the note is back as it was: <path>"
+     },
+     "id": "V06",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": [
+      {
+       "level": "state",
+       "output": "vault folder back",
+       "treatment": "then not applicable"
+      }
+     ],
+     "output": {
+      "fields": {
+       "file": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       }
+      },
+      "name": "note back {each.n}"
+     },
+     "owner_names": "none",
+     "phase": "putting back on this machine",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "path": [
+         {
+          "output": "vault folder back.path"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "identity": "path",
+      "place": {
+       "path": [
+        {
+         "output": "vault folder back.path"
+        },
+        {
+         "saved": 2
+        }
+       ]
+      },
+      "role": "the file put back",
+      "span": true,
+      "tracked": [
+       "exists",
+       "sha256"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "count": 1,
+     "line": {
+      "text": [
+       {
+        "literal": "name: "
+       },
+       {
+        "name": 1
+       },
+       {
+        "literal": "\nstatus: archived\narchived: "
+       },
+       {
+        "clock": "date"
+       }
+      ]
+     },
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "text": [
+         {
+          "literal": "project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "line"
+    }
+   ],
+   "after_test": [
+    {
+     "count": 1,
+     "line": {
+      "text": [
+       {
+        "literal": "name: "
+       },
+       {
+        "name": 1
+       },
+       {
+        "literal": "\nstatus: archived\narchived: "
+       },
+       {
+        "clock": "date"
+       }
+      ]
+     },
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "text": [
+         {
+          "literal": "project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "line"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "count": 1,
+     "id": "has",
+     "line": {
+      "text": [
+       {
+        "literal": "name: "
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "text": [
+         {
+          "literal": "project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "line"
+    },
+    {
+     "id": "not yet",
+     "line": {
+      "literal": "status: archived"
+     },
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "text": [
+         {
+          "literal": "project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "present": false,
+     "read": "line"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "edit": {
+     "kind": "replace",
+     "new": {
+      "text": [
+       {
+        "literal": "\n"
+       },
+       {
+        "text": [
+         {
+          "literal": "name: "
+         },
+         {
+          "name": 1
+         },
+         {
+          "literal": "\nstatus: archived\narchived: "
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       },
+       {
+        "literal": "\n"
+       }
+      ]
+     },
+     "old": {
+      "text": [
+       {
+        "literal": "\n"
+       },
+       {
+        "text": [
+         {
+          "literal": "name: "
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "\n"
+       }
+      ]
+     }
+    },
+    "id": "C3",
+    "risks": [
+     "RK2"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "protected records"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "mark the home memory note archived",
+    "status": "marked the home memory note archived: <path>"
+   },
+   "id": "T18",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": "none",
+   "output": {
+    "fields": {
+     "file": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "text": [
+         {
+          "literal": "project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "name": "memory note archived"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "text": [
+         {
+          "literal": "project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "label": "the memory note's lines before",
+     "read": "value",
+     "type": "before-image",
+     "value": {
+      "text": [
+       {
+        "literal": "\n"
+       },
+       {
+        "text": [
+         {
+          "literal": "name: "
+         },
+         {
+          "name": 1
+         }
+        ]
+       },
+       {
+        "literal": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "label": "the memory note's lines after",
+     "read": "value",
+     "type": "after-image",
+     "value": {
+      "text": [
+       {
+        "literal": "\n"
+       },
+       {
+        "text": [
+         {
+          "literal": "name: "
+         },
+         {
+          "name": 1
+         },
+         {
+          "literal": "\nstatus: archived\narchived: "
+         },
+         {
+          "clock": "date"
+         }
+        ]
+       },
+       {
+        "literal": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "label": "the memory note's lines before, its lines",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "text": [
+       {
+        "literal": "name: "
+       },
+       {
+        "name": 1
+       }
+      ]
+     }
+    },
+    {
+     "label": "the memory note's lines after, its lines",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "text": [
+       {
+        "literal": "name: "
+       },
+       {
+        "name": 1
+       },
+       {
+        "literal": "\nstatus: archived\narchived: "
+       },
+       {
+        "clock": "date"
+       }
+      ]
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": {
+    "ordered": true,
+    "placement": "in place"
+   },
+   "thing": {
+    "capability": "memory stores",
+    "identity": "path",
+    "layer": "memory note",
+    "place": {
+     "path": [
+      {
+       "location": "memory_home"
+      },
+      {
+       "text": [
+        {
+         "literal": "project_"
+        },
+        {
+         "name": 2
+        },
+        {
+         "literal": ".md"
+        }
+       ]
+      }
+     ]
+    },
+    "retires": true,
+    "role": "the home memory note",
+    "span": true,
+    "tracked": [
+     "exists",
+     "sha256"
+    ],
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 2
+       },
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "text": [
+           {
+            "literal": "project_"
+           },
+           {
+            "name": 2
+           },
+           {
+            "literal": ".md"
+           }
+          ]
+         }
+        ]
+       },
+       "read": "line"
+      }
+     ],
+     "after_test": [
+      {
+       "count": 1,
+       "line": {
+        "saved": 2
+       },
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "text": [
+           {
+            "literal": "project_"
+           },
+           {
+            "name": 2
+           },
+           {
+            "literal": ".md"
+           }
+          ]
+         }
+        ]
+       },
+       "read": "line"
+      },
+      {
+       "line": {
+        "saved": 3
+       },
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "text": [
+           {
+            "literal": "project_"
+           },
+           {
+            "name": 2
+           },
+           {
+            "literal": ".md"
+           }
+          ]
+         }
+        ]
+       },
+       "present": false,
+       "read": "line"
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "count": 1,
+       "id": "once",
+       "line": {
+        "saved": 3
+       },
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "text": [
+           {
+            "literal": "project_"
+           },
+           {
+            "name": 2
+           },
+           {
+            "literal": ".md"
+           }
+          ]
+         }
+        ]
+       },
+       "read": "line"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "edit": {
+       "kind": "replace",
+       "new": {
+        "saved": 0
+       },
+       "old": {
+        "saved": 1
+       }
+      },
+      "id": "C3",
+      "risks": [
+       "RK2"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "protected"
+      ],
+      "resting_places": [
+       "the protected folder"
+      ],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "protected records"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the memory note active",
+      "status": "the memory note is active again"
+     },
+     "id": "V07",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": "none",
+     "output": {
+      "fields": {
+       "file": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "text": [
+           {
+            "literal": "project_"
+           },
+           {
+            "name": 2
+           },
+           {
+            "literal": ".md"
+           }
+          ]
+         }
+        ]
+       }
+      },
+      "name": "memory note active"
+     },
+     "owner_names": "none",
+     "phase": "putting back on this machine",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "text": [
+           {
+            "literal": "project_"
+           },
+           {
+            "name": 2
+           },
+           {
+            "literal": ".md"
+           }
+          ]
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "capability": "memory stores",
+      "identity": "path",
+      "place": {
+       "path": [
+        {
+         "location": "memory_home"
+        },
+        {
+         "text": [
+          {
+           "literal": "project_"
+          },
+          {
+           "name": 2
+          },
+          {
+           "literal": ".md"
+          }
+         ]
+        }
+       ]
+      },
+      "role": "the file put back",
+      "span": true,
+      "tracked": [
+       "exists",
+       "sha256"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "line": {
+      "text": [
+       {
+        "literal": "## Archived\n"
+       },
+       {
+        "each": "line"
+       }
+      ]
+     },
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "literal": "MEMORY.md"
+       }
+      ]
+     },
+     "present": true,
+     "read": "line"
+    }
+   ],
+   "after_test": [
+    {
+     "line": {
+      "text": [
+       {
+        "literal": "## Archived\n"
+       },
+       {
+        "each": "line"
+       }
+      ]
+     },
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "literal": "MEMORY.md"
+       }
+      ]
+     },
+     "present": true,
+     "read": "line"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "count": 1,
+     "id": "has",
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "literal": "MEMORY.md"
+       }
+      ]
+     },
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "literal": "(project_"
+       },
+       {
+        "name": 2
+       },
+       {
+        "literal": ".md)"
+       }
+      ]
+     }
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "edit": {
+     "holding": {
+      "text": [
+       {
+        "literal": "(project_"
+       },
+       {
+        "name": 2
+       },
+       {
+        "literal": ".md)"
+       }
+      ]
+     },
+     "kind": "move-line",
+     "under": {
+      "literal": "## Archived"
+     }
+    },
+    "id": "C3",
+    "risks": [
+     "RK2"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "protected"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "protected records"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "move the memory index line under ## Archived",
+    "status": "the memory index line stands under ## Archived"
+   },
+   "id": "T19",
+   "keep_scope": "none",
+   "keeps_required": [],
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "memory note archived",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "file": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "literal": "MEMORY.md"
+       }
+      ]
+     }
+    },
+    "name": "memory index archived {each.n}"
+   },
+   "owner_names": "none",
+   "phase": "retiring on this machine",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "literal": "MEMORY.md"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": [
+    {
+     "holding": {
+      "text": [
+       {
+        "literal": "(project_"
+       },
+       {
+        "name": 2
+       },
+       {
+        "literal": ".md)"
+       }
+      ]
+     },
+     "label": "the line above it",
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "literal": "MEMORY.md"
+       }
+      ]
+     },
+     "read": "line-above",
+     "type": "line"
+    },
+    {
+     "holding": {
+      "text": [
+       {
+        "literal": "(project_"
+       },
+       {
+        "name": 2
+       },
+       {
+        "literal": ".md)"
+       }
+      ]
+     },
+     "label": "the line below it",
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "literal": "MEMORY.md"
+       }
+      ]
+     },
+     "read": "line-below",
+     "type": "line"
+    },
+    {
+     "label": "the memory index line",
+     "read": "value",
+     "type": "line",
+     "value": {
+      "each": "line"
+     }
+    }
+   ],
+   "review_file": "none",
+   "safe_content": "none",
+   "span": {
+    "ordered": false,
+    "placement": "in place"
+   },
+   "thing": {
+    "capability": "memory stores",
+    "family": {
+     "holding": {
+      "text": [
+       {
+        "literal": "(project_"
+       },
+       {
+        "name": 2
+       },
+       {
+        "literal": ".md)"
+       }
+      ]
+     },
+     "path": {
+      "path": [
+       {
+        "location": "memory_home"
+       },
+       {
+        "literal": "MEMORY.md"
+       }
+      ]
+     },
+     "read": "lines"
+    },
+    "identity": "path",
+    "layer": "memory note",
+    "place": {
+     "path": [
+      {
+       "location": "memory_home"
+      },
+      {
+       "literal": "MEMORY.md"
+      }
+     ]
+    },
+    "retires": true,
+    "role": "the memory index",
+    "span": true,
+    "tracked": [
+     "exists",
+     "sha256"
+    ],
+    "where": "machine"
+   },
+   "way_back": {
+    "reverse": {
+     "after_check": [
+      {
+       "line": {
+        "text": [
+         {
+          "literal": "## Archived\n"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       },
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "literal": "MEMORY.md"
+         }
+        ]
+       },
+       "present": false,
+       "read": "line"
+      },
+      {
+       "count": 1,
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "literal": "MEMORY.md"
+         }
+        ]
+       },
+       "read": "text",
+       "text": {
+        "text": [
+         {
+          "literal": "(project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md)"
+         }
+        ]
+       }
+      }
+     ],
+     "after_test": [
+      {
+       "line": {
+        "text": [
+         {
+          "literal": "## Archived\n"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       },
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "literal": "MEMORY.md"
+         }
+        ]
+       },
+       "present": false,
+       "read": "line"
+      },
+      {
+       "count": 1,
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "literal": "MEMORY.md"
+         }
+        ]
+       },
+       "read": "text",
+       "text": {
+        "text": [
+         {
+          "literal": "(project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md)"
+         }
+        ]
+       }
+      }
+     ],
+     "answers": "none",
+     "before_test": [
+      {
+       "id": "under",
+       "line": {
+        "text": [
+         {
+          "literal": "## Archived\n"
+         },
+         {
+          "saved": 2
+         }
+        ]
+       },
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "literal": "MEMORY.md"
+         }
+        ]
+       },
+       "present": true,
+       "read": "line"
+      }
+     ],
+     "commands": "none",
+     "condition": "none",
+     "construction": {
+      "edit": {
+       "above": {
+        "saved": 0
+       },
+       "below": {
+        "saved": 1
+       },
+       "holding": {
+        "text": [
+         {
+          "literal": "(project_"
+         },
+         {
+          "name": 2
+         },
+         {
+          "literal": ".md)"
+         }
+        ]
+       },
+       "kind": "move-line"
+      },
+      "id": "C3",
+      "risks": [
+       "RK2"
+      ]
+     },
+     "content_classes": {
+      "reads": [
+       "protected"
+      ],
+      "resting_places": [
+       "the protected folder"
+      ],
+      "shows": [
+       "safe"
+      ],
+      "stores": [
+       "protected records"
+      ],
+      "validators": []
+     },
+     "form_lines": {
+      "preview": "the memory index as it was",
+      "status": "the memory index line is back where it stood"
+     },
+     "id": "V08",
+     "keep_scope": "none",
+     "keeps_required": "none",
+     "kind": "change",
+     "lost_answer": "none",
+     "mode": "none",
+     "needs": "none",
+     "output": {
+      "fields": {
+       "file": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "literal": "MEMORY.md"
+         }
+        ]
+       }
+      },
+      "name": "memory index active {each.n}"
+     },
+     "owner_names": "none",
+     "phase": "putting back on this machine",
+     "planning_test": [
+      {
+       "is": "file",
+       "path": {
+        "path": [
+         {
+          "location": "memory_home"
+         },
+         {
+          "literal": "MEMORY.md"
+         }
+        ]
+       },
+       "read": "path"
+      }
+     ],
+     "repo_commands": "none",
+     "reverse_inputs": "none",
+     "review_file": "none",
+     "safe_content": "none",
+     "span": "none",
+     "thing": {
+      "capability": "memory stores",
+      "identity": "path",
+      "place": {
+       "path": [
+        {
+         "location": "memory_home"
+        },
+        {
+         "literal": "MEMORY.md"
+        }
+       ]
+      },
+      "role": "the memory index",
+      "span": true,
+      "tracked": [
+       "exists",
+       "sha256"
+      ]
+     },
+     "way_back": {
+      "none": "the row declares none: it is itself a reverse"
+     }
+    }
+   }
+  },
+  {
+   "after_check": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "text": [
+         {
+          "literal": "_sunset-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "text": [
+         {
+          "literal": "_sunset-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "text": [
+         {
+          "literal": "_sunset-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "id": "C1",
+    "last_record": true,
+    "mode": 420,
+    "single_file": true
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "records by label and path"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "write the tombstone into the archived vault folder; a database this run backed up is not paused by it (v1 never paused it itself); To restore: summon restore with this project's names on this machine, which holds this run's record",
+    "status": "the tombstone is <path>; a database this run backed up is not paused by it (v1 never paused it itself); To restore: summon restore with this project's names on this machine, which holds this run's record"
+   },
+   "id": "T30",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "build",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "vault folder archived",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "text": [
+         {
+          "literal": "_sunset-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "name": "tombstone"
+   },
+   "owner_names": "none",
+   "phase": "the last record",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "vault folder archived.path"
+       },
+       {
+        "text": [
+         {
+          "literal": "_sunset-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "path": [
+      {
+       "output": "vault folder archived.path"
+      },
+      {
+       "text": [
+        {
+         "literal": "_sunset-"
+        },
+        {
+         "run": "id"
+        },
+        {
+         "literal": ".md"
+        }
+       ]
+      }
+     ]
+    },
+    "role": "this sunset's record",
+    "tracked": [
+     "exists",
+     "identity",
+     "sha256"
+    ]
+   },
+   "way_back": "none"
+  }
+ ]
+}
