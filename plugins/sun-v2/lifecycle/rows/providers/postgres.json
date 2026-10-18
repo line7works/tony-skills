@@ -1,0 +1,178 @@
+{
+ "commands": {
+  "dump": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "PGCONNECT_TIMEOUT": {
+     "class": "fixed",
+     "value": "20"
+    },
+    "PGSERVICE": {
+     "class": "fixed",
+     "value": "sun"
+    },
+    "PGSERVICEFILE": {
+     "class": "private path",
+     "param": "passfile"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [],
+   "secret_output": "staging",
+   "template": [
+    {
+     "literal": "-w"
+    },
+    {
+     "literal": "-F"
+    },
+    {
+     "literal": "p"
+    },
+    {
+     "literal": "--no-owner"
+    },
+    {
+     "literal": "--no-privileges"
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "param": "out"
+    }
+   ],
+   "time_limit": 1800,
+   "tool": "pg_dump",
+   "trace_flags": [
+    "-v",
+    "--verbose"
+   ]
+  },
+  "inventory": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "PGCONNECT_TIMEOUT": {
+     "class": "fixed",
+     "value": "20"
+    },
+    "PGSERVICE": {
+     "class": "fixed",
+     "value": "sun"
+    },
+    "PGSERVICEFILE": {
+     "class": "private path",
+     "param": "passfile"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other",
+    "2": "other",
+    "3": "other"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "identity",
+     "place": [
+      "identity"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "disposition": "held",
+     "name": "tables",
+     "place": [
+      "tables"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "count"
+    },
+    {
+     "disposition": "equal",
+     "equals": {
+      "literal": 0
+     },
+     "name": "unreadable",
+     "place": [
+      "unreadable"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "count"
+    }
+   ],
+   "template": [
+    {
+     "literal": "-X"
+    },
+    {
+     "literal": "-A"
+    },
+    {
+     "literal": "-t"
+    },
+    {
+     "literal": "-w"
+    },
+    {
+     "literal": "-v"
+    },
+    {
+     "literal": "ON_ERROR_STOP=1"
+    },
+    {
+     "literal": "-c"
+    },
+    {
+     "literal": "select json_build_object('identity', (select system_identifier::text from pg_control_system()), 'tables', (select count(*) from pg_catalog.pg_tables where schemaname not in ('pg_catalog', 'information_schema')), 'unreadable', (select count(*) from pg_catalog.pg_tables where schemaname not in ('pg_catalog', 'information_schema') and not has_table_privilege(format('%I.%I', schemaname, tablename), 'SELECT')))"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "psql",
+   "trace_flags": [
+    "-a",
+    "--echo-all",
+    "-e",
+    "--echo-queries",
+    "-E",
+    "--echo-hidden"
+   ]
+  }
+ },
+ "credential_env": [
+  "PGPASSWORD",
+  "PGPASSFILE",
+  "PGSERVICEFILE"
+ ],
+ "host": null,
+ "identity": "none",
+ "provider": "postgres",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": []
+}
