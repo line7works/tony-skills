@@ -1693,13 +1693,19 @@ class AStartTheSystemRefuses(OpCase):
                 self.assertNotIn(self.LOST, went.text + status.text)
 
 
+# G23-24: the time limit of the reads below that a test makes run past their time (a fake that hangs). Long enough that a read
+# that answers on a machine under load (the two runtimes' suites side by side) answers within it, and short against the
+# hanging fake's ten minutes; it was one second, and a read made only to set up the case then ran out of time under load
+UNDER_LOAD = 8
+
+
 def failing_get_providers(base=None):
     """The fake providers with the fake host's `get` able to fail as RUN-7's test line has a read fail (test_run): its exit 5
-    `other` (the read failed), 7 `auth` (the read made as the wrong account), and a time limit of one second (the read runs
-    past its time); a partial answer is one the parser cannot read whole (`malformed`)."""
+    `other` (the read failed), 7 `auth` (the read made as the wrong account), and a time limit of `UNDER_LOAD` seconds (the
+    read runs past its time); a partial answer is one the parser cannot read whole (`malformed`)."""
     providers = base or rowlib.providers()
     providers["fakehost"]["commands"]["get"]["exits"].update({"5": "other", "7": "auth"})
-    providers["fakehost"]["commands"]["get"]["time_limit"] = 1
+    providers["fakehost"]["commands"]["get"]["time_limit"] = UNDER_LOAD
     return providers
 
 
@@ -1795,13 +1801,13 @@ class AnOwnerStepsReadThatFails(OpCase):
 
 def identity_failing_providers(base=None):
     """The fake providers of `failing_get_providers`, with the fake host's identity read (`whoami`) able to fail as RUN-7's
-    test line has a read fail: its exit 5 `other` (the read failed), and a time limit of one second (the read runs past its
-    time); a partial answer is one the parser cannot read whole (`malformed`)."""
+    test line has a read fail: its exit 5 `other` (the read failed), and a time limit of `UNDER_LOAD` seconds (the read runs
+    past its time); a partial answer is one the parser cannot read whole (`malformed`)."""
     providers = failing_get_providers(base)
     # exit 7 `auth`: the provider refuses the read's credentials (OP-9, batch 52, A122: "one whose credentials the provider
     # refuses shows no account at all, and is one that fails")
     providers["fakehost"]["commands"]["whoami"]["exits"].update({"5": "other", "7": "auth"})
-    providers["fakehost"]["commands"]["whoami"]["time_limit"] = 1
+    providers["fakehost"]["commands"]["whoami"]["time_limit"] = UNDER_LOAD
     return providers
 
 

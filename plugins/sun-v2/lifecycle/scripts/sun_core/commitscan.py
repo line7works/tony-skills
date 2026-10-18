@@ -200,6 +200,37 @@ def git_ignores(session, top, rel, of_operation=False):
     return results.Parser(IGNORE_CHECK, raw, session.register).finish().kind == "success"
 
 
+# G23-F1 (OP-8, A154): which ignore file ignores a path, as git itself answers it: `git check-ignore -v`, through the one runner,
+# its one line read in memory ("<source>:<line>:<pattern>\t<path>") and never shown. The build check's output folder must be
+# ignored by the project's own `.gitignore` (a `.gitignore` file inside the working tree), not by the repository's exclude
+# file or the owner's own excludes
+IGNORE_SOURCE = {
+    "tool": "git",
+    "template": [{"literal": "check-ignore"}, {"literal": "-v"}, {"literal": "--"}, {"param": "path"}],
+    "time_limit": 30,
+    "exits": {"0": "success", "1": "not-found"},
+    "fields": [],
+    "definite": {"success": ["success"], "refusals": ["not-found"]},
+    "trace_flags": ["--verbose", "--trace"],
+}
+
+
+def own_gitignore_ignores(session, top, rel, of_operation=False):
+    """True only where git answers that `rel` is ignored and the pattern that decides it stands in a `.gitignore` file of
+    the working tree at `top`. Raises `runner.Refused` as `git_ignores` does."""
+    world = session.world
+    context = runner.Context(session.register, session.run_dir, session.facts.search_list(world.fs, world.system_folders),
+                             of_operation=of_operation)
+    raw = runner.run(world, context, IGNORE_SOURCE, ["check-ignore", "-v", "--", rel], {}, top)
+    if raw.exit_code != 0 or not raw.stdout:
+        return False
+    line = raw.stdout.decode("utf-8", "replace").split("\n")[0]
+    source = line.split("\t", 1)[0].rsplit(":", 2)[0] if "\t" in line and line.count(":") >= 2 else ""
+    if not source or os.path.isabs(source) or source.split("/")[0] == ".git":
+        return False
+    return os.path.basename(source) == ".gitignore"
+
+
 def ignore_proven(session, repo, index, rel, of_operation=False):
     """Whether `rel` (a path in the working tree, from its top) is in no stage of the index and git ignores it."""
     if rel in index:

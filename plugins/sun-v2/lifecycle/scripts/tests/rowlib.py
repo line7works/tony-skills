@@ -371,6 +371,9 @@ FORM_CHANGES = {
     # which names the exact step, is not its line; the lane gives it (FORM-2; A9)
     "waiting, not shown": ("waiting on you, not shown: {what}; the step is not shown, since no read of it answered in this "
                            "invocation; mode: {mode}; the tool will know it is done {how}"),
+    # a hosting variable whose value the provider never returns, named by its key in the preview and the tombstone (SEC-6 as
+    # A148 words it; G23-8): FORM-2's table has no line for it, and the lane gives it
+    "not saved": "not saved, its value is never returned: {name} ({what})",
 }
 
 

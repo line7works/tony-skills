@@ -441,9 +441,12 @@ class ThroughTheCommandLine(harness.Case):
         self.assertIn("A142", found[0]["finding"])
 
     def test_SEC4_A142_the_shipped_declarations_whose_secret_fields_declare_a_z0_9_build_as_before(self):
-        """The 15 secret fields of the plugin's shipped files outside its tests all declare `a-z0-9` (A139): each is read
-        from its file here, and a row over the fixture providers with that alphabet builds. The fixtures' own secret fields,
-        and a held name field whose alphabet holds a space (spaces stay allowed outside a secret), build as before."""
+        """Every secret field of the plugin's shipped files outside its tests (A139): each is read from its file here, each
+        declares an alphabet that admits no white space, control or format character (A142), and a row over the fixture
+        providers with that alphabet builds. The count is what the shipped files declare, not a fixed number, so that a
+        lane's further secret field is held to the same rule (G23-22). The fixtures' own secret fields, and a held name field
+        whose alphabet holds a space (spaces stay allowed outside a secret), build as before."""
+        from sun_core import chars
         found = []
         for base, _dirs, files in os.walk(harness.PLUGIN):
             if os.sep + "tests" in base:
@@ -465,7 +468,10 @@ class ThroughTheCommandLine(harness.Case):
                         stack.extend(node.values())
                     elif isinstance(node, list):
                         stack.extend(node)
-        self.assertEqual(found, ["a-z0-9"] * 15)
+        self.assertTrue(found, "no shipped secret field was read")
+        for alphabet in found:
+            self.assertIsInstance(alphabet, str, "a shipped secret field declares no alphabet")
+            self.assertFalse(chars.alphabet_admits_barred(alphabet), alphabet)
         for alphabet in sorted(set(found)):
             self.assertEqual(admitted(rowlib.secret_op("X1"), self.secret_alphabet(alphabet)), [])
         self.assertEqual(admitted(rowlib.secret_op("X1")), [])

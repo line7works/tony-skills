@@ -23,7 +23,7 @@ Entry names, in the table's order:
     after_check, output, needs, condition, lost_answer, way_back, reverse_inputs, span, mode,
     safe_content, answers, review_file, owner_names, keep_scope, keeps_required, content_classes, form_lines
 """
-from . import chars, results
+from . import chars, results, values
 
 NONE = "none"
 KINDS = ("check", "build", "keep", "create", "change", "move", "owner step", "owner answer", "adopt")
@@ -131,7 +131,7 @@ def command_names_used(row):
     if isinstance(thing, dict):
         if thing.get("command"):
             used.append(thing["command"])
-        for key in ("identity_read", "name_form", "found_things", "family"):
+        for key in ("identity_read", "name_form", "found_things", "family", "build"):
             if isinstance(thing.get(key), dict) and thing[key].get("command"):
                 used.append(thing[key]["command"])
         for other in thing.get("also") if isinstance(thing.get("also"), list) else []:
@@ -331,6 +331,20 @@ def _command_findings(row, providers, held_outputs, in_look):
         for param, value in params.items():
             if not isinstance(value, dict):
                 continue
+            if values.is_mark(value) and "read" in value:
+                # G23-5 (SEC-2, SEC-3): a held field one of the row's own commands reads, back to the provider that issued it,
+                # in the frame's own request or through a protected input, and nowhere else
+                source = [c for c in commands if isinstance(c, dict) and c.get("name") == value["read"]["command"]
+                          and isinstance(c.get("use"), str)]
+                sdecl = ((providers.get(source[0]["use"].partition(".")[0]) or {}).get("commands") or {}).get(
+                    source[0]["use"].partition(".")[2]) if source else None
+                held_field = isinstance(sdecl, dict) and sdecl.get("effects", 0) == 0 and any(
+                    f.get("name") == value["read"]["field"] and f.get("disposition") == "held" for f in sdecl.get("fields") or [])
+                if not held_field or source[0]["use"].partition(".")[0] != provider:
+                    out.append(finding(row, "commands", "a held value goes back only to the provider that issued it (SEC-2)"))
+                elif decl.get("via") != "request" and param not in slots:
+                    out.append(finding(row, "commands", "a template that puts a held or a secret field into an argument (SEC-3)"))
+                continue
             reference = value.get("output")
             if reference and reference in held_outputs and decl.get("via") == "request":
                 # SEC-2: a held value goes back to the provider that issued it in the frame's own request, to that provider's
@@ -414,6 +428,15 @@ def admit(row, providers, held_outputs, as_reverse=False, skip_commands=False):
         out += _command_findings(row, providers, held_outputs, in_look=True)
     out += _other_findings(row, as_reverse)
     out += _validator_findings(row)
+    thing = row.get("thing") if isinstance(row.get("thing"), dict) else {}
+    if isinstance(thing.get("build"), dict):
+        named = thing["build"].get("output")
+        named = named if isinstance(named, list) else [named]
+        bad = not named or any(not isinstance(o, str) or not o or o.startswith("/") or ".." in o.split("/") or o.split("/")[0] == ".git"
+                               for o in named)
+        if row.get("kind") != "check" or bad:
+            # OP-8 (A154): the project's own build runs only in a check, its output folder one inside the project (G23-20)
+            out.append(finding(row, "thing", "a build stands only on a check, its output folder inside the project (OP-8, A154)"))
     return out
 
 

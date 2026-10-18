@@ -7,6 +7,8 @@ the receipts that are due and not given, and the disproof records.
 
 `CELLS` is ORD-1's table: what a provider that ended in a final status is to a need at a level.
 """
+import re
+
 from . import disproof as disproofmod
 from . import values
 
@@ -39,6 +41,7 @@ BINDS_EXISTING = ("done", "already so", "not proven", "done by owner, read back"
 # LOG-2 (the owner's ruling, A99): the step record of the runner's refusal of a create's send, written only where the runner
 # refused it before any child was created, so that it stands only where no request left the tool
 SEND_REFUSED = "send-refused"
+COMMIT = re.compile(r"\A[0-9a-f]{40}\Z")
 
 
 def unsent(starts, steps):
@@ -166,7 +169,8 @@ class State(object):
             if status is None or not output:
                 continue
             made = operation.get("kind") in ("build", "create", "keep", "adopt")
-            if status in (BINDS_MADE if made else BINDS_EXISTING):
+            if status in (BINDS_MADE if made else BINDS_EXISTING) or (operation.get("kind") == "check" and status == "passed"):
+                # a check binds its output at its latest attempt, and only where that attempt `passed` (G23-1; ORD-1, OP-8)
                 self._bind_fields(output["name"], output.get("fields") or {}, op)
 
     def with_own(self, op):
@@ -189,10 +193,17 @@ class State(object):
             try:
                 if isinstance(mark, dict) and "held" in mark:
                     answer = (self.answers.get(op) or [{}])[-1]
-                    if answer.get("held"):
+                    id_field = ((self.ops.get(op) or {}).get("construction") or {}).get("id_field", "id")
+                    if mark["held"] != id_field and op is not None:
+                        # a held field beside the create's id binds that field's own record (G23-2), never the id
+                        if (answer.get("held_fields") or {}).get(mark["held"]):
+                            bound[field] = values.Held(answer["held_fields"][mark["held"]])
+                    elif answer.get("held"):
                         bound[field] = values.Held(answer["held"])
                 elif isinstance(mark, dict) and "observed" in mark:
                     observed = (self.completions.get(op) or {}).get("observed") or {}
+                    if op is not None and self.ops[op].get("kind") == "check":
+                        observed = self.check_observed(op)
                     if mark["observed"] in observed:
                         bound[field] = observed[mark["observed"]]
                 else:
@@ -200,6 +211,17 @@ class State(object):
             except values.Unsettled:
                 continue
         self.outputs.setdefault(name, {}).update(bound)
+
+    def check_observed(self, op):
+        """What a check's latest attempt observed, where it `passed`: the commit of the head it read, for a check whose subject
+        is the repository's head (G23-1; OP-8: the attempt records "the tracked state of the subject it read")."""
+        found = self.attempts.get(op) or []
+        if not found or found[-1].get("answer") != "passed":
+            return {}
+        word = (found[-1].get("subject") or {}).get("word")
+        if (self.ops[op].get("thing") or {}).get("subject_git") == "head" and isinstance(word, str) and COMMIT.match(word):
+            return {"commit": word}
+        return {}
 
     # ---- needs (ORD-1) --------------------------------------------------------------------------
     def providers_of(self, output):

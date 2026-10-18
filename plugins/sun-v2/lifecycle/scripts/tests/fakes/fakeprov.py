@@ -122,7 +122,7 @@ def main():
     os.makedirs(ROOT, exist_ok=True)
     with open(COUNTS, "w") as fh:
         json.dump(counts, fh)
-    changing = command in ("create", "set", "cas", "write", "dump", "scaffold", "issue", "take")
+    changing = command in ("create", "set", "cas", "write", "dump", "scaffold", "issue", "take", "build")
     env = given()
     append(CALLS, {"tool": TOOL, "argv": ARGV, "env_names": sorted(env), "cwd": os.getcwd(), "pid": os.getpid(),
                    "changing": changing, "nth": nth, "env_values": env})
@@ -266,6 +266,13 @@ def main():
         if unreadable:
             answer({"kind": "other"}, 5)
         body = "".join("TABLE %s\n" % t for t in source["tables"]) + "DATA %s\n" % (state.get("secret") or "none")
+        if do == "sections":
+            # G23-9: a dump in the shape of a real one: each table's line, then its data section (one left out where the plan
+            # names it), and an end line (left out where the plan says the dump was cut)
+            body = "".join("TABLE %s (\n" % t + ("" if t == todo.get("drop") else "SECTION %s FROM stdin;\n" % t)
+                           for t in source["tables"]) + "DATA %s\n" % (state.get("secret") or "none")
+            if not todo.get("cut_end"):
+                body += "-- END OF DUMP\n"
         if do == "short":
             body = body[: len(body) // 2]
         with open(opts.get("out", ""), "w") as fh:
@@ -298,6 +305,22 @@ def main():
                 except OSError:
                     pass
         answer({"clean": not hit})
+    if command == "build":
+        # G23-20: a project's own build: it writes its output folder `out/` under --work, a fresh `main.js` each time; with
+        # the plan `stray` it also writes a file outside that folder; with `do: fail` (above) it cannot build
+        work = opts.get("work", "")
+        os.makedirs(os.path.join(work, "out"), exist_ok=True)
+        with open(os.path.join(work, "out", "main.js"), "w") as fh:
+            fh.write("built %d\n" % nth)
+        if todo.get("cache"):
+            # G23-F1: a second output folder a real build writes (a cache), named in the row beside `out`
+            os.makedirs(os.path.join(work, ".cache"), exist_ok=True)
+            with open(os.path.join(work, ".cache", "build.bin"), "w") as fh:
+                fh.write("cache %d\n" % nth)
+        if todo.get("stray"):
+            with open(os.path.join(work, "stray.txt"), "w") as fh:
+                fh.write("written by the build outside its output folder\n")
+        answer({})
     if command == "scaffold":
         target = opts.get("out", "")
         os.makedirs(os.path.join(target, "src"))

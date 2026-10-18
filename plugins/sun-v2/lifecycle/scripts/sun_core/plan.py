@@ -455,6 +455,13 @@ def restore_offer(session, look, retiring, journal, other_held):
                     continue
                 copies.append(protected.write(session.world, session.run_dir, session.world.new_id("p"), content,
                                               reference.get("type", "values"), reference.get("label", "an input of the reverse")))
+                item = items[index] if index < len(items) and isinstance(items[index], dict) else {}
+                if reference.get("type") == "held field" and item.get("read") == "command":
+                    # G23-5: the copy of a held field the forward row's own command read is that command's provider's, so that
+                    # it may go back to its issuer (SEC-2) and to no other (G22-2's check)
+                    used = [c.get("use") for c in operation.get("commands") or [] if isinstance(c, dict) and c.get("name") == item.get("command")]
+                    if used and isinstance(used[0], str):
+                        look.issuers[copies[-1]["record"]] = used[0].partition(".")[0]
             try:
                 reverse = values.bind_saved(reverse, copies)
             except values.Unsettled:
@@ -571,8 +578,26 @@ def identity_read(session, provider, spec, causes, refusals=None, unanswered=Non
     decl = copy.deepcopy(session.providers[provider]["commands"][spec["command"]])
     if not isinstance(decl.get("trace_flags"), list):
         decl["trace_flags"] = list(session.providers[provider].get("trace_flags") or [])
+    marked = sorted((spec.get("params") or {}).items()) if isinstance(spec.get("params"), dict) else []
+    if marked:
+        # G23-4: a parameter marked `{"settings": <provider>}` is filled in turn with each name his settings hold for that
+        # provider; a name the provider answers it does not know is passed over, and the first read whose field proves equal
+        # gives the account. No name proving equal is the wrong account (RUN-5; SEC-4's ground C)
+        param, mark = marked[0]
+        for name in session.facts.accounts(session.world.fs).get(mark.get("settings"), []):
+            found = _identity_once(session, provider, spec, decl, {param: name}, causes, refusals, unanswered, passed_over=True)
+            if found is not False:
+                return found
+        causes.append("the read was made as the wrong account: %s reports an account your settings do not name" % provider)
+        return None
+    return _identity_once(session, provider, spec, decl, {}, causes, refusals, unanswered)
+
+
+def _identity_once(session, provider, spec, decl, params, causes, refusals, unanswered, passed_over=False):
+    """One identity read with its parameters: the account, or None with its cause named; with `passed_over`, False where the
+    provider answers that it does not know the name, or the field does not prove equal (the next name is tried)."""
     try:
-        result = calls.call(session, {"name": "identity", "declaration": decl, "params": {}}, {})
+        result = calls.call(session, {"name": "identity", "declaration": decl, "params": params}, {})
     except runner.Refused as refused:
         causes.append("the read failed: %s's identity" % provider)
         if refusals is not None:
@@ -583,6 +608,8 @@ def identity_read(session, provider, spec, causes, refusals=None, unanswered=Non
         if unanswered is not None:
             unanswered.append(provider)
         return None
+    if passed_over and result.kind == "not-found":
+        return False
     if result.kind != "success":
         causes.append("%s: %s's identity" % (READ_KINDS.get(result.kind, READ_KINDS[None]), provider))
         # OP-9 (batches 51 and 52, A120, A122): an identity read that "fails, is partial or runs out of time"; "An identity
@@ -593,6 +620,8 @@ def identity_read(session, provider, spec, causes, refusals=None, unanswered=Non
             unanswered.append(provider)
         return None
     kept = result.fields.get(spec.get("field", "account"))
+    if passed_over and (kept is None or not kept.equal):
+        return False
     if kept is None or not kept.equal:
         causes.append("the read was made as the wrong account: %s reports an account your settings do not name" % provider)
         return None
@@ -703,6 +732,8 @@ def read_questions(session, look, lane, causes):
 
 # ---- found reads, lane facts and family rows (RUN-5 to RUN-7; G19-5 to G19-7) -------------------------------------
 DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+SUFFIX = re.compile(r"-[0-9]+\Z")
+LANE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}-([A-Za-z0-9]+)")
 
 
 def found_items(fs, spec):
@@ -734,6 +765,16 @@ def found_items(fs, spec):
             if spec.get("holding") and str(spec["holding"]) not in text:
                 continue
             item = {"path": path, "name": name, "stem": matched.group(1) if matched.groups() else name}
+            bare = os.path.splitext(name)[0]
+            if spec.get("suffix"):
+                # G23-12: a trailing `-<n>` of the file's name without its extension, else nothing (the tool's own match)
+                trailing = SUFFIX.search(bare)
+                item["suffix"] = trailing.group(0) if trailing else ""
+            if spec.get("lane"):
+                # G23-12: the word after the date its name begins with, where it begins with one
+                after = LANE.match(bare)
+                if after:
+                    item["lane"] = after.group(1)
             if spec.get("date"):
                 first = DATE.search(text.split("\n")[0]) or DATE.search(name)
                 if first:
@@ -771,6 +812,8 @@ def _item_marks(session, spec, item, row_id):
 
     def passes(field):
         name = declared.get(field)
+        if field == "suffix" and not name:
+            return SUFFIX.fullmatch(item[field]) is not None or item[field] == ""      # the tool's own match (G23-12)
         check = values.VALIDATORS.get(name) if name else (values.VALIDATORS["a date"] if field == "date" else None)
         return check is not None and check.fullmatch(item[field]) is not None and not session.register.holds(item[field])
     for field, text in sorted(item.items()):
@@ -968,6 +1011,7 @@ def expand_family(session, look, row):
             literal = marks["path"].get("literal")
             if isinstance(literal, str) and literal.startswith(moved.rstrip(os.sep) + os.sep):
                 marks["place"] = {"path": [{"output": within["output"]}, {"literal": os.path.relpath(literal, moved)}]}
+                marks["rel"] = {"literal": os.path.relpath(literal, moved)}       # its path inside that folder (G23-15)
             else:
                 marks["place"] = copy.deepcopy(marks["path"])
         shown = dict((f, m["literal"] if "literal" in m else (label or "#%d" % n)) for f, m in marks.items())
@@ -987,7 +1031,17 @@ def expand_family(session, look, row):
             return node
         member = put(copy.deepcopy(row))
         del member["thing"]["family"]
+        named = spec.get("no_way_back_if_held")
+        if isinstance(named, str) and isinstance(marks.get(named), dict) and "record" in marks[named]:
+            # G23-18 (EV-4): a member whose named field is held records no way back, "an input is missing"; the preview says so
+            member["no_way_back"] = "an input is missing"
         member["id"] = "%s-%s" % (row["id"], label) if label else "%s-%d" % (row["id"], n)
+        reverse = (member.get("way_back") or {}).get("reverse") if isinstance(member.get("way_back"), dict) else None
+        declared = ((row.get("way_back") or {}).get("reverse") or {}).get("id") if isinstance(row.get("way_back"), dict) else None
+        if isinstance(reverse, dict) and isinstance(declared, str) and "{each." not in declared:
+            # G23-17: a family reverse's id carries its member's suffix as the member's own id does, so that two members
+            # make two reverses (a restore of two launch agents loads both)
+            reverse["id"] = "%s-%s" % (declared, label) if label else "%s-%d" % (declared, n)
         members.append(member)
     return members
 
@@ -1093,7 +1147,16 @@ def plan_row(session, look, row, state, causes, held_things, resend=False, prese
         if kind in ("build", "keep", "create"):
             tests = row.get("planning_test") if isinstance(row.get("planning_test"), list) else []
             scope = [c for c in tests if c.get("id") == "scope"]
-            free = reader.evaluate([c for c in tests if c.get("id") != "scope"])
+            for own in [c for c in tests if isinstance(c, dict) and isinstance(c.get("stop_line"), str) and c.get("id") != "scope"]:
+                # G23-10: a planning test that carries its own stop line, in the row's own words, ends the look with that
+                # line where it fails (a step the owner takes once, then summons again: SR17's terms)
+                held = reader.evaluate([dict((k, v) for k, v in own.items() if k != "stop_line")])
+                if held == reads.UNREADABLE:
+                    return unreadable("the place")
+                if held is not True:
+                    causes.append(own["stop_line"])
+                    return "stop", {}
+            free = reader.evaluate([dict((k, v) for k, v in c.items() if k != "stop_line") for c in tests if c.get("id") != "scope"])
             if free == reads.UNREADABLE:
                 return unreadable("the place")
             if free is not True:
@@ -1263,6 +1326,35 @@ def tie_retirements(session, operations, not_applicable):
                                    "step": (operation.get("form_lines") or {}).get("owner_step", "")})
 
 
+def keys_apart_at_look(session, row):
+    """The keys a keep's inventory read sets apart, read once by the look, for the preview to name by key as not saved (SEC-6
+    as A148 words it; G23-8). [] where the row's keep has no such read, or its read needs a value the plan is to make."""
+    from . import effects
+    scope = row.get("keep_scope") if isinstance(row.get("keep_scope"), dict) else {}
+    spec = scope.get("inventory_from") if isinstance(scope.get("inventory_from"), dict) else {}
+    if row.get("kind") != "keep" or not spec.get("command") or not isinstance(spec.get("apart"), dict):
+        return []
+    command = [c for c in row.get("commands") or [] if isinstance(c, dict) and c.get("name") == spec["command"]]
+    try:
+        env = values.resolve((spec.get("target") or {}).get("holds"), {}) if isinstance(spec.get("target"), dict) else None
+        if isinstance(env, values.Held) or not command:
+            return []
+        result = calls.call(session, command[0], {})
+    except (values.Unsettled, calls.NotCallable):
+        return []
+    found = effects.split_keys(result, spec, env)
+    return sorted(set(found[1])) if found else []
+
+
+def programs_found(session, rows_in, causes):
+    """The tools the rows' commands start, each on the search list (RUN-5, RUN-7, SEC-3); a missing one is a cause."""
+    search = session.facts.search_list(session.world.fs, session.world.system_folders)
+    for tool in sorted(set((c.get("declaration") or {}).get("tool") for row in rows_in
+                           for c in (row.get("commands") if isinstance(row.get("commands"), list) else []) if isinstance(c, dict)) - {None}):
+        if runner.find(session.world, tool, search) is None:
+            causes.append(texts.PROGRAM_NOT_FOUND.format(program=tool, settings=session.facts.settings_path))
+
+
 def build(session, kind, look, number, state=None, journal_count=0):
     """Build manifest `number` for the run. `state` is the journal's, on a re-plan."""
     lane = session.lane
@@ -1304,6 +1396,7 @@ def build(session, kind, look, number, state=None, journal_count=0):
     journals, other_held = read_other_runs(session, earlier)
     session.other_held = other_held
     retiring, not_offered, unoffered, retired_tracked = None, [], [], {}
+    look.issuers = {}               # a protected record the look made from a provider's held value: its issuer (G22-2, G23-5)
     if kind == "restore":
         # EV-5, EV-7: a restore builds its manifest from the latest retiring run's journal; its reverses are ordinary
         # operations under every rule, admitted as rows of their own kind in this lane's phases, and planned first
@@ -1336,17 +1429,42 @@ def build(session, kind, look, number, state=None, journal_count=0):
     if asked and not causes:
         raise Questions(asked)
     flat = []
-    look.issuers = {}               # a protected record the look made from a provider's held value: its issuer (G22-2)
-    for row in expanded:
+
+    def family_of(row):
         family = (row.get("thing") or {}).get("family") if isinstance(row.get("thing"), dict) else None
-        if isinstance(family, dict) and excluded_by_inputs(look, row) is None:
+        return family if isinstance(family, dict) and excluded_by_inputs(look, row) is None else None
+
+    def lacks_capability(row):
+        capability = (row.get("thing") or {}).get("capability") if isinstance(row.get("thing"), dict) else None
+        return bool(capability) and capability not in look.capabilities
+    early = None
+    if any(family_of(row) is not None and not lacks_capability(row) for row in expanded):
+        # G23-3: a family's read is made after the programs are found and the identity reads are made, so that an account
+        # mark in it settles (RUN-5; SEC-4's ground C), as every other row's command is; where no family is read, the order
+        # below stands as it was
+        early = [row for row in expanded if excluded_by_inputs(look, row) is None and not (family_of(row) is not None and lacks_capability(row))]
+        programs_found(session, early, causes)
+        if causes:
+            raise PlanningStop(causes)
+        early = identity_reads(session, providers_used(early), causes)
+        look.accounts = early
+    for row in expanded:
+        family = family_of(row)
+        if family is not None and lacks_capability(row):
+            # G23-3: a row's capability is settled before its family's read: on a harness that did not declare it the family
+            # is not read, and the row is not applicable, as `plan_row` has a row without its capability (OP-8)
+            excluded.append({"row": row["id"], "reason": "not available on this harness",
+                             "what": (row.get("form_lines") or {}).get("preview") or row["id"]})
+            continue
+        if family is not None:
             try:
                 members = expand_family(session, look, row)
             except (OSError, UnicodeDecodeError, ValueError, KeyError, IndexError, runner.Refused, calls.NotCallable):
                 causes.append("the read failed: the things row %s is made for" % row["id"])
                 continue
             except values.Unsettled:
-                findings.append(rows.finding(row, "thing", "a value the look cannot settle"))
+                if not (early is not None and causes):       # an identity read that failed is named as its cause (G23-3)
+                    findings.append(rows.finding(row, "thing", "a value the look cannot settle"))
                 continue
             if not members:
                 excluded.append({"row": row["id"], "reason": "none found", "what": row["id"]})
@@ -1377,14 +1495,11 @@ def build(session, kind, look, number, state=None, journal_count=0):
         raise Questions(refusals)
     if findings:
         raise BuildFailed(findings)
-    search = session.facts.search_list(session.world.fs, session.world.system_folders)
-    for tool in sorted(set((c.get("declaration") or {}).get("tool") for row in candidates
-                           for c in (row.get("commands") if isinstance(row.get("commands"), list) else []) if isinstance(c, dict)) - {None}):
-        if runner.find(session.world, tool, search) is None:      # the tools on the search list (RUN-5, RUN-7, SEC-3)
-            causes.append(texts.PROGRAM_NOT_FOUND.format(program=tool, settings=session.facts.settings_path))
+    if early is None:
+        programs_found(session, candidates, causes)
     if causes:
         raise PlanningStop(causes)
-    accounts = identity_reads(session, providers_used(candidates), causes)
+    accounts = identity_reads(session, providers_used(candidates), causes) if early is None else early
     # an account mark is settled once the identity reads have proved each account (SEC-4's ground C): the second freeze
     look.accounts = accounts
     for index, row in enumerate(candidates):
@@ -1475,6 +1590,9 @@ def build(session, kind, look, number, state=None, journal_count=0):
                 continue
         row["planning_outcome"] = "in"
         row.update(detail)
+        not_saved = keys_apart_at_look(session, row)
+        if not_saved:
+            row["not_saved"] = not_saved
         present.update(present_places(row))
         if row["kind"] == "owner step" and isinstance(row.get("reverse_inputs"), list):
             for item in row["reverse_inputs"]:

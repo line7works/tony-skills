@@ -12,6 +12,7 @@ a create again on its own, takes as the project's a thing it found, or records a
 prove (GOV-1).
 """
 import os
+import stat
 
 from . import calls, fsio, protected, reads, runner, state as statemod, values
 
@@ -104,7 +105,30 @@ class Engine(object):
             raise Stop("a read would change something", op)
         return self.call(command, op)
 
+    def held_reads(self, command, op):
+        """The command with each `{"read": {command, field}}` of its parameters made: that command of the row read now, its
+        held field kept as a protected record and given in its place (G23-5; SEC-2: back to its issuer, which the row's
+        admission proved). A read that does not answer with the field stops, as an unreadable thing."""
+        params = command.get("params") if isinstance(command.get("params"), dict) else {}
+        marked = [(k, v) for k, v in params.items() if values.is_mark(v) and "read" in v]
+        if not marked:
+            return command
+        operation = self.state.ops[op]
+        made = dict(params)
+        for name, mark in marked:
+            source = self.command(operation, mark["read"]["command"])
+            if (source.get("declaration") or {}).get("effects", 0) != 0:
+                raise Stop("a read would change something", op)
+            result = self.call(source, op)
+            held = result.held(mark["read"]["field"]) if result.kind == "success" else None
+            if held is None or isinstance(held, (list, dict)):
+                raise Stop("unreadable", op, what="the held field the command needs")
+            made[name] = {"record": self.protect(op, str(held).encode("utf-8"), "held field", "the %s %s read" % (mark["read"]["field"], mark["read"]["command"]))}
+        return dict(command, params=made)
+
     def call(self, command, op, extra=None, cwd=None, own=None, connection=None, hosting_env=False):
+        if op in self.state.ops:
+            command = self.held_reads(command, op)
         try:
             outputs = self.state.with_own(op) if op in self.state.ops else self.state.outputs
             return calls.call(self.session, command, outputs, op, self.journal, extra, cwd, own, connection, hosting_env)
@@ -267,6 +291,8 @@ class Engine(object):
             self.log("attempt", op=op, attempt=number, subject={}, answer="unavailable", way_back=self.no_way_back(operation, "unavailable"))
             return
         subject = self.subject_state(operation)
+        if isinstance(thing.get("build"), dict) and not self.project_build(operation, number, subject):
+            return
         reader = self.reader(operation)
         try:
             verdict = reader.evaluate(thing.get("passes") or [])
@@ -291,6 +317,70 @@ class Engine(object):
                 args, more = sec10_stop(reader.last_hit, op, self.session.register)
                 raise Stop(*args, **more)
             raise Stop("a check failed", op)
+
+    def project_build(self, operation, number, subject):
+        """OP-8 (A154): a build check runs the project's own build on every attempt, before its reads. Its output folder,
+        named in the row, must be one the project's own `.gitignore` ignores (git asked, through the runner); what an earlier
+        build left there is taken away first, so that only this build's output can pass; then the build; then the clean read
+        (G19-10's `index-current`: nothing written but ignored files). A folder not proven ignored, a build that fails, and a
+        clean read that is not clean each record a `failed` attempt and stop the run (G23-20). True where the reads may follow."""
+        from . import commitscan, gitread
+        op, spec = operation["id"], operation["thing"]["build"]
+        repo_path = self.value(spec["repo"], op)
+        named = spec["output"] if isinstance(spec["output"], list) else [spec["output"]]
+        outputs = [os.path.normpath(str(o)) for o in named]
+        folders = [os.path.join(repo_path, o) for o in outputs]
+
+        def failed(reason, **more):
+            self.log("attempt", op=op, attempt=number, subject=subject, answer="failed")
+            raise Stop(reason, op, **more)
+        try:
+            for output, folder in zip(outputs, folders):
+                # G23-F1: ignored by the project's own `.gitignore`, as git answers which file decides it
+                if (output.startswith("..") or os.path.isabs(output) or output.split(os.sep)[0] == ".git"
+                        or not commitscan.own_gitignore_ignores(self.session, repo_path, output + "/", True)):
+                    failed("a check failed", what="the build's output folder is not one the project's own .gitignore ignores")
+                if self.fs.islink(folder):
+                    failed("a check failed", what="the build's output folder is a link")
+            for folder in folders:
+                if self.fs.isdir(folder):
+                    self.fs.rmtree(folder)      # an output an earlier build left never passes the check (OP-8)
+            before = self.tree_outside(repo_path, folders)
+        except runner.Refused as refused:
+            stop = Stop("the runner refused the command: " + refused.reason, op)
+            stop.refused = True
+            raise stop
+        except (commitscan.Unreadable, gitread.Unreadable, OSError):
+            raise Stop("unreadable", op, what="the check's subject")
+        result = self.call(self.command(operation, spec["command"]), op, cwd=repo_path)
+        if result.definite != "success":
+            failed("a check failed", command=getattr(result, "shown", None))
+        try:
+            clean = reads.index_current(self.session, repo_path, True)       # the clean read that follows (OP-8)
+            if clean:
+                clean = self.tree_outside(repo_path, folders) == before
+                if not clean:
+                    failed("the build wrote outside its output folder")      # an ignored path among them (G23-F1)
+        except (commitscan.Unreadable, gitread.Unreadable, OSError):
+            raise Stop("unreadable", op, what="the clean read after the build")
+        if not clean:
+            failed("the clean read after the build is not clean")
+        return True
+
+    def tree_outside(self, top, folders):
+        """Every path of the project folder outside the named output folders, its git folder among them, each with what a
+        write changes (a file's or a link's mode, size, modified time and object; a folder's being there), never its content
+        (G23-F1). Compared before and after the build: any difference is a write outside the output, ignored or not."""
+        out = {}
+        for path in self.fs.walk(top):
+            if any(path == f or path.startswith(f.rstrip(os.sep) + os.sep) for f in folders):
+                continue
+            st = self.fs.lstat(path)
+            if stat.S_ISDIR(st.st_mode):
+                out[path] = ("dir", st.st_ino)
+            else:
+                out[path] = (st.st_mode, st.st_size, st.st_mtime_ns, st.st_ino)
+        return out
 
     # ---- adopt (OP-10) --------------------------------------------------------------------------
     def adopt(self, operation):
@@ -501,7 +591,9 @@ class Engine(object):
                     held = result.held(item.get("field")) if result.kind == "success" else None
                     if held is None:
                         raise Stop("an input a reverse needs could not be read", op)
-                    content = fsio.canonical_json(held).encode("utf-8")
+                    # a held field of one value is saved as that value, as a create's answer record saves its id, so that a
+                    # reverse sends it back to its issuer as it was read (G23-5); a list or an object, as canonical JSON
+                    content = (held if isinstance(held, str) else fsio.canonical_json(held)).encode("utf-8")
                 else:
                     raise Stop("an input a reverse needs could not be read", op)
             except OSError:
@@ -528,6 +620,8 @@ class Engine(object):
             return {"offered": False, "reason": "the row declares none"}
         if absent_reason not in (None, "done by the owner"):
             return {"offered": False, "reason": absent_reason}
+        if operation.get("no_way_back") == "an input is missing":
+            return {"offered": False, "reason": "an input is missing"}      # a family member's held field (G23-18; EV-4)
         wanted = operation.get("reverse_inputs") if isinstance(operation.get("reverse_inputs"), list) else []
         for reference in inputs:
             try:

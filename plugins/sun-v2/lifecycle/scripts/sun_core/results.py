@@ -80,6 +80,7 @@ class Result(object):
         self.fields = fields or {}
         self.definite = definite          # "success", "refusal", or None for an indefinite result
         self.alternative = alternative    # a definite refusal the declaration lists as an alternative result
+        self.not_returned = {}            # a pairs field: [(index, key)] of the members whose value was not returned (G23-7)
 
     def safe(self):
         """What may be written of the result: the tool's own words and copies, and nothing held."""
@@ -212,6 +213,7 @@ class Parser(object):
         self._secrets_read = False
         self.protected_text = None    # a declaration's whole answer named protected text: in memory only (SEC-4, A147)
         self.secret_lists = {}        # a secret list field's members, kept, in memory only (G20-6; SEC-4 as A150 words it)
+        self.not_returned = {}        # a pairs field's members with no value returned: [(index, key)] (G23-7)
         self._classify()
 
     def _secret_members(self):
@@ -335,8 +337,9 @@ class Parser(object):
             return SecretRead(field["name"], NO_VALUE)
         pairs = field.get("pairs") if isinstance(field.get("pairs"), dict) else None
         if pairs:
-            passed = all(isinstance(m, dict) and _valid(field, m.get(pairs.get("key"))) and isinstance(m.get(pairs.get("value")), str)
-                         for m in members)
+            members = self._returned(field, members, pairs)
+            passed = members is not None and all(isinstance(m.get(pairs.get("value")), str) for m in members)
+            members = members if members is not None else []
             texts = [m.get(pairs.get("value")) for m in members if isinstance(m, dict)]
         else:
             passed = all(_valid(field, m) for m in members)
@@ -361,6 +364,21 @@ class Parser(object):
             return SecretRead(field["name"], DROPPED)
         components = [t for t in texts if _count_bytes(t) >= LEAST_LENGTH]
         return SecretRead(field["name"], "kept", raw, False, False, components)
+
+    def _returned(self, field, members, pairs):
+        """A pairs field's members whose value is returned (G23-7): a member with no value (absent, or null) is no pair, and is
+        noted by its place and key for the keep to set apart or fail on. None where a member is no object or its key fails."""
+        if not all(isinstance(m, dict) and _valid(field, m.get(pairs.get("key"))) for m in members):
+            return None
+        out, skipped = [], []
+        for index, m in enumerate(members):
+            if m.get(pairs.get("value")) is None:
+                skipped.append((index, m[pairs["key"]]))
+            else:
+                out.append(m)
+        if skipped:
+            self.not_returned[field["name"]] = skipped
+        return out
 
     def _definite(self, kind):
         definite = self.decl.get("definite") or {}
@@ -392,11 +410,15 @@ class Parser(object):
                 pairs = field.get("pairs")
                 if isinstance(pairs, dict):
                     # a held list of key and text pairs (G19-29): each member an object whose key passes the field's
-                    # validator and whose value is any text
-                    if not all(isinstance(v, dict) and _valid(field, v.get(pairs.get("key"))) and isinstance(v.get(pairs.get("value")), str)
-                               for v in found):
+                    # validator and whose value is any text; a member whose value is not returned is no pair (G23-7)
+                    found = self._returned(field, found, pairs)
+                    if found is None or not all(isinstance(v.get(pairs.get("value")), str) for v in found):
                         return Result("malformed")
                     found = [[v[pairs["key"]], v[pairs["value"]]] for v in found]
+                elif field.get("lists") is True:
+                    # a held list whose members are each a list of values (G23-6: a key's targets), each value by the validator
+                    if not all(isinstance(v, list) and all(_valid(field, x) for x in v) for v in found):
+                        return Result("malformed")
                 elif not all(_valid(field, v) for v in found):
                     return Result("malformed")
                 if field.get("disposition") != "held":
@@ -435,4 +457,5 @@ class Parser(object):
         alternative = self.kind in (self.decl.get("alternatives") or [])
         result = Result(self.kind, fields, "refusal" if alternative else self._definite(self.kind), alternative)
         result.protected_text = self.protected_text
+        result.not_returned = dict(self.not_returned)
         return result

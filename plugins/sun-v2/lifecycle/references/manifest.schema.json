@@ -123,6 +123,9 @@
          "or_absent": {
           "type": "boolean"
          },
+         "or_refused": {
+          "type": "boolean"
+         },
          "path": {
           "$ref": "#/$defs/value"
          },
@@ -154,6 +157,10 @@
          },
          "result": {
           "maxLength": 200,
+          "type": "string"
+         },
+         "stop_line": {
+          "maxLength": 2000,
           "type": "string"
          },
          "text": {
@@ -290,6 +297,9 @@
          "or_absent": {
           "type": "boolean"
          },
+         "or_refused": {
+          "type": "boolean"
+         },
          "path": {
           "$ref": "#/$defs/value"
          },
@@ -321,6 +331,10 @@
          },
          "result": {
           "maxLength": 200,
+          "type": "string"
+         },
+         "stop_line": {
+          "maxLength": 2000,
           "type": "string"
          },
          "text": {
@@ -539,6 +553,9 @@
          "or_absent": {
           "type": "boolean"
          },
+         "or_refused": {
+          "type": "boolean"
+         },
          "path": {
           "$ref": "#/$defs/value"
          },
@@ -570,6 +587,10 @@
          },
          "result": {
           "maxLength": 200,
+          "type": "string"
+         },
+         "stop_line": {
+          "maxLength": 2000,
           "type": "string"
          },
          "text": {
@@ -830,6 +851,9 @@
                 "type": "string"
                },
                "type": "array"
+              },
+              "lists": {
+               "const": true
               },
               "many": {
                "type": "boolean"
@@ -1238,6 +1262,9 @@
             "below": {
              "$ref": "#/$defs/value"
             },
+            "gitkeep": {
+             "type": "boolean"
+            },
             "head": {
              "$ref": "#/$defs/value"
             },
@@ -1252,7 +1279,8 @@
               "insert-between",
               "kit",
               "replace-all",
-              "move-line"
+              "move-line",
+              "folder"
              ]
             },
             "lift_from": {
@@ -1273,6 +1301,9 @@
             "ordered": {
              "type": "boolean"
             },
+            "pointer": {
+             "$ref": "#/$defs/value"
+            },
             "stub": {
              "$ref": "#/$defs/value"
             },
@@ -1286,7 +1317,8 @@
              "enum": [
               "keep",
               "append",
-              "stub"
+              "stub",
+              "merge"
              ]
             }
            },
@@ -1413,6 +1445,9 @@
           "below": {
            "$ref": "#/$defs/value"
           },
+          "gitkeep": {
+           "type": "boolean"
+          },
           "head": {
            "$ref": "#/$defs/value"
           },
@@ -1427,7 +1462,8 @@
             "insert-between",
             "kit",
             "replace-all",
-            "move-line"
+            "move-line",
+            "folder"
            ]
           },
           "lift_from": {
@@ -1448,6 +1484,9 @@
           "ordered": {
            "type": "boolean"
           },
+          "pointer": {
+           "$ref": "#/$defs/value"
+          },
           "stub": {
            "$ref": "#/$defs/value"
           },
@@ -1461,7 +1500,8 @@
            "enum": [
             "keep",
             "append",
-            "stub"
+            "stub",
+            "merge"
            ]
           }
          },
@@ -1682,7 +1722,8 @@
            "check": {
             "enum": [
              "count-lines",
-             "ends-with"
+             "ends-with",
+             "has-section"
             ]
            },
            "field": {
@@ -1694,6 +1735,10 @@
             "type": "string"
            },
            "record": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "section": {
             "maxLength": 200,
             "type": "string"
            },
@@ -1753,6 +1798,23 @@
           "pairs": {
            "maxLength": 200,
            "type": "string"
+          },
+          "target": {
+           "additionalProperties": false,
+           "properties": {
+            "field": {
+             "maxLength": 200,
+             "type": "string"
+            },
+            "holds": {
+             "$ref": "#/$defs/value"
+            }
+           },
+           "required": [
+            "field",
+            "holds"
+           ],
+           "type": "object"
           }
          },
          "required": [],
@@ -1938,8 +2000,19 @@
     "no_reverse": {
      "type": "boolean"
     },
+    "no_way_back": {
+     "const": "an input is missing"
+    },
     "not_proven": {
      "const": true
+    },
+    "not_saved": {
+     "items": {
+      "maxLength": 200,
+      "type": "string"
+     },
+     "maxItems": 200,
+     "type": "array"
     },
     "output": {
      "additionalProperties": false,
@@ -2154,6 +2227,9 @@
          "or_absent": {
           "type": "boolean"
          },
+         "or_refused": {
+          "type": "boolean"
+         },
          "path": {
           "$ref": "#/$defs/value"
          },
@@ -2185,6 +2261,10 @@
          },
          "result": {
           "maxLength": 200,
+          "type": "string"
+         },
+         "stop_line": {
+          "maxLength": 2000,
           "type": "string"
          },
          "text": {
@@ -2478,6 +2558,41 @@
          "maxLength": 200,
          "type": "string"
         },
+        "build": {
+         "additionalProperties": false,
+         "properties": {
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "output": {
+           "anyOf": [
+            {
+             "maxLength": 200,
+             "type": "string"
+            },
+            {
+             "items": {
+              "maxLength": 200,
+              "type": "string"
+             },
+             "maxItems": 16,
+             "minItems": 1,
+             "type": "array"
+            }
+           ]
+          },
+          "repo": {
+           "$ref": "#/$defs/value"
+          }
+         },
+         "required": [
+          "command",
+          "repo",
+          "output"
+         ],
+         "type": "object"
+        },
         "capability": {
          "maxLength": 200,
          "type": "string"
@@ -2533,7 +2648,14 @@
           "holding": {
            "$ref": "#/$defs/value"
           },
+          "lane": {
+           "type": "boolean"
+          },
           "name_after": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "no_way_back_if_held": {
            "maxLength": 200,
            "type": "string"
           },
@@ -2546,6 +2668,9 @@
             "lines",
             "command"
            ]
+          },
+          "suffix": {
+           "type": "boolean"
           },
           "tree": {
            "type": "boolean"
@@ -2769,6 +2894,9 @@
            "or_absent": {
             "type": "boolean"
            },
+           "or_refused": {
+            "type": "boolean"
+           },
            "path": {
             "$ref": "#/$defs/value"
            },
@@ -2800,6 +2928,10 @@
            },
            "result": {
             "maxLength": 200,
+            "type": "string"
+           },
+           "stop_line": {
+            "maxLength": 2000,
             "type": "string"
            },
            "text": {
@@ -3162,6 +3294,9 @@
          "or_absent": {
           "type": "boolean"
          },
+         "or_refused": {
+          "type": "boolean"
+         },
          "path": {
           "$ref": "#/$defs/value"
          },
@@ -3193,6 +3328,10 @@
          },
          "result": {
           "maxLength": 200,
+          "type": "string"
+         },
+         "stop_line": {
+          "maxLength": 2000,
           "type": "string"
          },
          "text": {
@@ -3329,6 +3468,9 @@
          "or_absent": {
           "type": "boolean"
          },
+         "or_refused": {
+          "type": "boolean"
+         },
          "path": {
           "$ref": "#/$defs/value"
          },
@@ -3360,6 +3502,10 @@
          },
          "result": {
           "maxLength": 200,
+          "type": "string"
+         },
+         "stop_line": {
+          "maxLength": 2000,
           "type": "string"
          },
          "text": {
@@ -3511,6 +3657,9 @@
          "or_absent": {
           "type": "boolean"
          },
+         "or_refused": {
+          "type": "boolean"
+         },
          "path": {
           "$ref": "#/$defs/value"
          },
@@ -3542,6 +3691,10 @@
          },
          "result": {
           "maxLength": 200,
+          "type": "string"
+         },
+         "stop_line": {
+          "maxLength": 2000,
           "type": "string"
          },
          "text": {
@@ -3802,6 +3955,9 @@
                 "type": "string"
                },
                "type": "array"
+              },
+              "lists": {
+               "const": true
               },
               "many": {
                "type": "boolean"
@@ -4210,6 +4366,9 @@
             "below": {
              "$ref": "#/$defs/value"
             },
+            "gitkeep": {
+             "type": "boolean"
+            },
             "head": {
              "$ref": "#/$defs/value"
             },
@@ -4224,7 +4383,8 @@
               "insert-between",
               "kit",
               "replace-all",
-              "move-line"
+              "move-line",
+              "folder"
              ]
             },
             "lift_from": {
@@ -4245,6 +4405,9 @@
             "ordered": {
              "type": "boolean"
             },
+            "pointer": {
+             "$ref": "#/$defs/value"
+            },
             "stub": {
              "$ref": "#/$defs/value"
             },
@@ -4258,7 +4421,8 @@
              "enum": [
               "keep",
               "append",
-              "stub"
+              "stub",
+              "merge"
              ]
             }
            },
@@ -4385,6 +4549,9 @@
           "below": {
            "$ref": "#/$defs/value"
           },
+          "gitkeep": {
+           "type": "boolean"
+          },
           "head": {
            "$ref": "#/$defs/value"
           },
@@ -4399,7 +4566,8 @@
             "insert-between",
             "kit",
             "replace-all",
-            "move-line"
+            "move-line",
+            "folder"
            ]
           },
           "lift_from": {
@@ -4420,6 +4588,9 @@
           "ordered": {
            "type": "boolean"
           },
+          "pointer": {
+           "$ref": "#/$defs/value"
+          },
           "stub": {
            "$ref": "#/$defs/value"
           },
@@ -4433,7 +4604,8 @@
            "enum": [
             "keep",
             "append",
-            "stub"
+            "stub",
+            "merge"
            ]
           }
          },
@@ -4650,7 +4822,8 @@
            "check": {
             "enum": [
              "count-lines",
-             "ends-with"
+             "ends-with",
+             "has-section"
             ]
            },
            "field": {
@@ -4662,6 +4835,10 @@
             "type": "string"
            },
            "record": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "section": {
             "maxLength": 200,
             "type": "string"
            },
@@ -4721,6 +4898,23 @@
           "pairs": {
            "maxLength": 200,
            "type": "string"
+          },
+          "target": {
+           "additionalProperties": false,
+           "properties": {
+            "field": {
+             "maxLength": 200,
+             "type": "string"
+            },
+            "holds": {
+             "$ref": "#/$defs/value"
+            }
+           },
+           "required": [
+            "field",
+            "holds"
+           ],
+           "type": "object"
           }
          },
          "required": [],
@@ -5110,6 +5304,9 @@
          "or_absent": {
           "type": "boolean"
          },
+         "or_refused": {
+          "type": "boolean"
+         },
          "path": {
           "$ref": "#/$defs/value"
          },
@@ -5141,6 +5338,10 @@
          },
          "result": {
           "maxLength": 200,
+          "type": "string"
+         },
+         "stop_line": {
+          "maxLength": 2000,
           "type": "string"
          },
          "text": {
@@ -5417,6 +5618,41 @@
          "maxLength": 200,
          "type": "string"
         },
+        "build": {
+         "additionalProperties": false,
+         "properties": {
+          "command": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "output": {
+           "anyOf": [
+            {
+             "maxLength": 200,
+             "type": "string"
+            },
+            {
+             "items": {
+              "maxLength": 200,
+              "type": "string"
+             },
+             "maxItems": 16,
+             "minItems": 1,
+             "type": "array"
+            }
+           ]
+          },
+          "repo": {
+           "$ref": "#/$defs/value"
+          }
+         },
+         "required": [
+          "command",
+          "repo",
+          "output"
+         ],
+         "type": "object"
+        },
         "capability": {
          "maxLength": 200,
          "type": "string"
@@ -5472,7 +5708,14 @@
           "holding": {
            "$ref": "#/$defs/value"
           },
+          "lane": {
+           "type": "boolean"
+          },
           "name_after": {
+           "maxLength": 200,
+           "type": "string"
+          },
+          "no_way_back_if_held": {
            "maxLength": 200,
            "type": "string"
           },
@@ -5485,6 +5728,9 @@
             "lines",
             "command"
            ]
+          },
+          "suffix": {
+           "type": "boolean"
           },
           "tree": {
            "type": "boolean"
@@ -5708,6 +5954,9 @@
            "or_absent": {
             "type": "boolean"
            },
+           "or_refused": {
+            "type": "boolean"
+           },
            "path": {
             "$ref": "#/$defs/value"
            },
@@ -5739,6 +5988,10 @@
            },
            "result": {
             "maxLength": 200,
+            "type": "string"
+           },
+           "stop_line": {
+            "maxLength": 2000,
             "type": "string"
            },
            "text": {
@@ -6197,6 +6450,33 @@
      },
      "required": [
       "checked"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "read": {
+       "additionalProperties": false,
+       "properties": {
+        "command": {
+         "maxLength": 200,
+         "type": "string"
+        },
+        "field": {
+         "maxLength": 200,
+         "type": "string"
+        }
+       },
+       "required": [
+        "command",
+        "field"
+       ],
+       "type": "object"
+      }
+     },
+     "required": [
+      "read"
      ],
      "type": "object"
     },

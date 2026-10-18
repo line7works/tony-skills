@@ -65,6 +65,13 @@ class Reader(object):
                 raise OSError("a protected record cannot be read")
         return found
 
+    def joined(self, mark):
+        """A line read's value where it is a text of parts: each part by its content, a held part read from its record in
+        memory, and the parts joined (G23-14: a literal heading and a held line, two lines). Any other value as `text` gives it."""
+        if values.is_mark(mark) and "text" in mark:
+            return "".join(str(self.joined(part)) for part in mark["text"])
+        return self.text(mark)
+
     def condition(self, c):
         read = c.get("read")
         try:
@@ -96,7 +103,7 @@ class Reader(object):
                     n = int(c["number"])
                     at = lines[n - 1] if 0 < n <= len(lines) else None
                     return (at == str(self.text(c["line"]))) == bool(c.get("present", True))
-                count = len(span_at(lines, str(self.text(c["line"])).split("\n")))     # a span of one line or more (EV-6)
+                count = len(span_at(lines, str(self.joined(c["line"])).split("\n")))   # a span of one line or more (EV-6)
                 if "count" in c:
                     return count == c["count"]
                 return (count > 0) == bool(c.get("present", True))
@@ -124,6 +131,10 @@ class Reader(object):
                     result = self.caller(self.session, command, self.outputs, self.op, self.journal)
                     self.last_command, self.last_kind = getattr(result, "shown", None), result.kind
                     body = getattr(result, "protected_text", None)
+                    if result.definite == "refusal" and not result.alternative and c.get("or_refused"):
+                        # G23-16: the command answered a refusal its declaration lists (no crontab: `crontab -l` exits 1), a
+                        # state of its own where the row says so, as `or_absent` has a file's absence
+                        return True
                     if result.kind != "success" or body is None:
                         return UNREADABLE
                     lines = body.split("\n")
