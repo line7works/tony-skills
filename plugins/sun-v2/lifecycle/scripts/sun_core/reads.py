@@ -14,6 +14,7 @@ must show:
                                                      SEC-3, A55, A63); `"free": false` asks that the name is now taken,
                                                      as an after-check (G19-11)
     {"read": "text", "path": V, "text": V, "count": n | "present": B}   how many lines of a file hold a safe value
+    {"read": "text", ..., "under": V}                 the same of the lines under the heading line V only (G25-4)
     {"read": "text", "command": NAME, ...}           the same over a command's answer declared `protected text`, counted in
                                                      memory and kept nowhere (SEC-4, A147; G19-8)
     {"read": "index-current", "repo": V, "is": B}    nothing left for `git add --all` to stage: every path of the index
@@ -144,6 +145,20 @@ class Reader(object):
                     if not self.fs.isfile(path):
                         return bool(c.get("or_absent")) and not self.fs.lexists(path)
                     lines = self.fs.read_text(path).split("\n")
+                if c.get("under") is not None:
+                    # G25-4 (set's C2: "T16's after-test and after-check must verify both the link and its required heading
+                    # placement"): only the lines that stand under the heading: after a line equal to it, before the next
+                    # line that begins with `#`
+                    heading = self.value(c["under"])
+                    if not isinstance(heading, str) or not heading:
+                        return UNREADABLE
+                    under, inside = [], False
+                    for line in lines:
+                        if line == heading or line.startswith("#"):
+                            inside = line == heading
+                        elif inside:
+                            under.append(line)
+                    lines = under
                 count = sum(1 for line in lines if text in line)
                 if "count" in c:
                     return count == c["count"]

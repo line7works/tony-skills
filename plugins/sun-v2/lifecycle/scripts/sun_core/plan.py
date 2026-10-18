@@ -1100,9 +1100,124 @@ def present_places(row):
     return {output["name"]: fields} if fields else {}
 
 
-def plan_row(session, look, row, state, causes, held_things, resend=False, present=None):
+def scope_at_look(row, own):
+    """G25-3 (prov's P3: "Reject the look when the hosting inventory is already known to be paginated, hidden or otherwise
+    incomplete"; KEEP-1: "where the look can already see that, it is a planning stop"): a keep's planning conditions with the
+    id `scope` that, with the commands they read and the secret its thing reads, refer to nothing the plan is to make. The
+    look reads these though the keep's place is the plan's to make; [] where there are none."""
+    thing = row.get("thing") if isinstance(row.get("thing"), dict) else {}
+    if values.refers_to(thing.get("secret_read")):
+        return []
+    named = dict((c.get("name"), c) for c in row.get("commands") or [] if isinstance(c, dict))
+    tests = row.get("planning_test") if isinstance(row.get("planning_test"), list) else []
+    return [c for c in tests if isinstance(c, dict) and c.get("id") == "scope"
+            and not [r for r in values.refers_to([c, named.get(c.get("command"))]) if r.partition(".")[0] != own]]
+
+
+def probe_tested(candidates, phases):
+    """G25-5 (RUN-6: the look "never reads ... a state that an earlier operation of the same plan is to leave"; "the test is
+    made by the probe"): in a restore, the ids of the change reverses whose place is the place of a change reverse in an
+    earlier phase of the lane's (a family member's included), which runs to its end first (ORD-4). Each place is taken where
+    it is now (`present_places`, RUN-6); a place the look cannot settle is no match."""
+    moved = {}
+    for row in candidates:
+        moved.update(present_places(row))
+    placed = []
+    for row in candidates:
+        thing = row.get("thing") if isinstance(row.get("thing"), dict) else {}
+        if row.get("kind") != "change" or not row.get("reverse_of") or row.get("phase") not in phases or thing.get("place") is None:
+            continue
+        try:
+            placed.append((row["id"], phases.index(row["phase"]), values.resolve(thing["place"], moved)))
+        except values.Unsettled:
+            continue
+    return set(op for op, at, where in placed if any(at2 < at and where2 == where for _o, at2, where2 in placed))
+
+
+PLANNED = {"identity": "planned"}
+TESTS = ("planning_test", "before_test", "after_test", "after_check")
+CHECKED = ("before_test", "after_test", "after_check")
+BOUND = TESTS + ("commands",)
+
+
+def _names_planned(node):
+    if isinstance(node, list):
+        return any(_names_planned(v) for v in node)
+    if isinstance(node, dict):
+        return node == PLANNED or any(_names_planned(v) for v in node.values())
+    return False
+
+
+def _put_planned(node, reference):
+    if isinstance(node, list):
+        return [_put_planned(v, reference) for v in node]
+    if isinstance(node, dict):
+        if node == PLANNED:
+            return {"record": reference}
+        return dict((k, _put_planned(v, reference)) for k, v in node.items())
+    return node
+
+
+def bind_planned(session, row, outputs, prior=None):
+    """G25-1 (prov's P1: "Bind and compare the resource identity across the planned target, effect confirmation and
+    reverse, stopping when it differs"; EV-1, EV-3, GOV-1): where a retiring row's tests or commands name `{"identity":
+    "planned"}`, the look reads its target's identity once (`thing.identity_read`), keeps the held answer as a protected
+    record of this run, and every such mark becomes a reference to that record, compared in memory (`compare_held`).
+    G25-R1 (her closing rule: "Preserve the planned identity through effect targeting and every successful state
+    classification, so a replacement cannot receive the effect or qualify as `already so`"): a command's parameter that is a
+    fresh read of that identity (G23-5's `{"read": ...}` of the same command and field) takes the record too, so the effect
+    goes to the planned thing and never to one read at the call; and the before-test, after-test and after-check each carry
+    the row's comparison with it, so that `ready`, `already so`, `landed` and the after-check all compare the identity.
+    On a re-plan of an operation the run began, the manifest in force's binding stands (`prior`), never a fresh read. False
+    where the identity cannot be read or compared, or a command of another provider would carry it (SEC-2); True otherwise,
+    and where the row names no such mark."""
+    if not any(_names_planned(row.get(k)) for k in BOUND):
+        return True
+    if prior is not None:
+        if any(_names_planned(prior.get(k)) for k in BOUND) or not all(isinstance(prior.get(k), list) for k in CHECKED):
+            return False
+        for k in BOUND:
+            if k in prior:
+                row[k] = copy.deepcopy(prior[k])
+        return True
+    thing = row.get("thing") if isinstance(row.get("thing"), dict) else {}
+    spec = thing.get("identity_read") if isinstance(thing.get("identity_read"), dict) else None
+    if not thing.get("retires") or spec is None:
+        return False
+    commands = [c for c in row.get("commands") or [] if isinstance(c, dict)]
+    source = [c for c in commands if c.get("name") == spec.get("command")]
+    compare = [c for k in CHECKED for c in (row.get(k) if isinstance(row.get(k), list) else [])
+               if isinstance(c, dict) and c.get("equals") == PLANNED]
+    if not source or not compare:
+        return False
+    issuer = str(source[0].get("use", "")).partition(".")[0]
+    fresh = {"read": {"command": spec.get("command"), "field": spec.get("field")}}
+    if any(_names_planned(c.get("params")) and str(c.get("use", "")).partition(".")[0] != issuer for c in commands):
+        return False
+    try:
+        result = calls.call(session, source[0], outputs)
+    except (runner.Refused, calls.NotCallable, values.Unsettled):
+        return False
+    held = result.held(spec.get("field")) if result.kind == "success" else None
+    if held is None or isinstance(held, (list, dict)):
+        return False
+    reference = protected.write(session.world, session.run_dir, session.world.new_id("p"), str(held).encode("utf-8"),
+                                "held field", "the identity of the thing the row retires, as the look read it")
+    for k in CHECKED:
+        if isinstance(row.get(k), list) and not any(isinstance(c, dict) and c.get("equals") == PLANNED for c in row[k]):
+            row[k] = row[k] + [dict((x, y) for x, y in compare[0].items() if x != "id")]
+    for command in commands:
+        if isinstance(command.get("params"), dict):
+            command["params"] = dict((n, PLANNED if v == fresh else v) for n, v in command["params"].items())
+    for k in BOUND:
+        row[k] = _put_planned(row.get(k), reference)
+    return True
+
+
+def plan_row(session, look, row, state, causes, held_things, resend=False, present=None, probe_tests=False):
     """One candidate: (`in` | `already so` | `not applicable` | `stop`, detail). `present` is what `present_places` gives
-    for the moves this plan has planned `in` before this row."""
+    for the moves this plan has planned `in` before this row. With `probe_tests` (G25-5, RUN-6), a change's after-test and
+    before-test are left to its probe: an earlier phase of the plan changes the same thing first."""
     fs = session.world.fs
     op, kind = row["id"], row["kind"]
     thing = row.get("thing") if isinstance(row.get("thing"), dict) else {}
@@ -1117,18 +1232,27 @@ def plan_row(session, look, row, state, causes, held_things, resend=False, prese
     if kind == "owner step":
         row["resolved_mode"] = row.get("mode")
     if state is not None and (state.starts.get(op) or op in state.waiting_records) and not resend:
+        if not bind_planned(session, row, {}, prior=state.ops.get(op) or {}):
+            causes.append("the read failed: the identity of the thing row %s retires" % op)
+            return "stop", {}
         return "in", {}                     # the journal shows the run began it: the probe decides, not the look
     own = (row.get("output") or {}).get("name") if isinstance(row.get("output"), dict) else None
     refers = [r for r in values.refers_to([row.get("thing"), row.get("planning_test"), row.get("before_test"), row.get("commands")])
               if r.partition(".")[0] != own]
     outputs = {}
+    scope_only = None
     if refers:
         present = present or {}
         if not all(r.partition(".")[0] in present and r.partition(".")[2] in present[r.partition(".")[0]] for r in refers):
-            return "in", {}                 # it depends on what the plan is to make: the probe tests it (RUN-6)
-        # a thing inside a thing a move of this plan moves: the look reads it where it is now (RUN-6); the manifest keeps
-        # the reference, and the probe reads it where the move's record says it went
-        outputs = present
+            # it depends on what the plan is to make: the probe tests it (RUN-6); but for a keep's `scope` reads that depend
+            # on nothing the plan makes, which the look reads now (G25-3, KEEP-1's planning stop, RUN-7)
+            scope_only = scope_at_look(row, own) if kind == "keep" else []
+            if not scope_only:
+                return "in", {}
+        else:
+            # a thing inside a thing a move of this plan moves: the look reads it where it is now (RUN-6); the manifest keeps
+            # the reference, and the probe reads it where the move's record says it went
+            outputs = present
     connection = []                 # SEC-2's password file, for a look's command that declares its slot (G20-1; G9)
     reader = reads.Reader(session, outputs, row.get("commands") if isinstance(row.get("commands"), list) else [],
                           lambda s, command, o, _op, _j: calls.call(s, command, o, connection=connection[0] if connection else None))
@@ -1149,7 +1273,21 @@ def plan_row(session, look, row, state, causes, held_things, resend=False, prese
         row["_secret_read"] = {"file": path, "keys": list(secret.get("keys") or [])}
         built = (row.get("construction") or {}).get("connection") if isinstance(row.get("construction"), dict) else None
         connection.append((address, (built or {}).get("slot", "passfile") if isinstance(built, dict) else "passfile", op))
+    if scope_only is None and not bind_planned(session, row, outputs):
+        causes.append("the read failed: the identity of the thing row %s retires" % op)
+        return "stop", {}
     try:
+        if scope_only:
+            whole = reader.evaluate(scope_only)
+            if whole == reads.UNREADABLE:
+                return unreadable("the keep's scope")
+            if whole is not True:
+                causes.append("the whole scope of a keep cannot be read or established: row %s" % op)
+                told = unreadable_told(session, row, outputs)
+                if told:
+                    causes.append(told)
+                return "stop", {}
+            return "in", {}                 # its place, the plan's to make, is tested by the probe (RUN-6)
         if kind in ("build", "keep", "create"):
             tests = row.get("planning_test") if isinstance(row.get("planning_test"), list) else []
             scope = [c for c in tests if c.get("id") == "scope"]
@@ -1181,6 +1319,8 @@ def plan_row(session, look, row, state, causes, held_things, resend=False, prese
                     if told:
                         causes.append(told)
                     return "stop", {}
+        elif kind == "change" and probe_tests:
+            pass                            # G25-5: an earlier phase changes this thing first; its probe makes the tests (RUN-6)
         elif kind in ("change", "move"):
             after = reader.evaluate(row.get("after_test"))
             if after == reads.UNREADABLE:
@@ -1434,7 +1574,7 @@ def build(session, kind, look, number, state=None, journal_count=0):
     asked += read_questions(session, look, lane, causes)
     if asked and not causes:
         raise Questions(asked)
-    flat = []
+    flat, members_of = [], {}
 
     def family_of(row):
         family = (row.get("thing") or {}).get("family") if isinstance(row.get("thing"), dict) else None
@@ -1474,9 +1614,17 @@ def build(session, kind, look, number, state=None, journal_count=0):
                 continue
             if not members:
                 excluded.append({"row": row["id"], "reason": "none found", "what": row["id"]})
+            members_of[row["id"]] = [member["id"] for member in members]
             flat += members
             continue
         flat.append(row)
+    for row in flat:
+        # G25-2 (prov's P2: "Before approval, bind every expanded custom-environment keep to T21 and compare each recorded
+        # source identity again before pausing"; KEEP-2): a family row named in `keeps_required` stands for every member the
+        # look made of it, so that the manifest binds each, and the look's tie and the run's compare read each
+        required = row.get("keeps_required")
+        if isinstance(required, list) and any(k in members_of for k in required):
+            row["keeps_required"] = [m for k in required for m in (members_of[k] if k in members_of else [k])]
     refusals = []
     for row in flat:
         reason = excluded_by_inputs(look, row)
@@ -1540,6 +1688,7 @@ def build(session, kind, look, number, state=None, journal_count=0):
         # is not outstanding; with no such record after it, it is, and every later look for the key reads it so
         earlier_outstanding |= set(op for op in seen_start - seen_answer if not statemod.unsent(starts_of.get(op), steps_of.get(op)))
     present = {}                            # RUN-6: where the things the plan's moves move stand now
+    later = probe_tested(candidates, list(lane.get("phases") or [])) if kind == "restore" else set()
     for row in candidates:
         op = row["id"]
         what = (row.get("form_lines") or {}).get("preview") or op
@@ -1571,7 +1720,7 @@ def build(session, kind, look, number, state=None, journal_count=0):
                     row["resend"] = True
                     if mine:
                         row["fresh_from"] = journal_count
-        outcome, detail = plan_row(session, look, row, state, causes, held_things, resend, present)
+        outcome, detail = plan_row(session, look, row, state, causes, held_things, resend, present, probe_tests=op in later)
         if "_secret_read" in row:
             secret_reads.append(row.pop("_secret_read"))
         if outcome == "not applicable":
