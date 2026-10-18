@@ -1,0 +1,93 @@
+{
+ "commands": {
+  "status": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "28": "timeout",
+    "35": "other",
+    "6": "other",
+    "60": "other",
+    "7": "other"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "200",
+      "301",
+      "302",
+      "307",
+      "308",
+      "401",
+      "403",
+      "404",
+      "500",
+      "502",
+      "503"
+     ],
+     "name": "status",
+     "place": [
+      "status"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    }
+   ],
+   "template": [
+    {
+     "literal": "-s"
+    },
+    {
+     "literal": "-o"
+    },
+    {
+     "literal": "/dev/null"
+    },
+    {
+     "literal": "--proto"
+    },
+    {
+     "literal": "=https"
+    },
+    {
+     "literal": "--max-time"
+    },
+    {
+     "literal": "20"
+    },
+    {
+     "literal": "-w"
+    },
+    {
+     "literal": "{\"status\":\"%{http_code}\"}"
+    },
+    {
+     "param": "url"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "curl"
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "web",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": [
+  "-v",
+  "--verbose",
+  "--trace",
+  "--trace-ascii"
+ ]
+}
