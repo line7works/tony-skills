@@ -522,7 +522,8 @@ class Engine(object):
     def save_reverse_inputs(self, operation, computed=None):
         """Every input the row's reverse names, read and saved as a protected record before the
         effect (LOG-2), each read back against its fingerprint. `computed`, for a C6 whose command's protected input is made
-        from a computed text, is (the command its text was read by, that text, the computed text), read once by the caller:
+        from a computed text, is (the command its text was read by, that text, the computed text), read once by the caller (for
+        a C3's swap, (None, the file's text, the text the swap puts in place), G24-6):
         a `command` input of that command with no field saves that same text, and a `computed` input the computed text, so
         the before-image and the after-image are the very texts the effect starts from and sends (G22-7, rows-set T10d)."""
         op, saved = operation["id"], []

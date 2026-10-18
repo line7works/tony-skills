@@ -1033,6 +1033,51 @@
                 "slot"
                ],
                "type": "object"
+              },
+              {
+               "additionalProperties": false,
+               "properties": {
+                "text": {
+                 "items": {
+                  "oneOf": [
+                   {
+                    "additionalProperties": false,
+                    "properties": {
+                     "literal": {
+                      "type": [
+                       "string",
+                       "number"
+                      ]
+                     }
+                    },
+                    "required": [
+                     "literal"
+                    ],
+                    "type": "object"
+                   },
+                   {
+                    "additionalProperties": false,
+                    "properties": {
+                     "param": {
+                      "maxLength": 200,
+                      "type": "string"
+                     }
+                    },
+                    "required": [
+                     "param"
+                    ],
+                    "type": "object"
+                   }
+                  ]
+                 },
+                 "minItems": 1,
+                 "type": "array"
+                }
+               },
+               "required": [
+                "text"
+               ],
+               "type": "object"
               }
              ]
             },
@@ -3831,6 +3876,51 @@
          },
          "required": [
           "slot"
+         ],
+         "type": "object"
+        },
+        {
+         "additionalProperties": false,
+         "properties": {
+          "text": {
+           "items": {
+            "oneOf": [
+             {
+              "additionalProperties": false,
+              "properties": {
+               "literal": {
+                "type": [
+                 "string",
+                 "number"
+                ]
+               }
+              },
+              "required": [
+               "literal"
+              ],
+              "type": "object"
+             },
+             {
+              "additionalProperties": false,
+              "properties": {
+               "param": {
+                "maxLength": 200,
+                "type": "string"
+               }
+              },
+              "required": [
+               "param"
+              ],
+              "type": "object"
+             }
+            ]
+           },
+           "minItems": 1,
+           "type": "array"
+          }
+         },
+         "required": [
+          "text"
          ],
          "type": "object"
         }

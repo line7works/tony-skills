@@ -733,7 +733,7 @@ def read_questions(session, look, lane, causes):
 # ---- found reads, lane facts and family rows (RUN-5 to RUN-7; G19-5 to G19-7) -------------------------------------
 DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 SUFFIX = re.compile(r"-[0-9]+\Z")
-LANE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}-([A-Za-z0-9]+)")
+LANE = re.compile(r"-([A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*)(?=-|\Z)")      # the word after a date, holding a letter (G24-3)
 
 
 def found_items(fs, spec):
@@ -766,15 +766,18 @@ def found_items(fs, spec):
                 continue
             item = {"path": path, "name": name, "stem": matched.group(1) if matched.groups() else name}
             bare = os.path.splitext(name)[0]
+            # G24-3 (rise's SR06-coldread, SR06-review): where the name holds a date, its suffix and its lane are read after
+            # the first date in it, as `<date>[-<lane>][-<n>]` (precon's `<slug>-cold-read-<date>[-<n>]`, architect's
+            # `<slug>-review-<date>[-<lane>][-<n>]`): the day is no suffix. A name with no date: its trailing `-<n>` (G23-12)
+            dated = DATE.search(bare)
+            rest = bare[dated.end():] if dated else None
+            after = LANE.match(rest) if dated else None
             if spec.get("suffix"):
-                # G23-12: a trailing `-<n>` of the file's name without its extension, else nothing (the tool's own match)
-                trailing = SUFFIX.search(bare)
+                # a trailing `-<n>` (after the date and its lane, where it has them), else nothing (the tool's own match)
+                trailing = SUFFIX.search(rest[after.end():] if after else rest) if dated else SUFFIX.search(bare)
                 item["suffix"] = trailing.group(0) if trailing else ""
-            if spec.get("lane"):
-                # G23-12: the word after the date its name begins with, where it begins with one
-                after = LANE.match(bare)
-                if after:
-                    item["lane"] = after.group(1)
+            if spec.get("lane") and after:
+                item["lane"] = after.group(1)       # the word just after the date, where that word holds a letter
             if spec.get("date"):
                 first = DATE.search(text.split("\n")[0]) or DATE.search(name)
                 if first:
@@ -1014,6 +1017,9 @@ def expand_family(session, look, row):
                 marks["rel"] = {"literal": os.path.relpath(literal, moved)}       # its path inside that folder (G23-15)
             else:
                 marks["place"] = copy.deepcopy(marks["path"])
+                # G24-6 (b): a member outside that folder carries its place whole as `rel`, so that one place built from the
+                # folder's output and `rel` serves both kinds of member (`os.path.join` keeps a whole path whole; set's V06)
+                marks["rel"] = copy.deepcopy(marks["path"])
         shown = dict((f, m["literal"] if "literal" in m else (label or "#%d" % n)) for f, m in marks.items())
         shown["n"] = str(n)        # the member's index, carried by its outputs and needs (G21-9; a reverse keeps its row's)
 

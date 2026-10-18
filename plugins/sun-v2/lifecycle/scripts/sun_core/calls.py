@@ -84,12 +84,17 @@ def argv_for_show(command, params_shown):
     if decl.get("via") == "request":
         shown = ["request", str(decl.get("method") or "GET")]
         for part in decl.get("template") or []:
-            shown.append(str(part["literal"]) if "literal" in part else str(params_shown.get(part.get("param"), "<%s>" % part.get("param"))))
+            parts = part["text"] if "text" in part else [part]
+            shown.append("".join(str(p["literal"]) if "literal" in p else str(params_shown.get(p.get("param"), "<%s>" % p.get("param")))
+                                 for p in parts))
         return " ".join(shown)
     shown = [decl["tool"]]
     for part in decl.get("template") or []:
         if "literal" in part:
             shown.append(str(part["literal"]))
+        elif "text" in part:
+            shown.append("".join(str(p["literal"]) if "literal" in p else str(params_shown.get(p.get("param"), "<%s>" % p.get("param")))
+                                 for p in part["text"]))
         elif "param" in part:
             shown.append(str(params_shown.get(part["param"], "<%s>" % part["param"])))
         elif "slot" in part:
@@ -206,6 +211,12 @@ def call(session, command, outputs, op=None, journal=None, extra_params=None, cw
     for part in decl.get("template") or []:
         if "literal" in part:
             argv.append(str(part["literal"]))
+        elif "text" in part:
+            # G24-2: one argument built from literals and parameters (vercel's `cli-team`: the team in `/v2/teams/<team>`),
+            # each parameter filled as a part of its own is
+            if any("param" in p and p["param"] not in params for p in part["text"]):
+                raise NotCallable("a template names a value the row does not give")
+            argv.append("".join(str(p["literal"]) if "literal" in p else str(params[p["param"]]) for p in part["text"]))
         elif "param" in part or "slot" in part:
             key = part.get("param") or part.get("slot")
             if key not in params:

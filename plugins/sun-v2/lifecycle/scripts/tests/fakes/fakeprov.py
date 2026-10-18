@@ -21,6 +21,7 @@ Commands (the default behaviour, where no plan entry says otherwise):
     set --name N --state S [--if S0]        a state change; with --if, refused (exit 4) unless the state is S0
     cas --ref R --new V --old V             compare-and-swap of a named value; exit 4 where it is not V
     ref --ref R                             the value of a named value
+    head --ref R                            the same as the field `head`, which stands nowhere where the value is absent
     write --out PATH [--lines N]            writes a secret-bearing file (the canary of its state) at PATH
     dump --out PATH                         writes a dump at PATH; reads the connection from the private file
     inventory                               the list of what a dump would hold, and the source's identity
@@ -230,6 +231,8 @@ def main():
         answer({"ref": opts.get("new")})
     if command == "ref":
         answer({"ref": state["refs"].get(opts.get("ref"), "none")})
+    if command == "head":                     # G24-1: a named value's commit, the field standing nowhere where it is absent
+        answer({"head": state["refs"][opts["ref"]]} if opts.get("ref") in state["refs"] else {})
     if command == "write":
         secret = state.get("secret") or issue(state, "env")
         state["secret"] = secret
