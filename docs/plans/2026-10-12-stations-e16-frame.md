@@ -818,10 +818,10 @@ completion record; in every other run of the kill sweep, at most one.
 
 | Kind | What it is | Its one effect | Built by (OP-3) | May declare a way back |
 |---|---|---|---|---|
-| check | reads and decides | none | none | no |
+| check | reads and decides; a build check also runs the project's own build (OP-8, A154) | none | none | no |
 | build | makes a new file or folder where there is nothing, complete on arrival | the publish of a staged object | C1 | no |
 | create | makes a new thing at a provider | one create request | C2 | no |
-| change | takes an identified existing thing from a recorded before-state to a computed after-state, in place; a file whose recorded before-state is its absence is published as C1 publishes (A147) | one swap, one compare-and-swap, one refusing call, or one read-then-ask | C3, C4, C5, C6 | yes |
+| change | takes an identified existing thing from a recorded before-state to a computed after-state, in place; a file or a folder whose recorded before-state is its absence is published as C1 publishes (A147, A154) | one swap, one compare-and-swap, one refusing call, or one read-then-ask | C3, C4, C5, C6 | yes |
 | move | puts an identified existing thing at another place | one rename | C7 | yes |
 | keep | makes a checked copy of a named scope at a place with no clock | the publish of the staged copy | C1 | no |
 | owner step | the owner acts; the tool shows the exact step | none by the tool | none | yes, as an owner step |
@@ -1000,6 +1000,11 @@ under the same manifest sends it (A103; RK16).
 **OP-8. Checks.** A check has no before-state and no after-state. Each time it is made is an
 attempt, recorded on its own with the invocation that made it, the tracked state of the subject it
 read, and its answer: `passed`, `failed` or `unavailable`. No attempt is ever erased or rewritten.
+A check writes nothing, with one exception, the owner's pick (A154): a check may run the project's
+own build, which writes only that build's own output folder, ignored by the project's own
+`.gitignore` and named in the check's row; a write anywhere else shows in the clean read that follows
+it, which stops the run. So the build is made on every run, and an output an earlier build left never
+passes the check.
 `unavailable` is given only when the check needs a capability the adapter did not declare in the
 look; the preview says so beforehand and the summary says so afterwards. A `failed` attempt stops
 the run, and the check is attempted again on resume. A need on a check (ORD-1) is met only by its
@@ -1009,7 +1014,9 @@ latest attempt does not meet a need of the next operation that could otherwise r
 attempted again first. A further attempt is not a reopening: EV-3 concerns operations with an effect
 and owner kinds. A subject that cannot be read is a stop.
 
-Test on fakes: a failing kit line stops the run; a harness without the canary capability yields a
+Test on fakes: a build check over a stale output whose scaffold cannot build fails, and over one that
+builds runs the build and passes; a build that writes outside its output folder stops on the clean
+read. Test on fakes: a failing kit line stops the run; a harness without the canary capability yields a
 preview line, an `unavailable` attempt, and a run that can end `complete` with the line in its
 summary; a scan that passed in one invocation is attempted again in the next before the push, and
 the journal then holds both attempts; a scan that passed on one commit does not let the push run
