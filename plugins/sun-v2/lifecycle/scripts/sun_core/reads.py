@@ -20,7 +20,8 @@ must show:
                                                      stands with its content, and every other file is one git ignores
     {"read": "ref", "repo": V, "ref": WORD, "exists": B | "equals": V}   a branch's commit, read by the tool from the
                                                      repository itself (SEC-4's hash row; G19-10)
-    {"read": "command", "command": NAME, "result": KIND, "field": F, "equals": WORD}
+    {"read": "command", "command": NAME, "result": KIND, "field": F, "equals": WORD}   false where the field stands
+                                                     nowhere in the answer (G24-1)
     {"read": "commit-scan", "repo": V, "env_file": V, "link_file": V, "fixed_words": {VAR: [WORD]}}
     {"read": "push-scan", ..., "branch": WORD, "base": REF}   SEC-10's check before a commit and before a push
                                                              (`commitscan`); false on a hit, which `last_hit` names
@@ -182,7 +183,9 @@ class Reader(object):
                 if "present" in c:
                     return (kept is not None) == bool(c["present"])      # an optional field that stood nowhere (G19-9)
                 if kept is None:
-                    return UNREADABLE
+                    # G24-1 (OP-5): an equality on a field that stands nowhere is false (a tag read before it exists is not
+                    # the scanned commit), so a probe that asks the after-test first reads the before-test next
+                    return False if "equals" in c else UNREADABLE
                 if "equals" in c:
                     want = c["equals"]
                     want = self.value(want) if isinstance(want, dict) else want

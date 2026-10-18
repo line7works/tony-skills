@@ -341,6 +341,16 @@ def landed(engine, operation, cid):
         if staged and staged[-1].get("identity") == engine.fs.identity(start["thing"]["path"]):
             if start["thing"].get("mode") is not None and engine.fs.mode(start["thing"]["path"]) != start["thing"]["mode"]:
                 engine.fs.chmod(start["thing"]["path"], start["thing"]["mode"])
+            if start["thing"].get("exists") is False:
+                # G24-4 (OP-4, OP-6's `landed` row): a thing whose before-state was its absence, published as C1 publishes,
+                # takes its construction's modes as `c3_absent` and `c3_absent_folder` give them, a kill having come between the
+                # publish and the giving: the folder's mode, and its `.gitkeep`'s 0644
+                place = start["thing"]["path"]
+                settle_mode(engine, operation, place)
+                keep = os.path.join(place, ".gitkeep")
+                if ((operation["construction"].get("edit") or {}).get("gitkeep") and engine.fs.isfile(keep) and not engine.fs.islink(keep)
+                        and engine.fs.mode(keep) != 0o644):
+                    engine.fs.chmod(keep, 0o644)
             after_check(engine, operation)
             complete(engine, operation, "b", inputs_of(engine, op))
             return
@@ -1241,7 +1251,9 @@ def c3(engine, operation, answer):
     new = edited(before, construction["edit"], lambda mark: held_text(engine, mark, op), lambda p: other_text(engine, p))
     if new is None:
         raise Stop("foreign", op, what=placement_unmet(engine.value, operation, path, op))
-    inputs = engine.save_reverse_inputs(operation)
+    # G24-6 (a): the swap's own computed text handed as G22-7's `computed`, so that a `computed` input is the very text the swap
+    # puts in place (set's T17: "the note after", which its reverse V06 checks the note against, EV-6)
+    inputs = engine.save_reverse_inputs(operation, (None, before, new))
     start_record(engine, operation, answer, {"path": path, "exists": True, "identity": identity, "sha256": fsio.sha256_hex(before), "mode": mode},
                  {"path": path, "exists": True, "sha256": fsio.sha256_hex(new)}, inputs)
     folder = enginemod.staging_of(engine.run_dir, op)
@@ -1277,15 +1289,20 @@ def _lines(text):
 
 
 def _merged(text, body, pointer):
-    """The kit merge (G23-13; rows-rise 3.5, SR03-agents): where the file's one content line is the old pointer line, that
-    line replaced by the body; else each line of the body the file lacks added at the end of its heading's section, the
-    heading added at the end where it is absent, and what stands kept. A line before the body's first heading goes at the
+    """The kit merge (G23-13; rows-rise 3.5, SR03-agents): where the file's content lines are the old pointer (one line, or
+    the lines of a text of several, G24-5), standing next to each other, those lines replaced by the body; else each line of
+    the body the file lacks added at the end of its heading's section, the heading added at the end where it is absent, and
+    what stands kept. A line before the body's first heading goes at the
     end of the file's lines before its own first heading."""
     have = _lines(text)
     content = [l for l in have if l.strip() and not l.startswith("#")]
-    if pointer is not None and content == [pointer]:
-        at = have.index(pointer)
-        return "".join(l + "\n" for l in have[:at]) + body + "".join(l + "\n" for l in have[at + 1:])
+    stub = pointer.split("\n") if pointer is not None else None
+    found = reads.span_at(have, stub) if stub and content == stub else []
+    if len(found) == 1:
+        # the old stub as it stands, its one line or its lines next to each other (G24-5: v1's old AGENTS.md stub has two),
+        # being the file's every content line: those lines replaced by the body, nothing else of the file touched
+        at = found[0]
+        return "".join(l + "\n" for l in have[:at]) + body + "".join(l + "\n" for l in have[at + len(stub):])
     out, heading = list(have), None
     for line in _lines(body):
         if line.startswith("#"):
