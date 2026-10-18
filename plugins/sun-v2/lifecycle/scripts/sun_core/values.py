@@ -48,6 +48,7 @@ VALIDATORS = {
     "a launch agent's label": re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}"),
     "a date": re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}"),
     "a shortcut's name": re.compile(r"[a-z0-9]{2,5}"),           # rise's shortcut: 2 to 5 lowercase letters or digits (G20-3)
+    "a shortcut name": re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}"),     # set's T11: a found alias's name (rows-set 8, item 1; G23-19)
     # rise's L24 (R8; G21-6): a folder a shell line holds between double quotes, with no `"`, `$`, backtick, backslash or line break
     "a path a shell line may hold": re.compile(r'[^"$`\\\r\n]{1,1024}'),
 }
@@ -230,6 +231,9 @@ def is_mark(node):
         return isinstance(held, dict) and set(held) in ({"name", "by"}, {"name", "by", "cut"})
     if key == "checked":
         return isinstance(held, dict) and set(held) == {"value", "validator"}
+    if key == "read":
+        # G23-5: a held field the row's own command read, made at the operation's time and going back to its issuer (SEC-2)
+        return isinstance(held, dict) and set(held) == {"command", "field"}
     return False
 
 
@@ -301,6 +305,8 @@ def resolve(value, outputs):
         return value["literal"]
     if "record" in value:
         return Held(value["record"])
+    if "read" in value and is_mark(value):
+        raise Unsettled("a held field a command of the row reads when the operation runs")
     if "checked" in value and is_mark(value):
         found = resolve(value["checked"]["value"], outputs)
         try:

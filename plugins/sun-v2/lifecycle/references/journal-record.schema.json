@@ -918,6 +918,46 @@
      ],
      "type": "object"
     },
+    "held_fields": {
+     "additionalProperties": {
+      "additionalProperties": false,
+      "properties": {
+       "fingerprint": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+       },
+       "label": {
+        "maxLength": 200,
+        "type": "string"
+       },
+       "record": {
+        "pattern": "^p-[0-9a-f]{16}$",
+        "type": "string"
+       },
+       "type": {
+        "enum": [
+         "before-image",
+         "after-image",
+         "definition",
+         "line",
+         "values",
+         "copy",
+         "held field",
+         "secret field"
+        ]
+       }
+      },
+      "required": [
+       "record",
+       "type",
+       "label",
+       "fingerprint"
+      ],
+      "type": "object"
+     },
+     "maxProperties": 16,
+     "type": "object"
+    },
     "inv": {
      "pattern": "^i-[0-9a-f]{16}$",
      "type": "string"

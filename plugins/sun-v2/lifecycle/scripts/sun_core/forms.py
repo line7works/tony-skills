@@ -174,9 +174,14 @@ def preview_lines(manifest):
                 head += "; " + line_for("unavailable", changes, what=what)
             if operation.get("resend"):
                 head += "; an earlier send got no answer"
+            if operation.get("no_way_back"):
+                head += "; no way back can be recorded: %s" % operation["no_way_back"]      # EV-4 (G23-18)
             if operation.get("not_proven"):
                 head += "; " + line_for("not proven, on his word", changes, what=what)     # EV-5: on every form
             out.append(head)
+            for key in operation.get("not_saved") or []:
+                # a hosting variable whose value the provider never returns, named by its key as not saved (SEC-6, A148)
+                out.append("      " + line_for("not saved", changes, name=key, what=what))
             if rk18_line(operation):
                 out.append("      " + line_for(RK18_KEY, changes, what=rk18_line(operation)))
             for name in operation.get("repo_commands") if isinstance(operation.get("repo_commands"), list) else []:

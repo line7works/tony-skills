@@ -145,8 +145,9 @@ class Sweep(object):
         self.statuses = machine.statuses(looked.doc["run"])
         self.test.assertEqual(twice(self.facts), [])
 
-    def kill_at(self, point):
-        """One kill point on a machine of its own. Returns (the outcome's word, the failure as words or None)."""
+    def kill_at(self, point, hook=None):
+        """One kill point on a machine of its own. Returns (the outcome's word, the failure as words or None). `hook`, where a
+        test gives one, is handed to the first resume as its event hook (it never kills): a race made to fall where it can."""
         folder = os.path.join(self.tmp, "k%d" % point)
         os.makedirs(folder)
         try:
@@ -158,7 +159,7 @@ class Sweep(object):
             results = [looked, died]
             if not died.killed:
                 return "ended first", "point %d: the command ended before the boundary (exit %s)" % (point, died.code)
-            ending, reason = None, None
+            ending, reason, settled = None, None, False
             for _round in range(6):
                 ended = [r for r in machine.journal(run) if r["kind"] == "run-end"]
                 status = machine.summon("status", self.name, env=self.env)
@@ -180,8 +181,10 @@ class Sweep(object):
                 else:
                     if status.doc is None or status.doc.get("position") is None:
                         return "broken", "point %d: the status summons gave no position: %s" % (point, status.text[:300])
+                    more = {"kill": (lambda event, m=machine, h=hook: h(m, event))} if hook is not None else {}
+                    hook = None
                     again = machine.summon("resume", self.name, "--position", status.doc["position"], "--word", "go on",
-                                           env=self.env)
+                                           env=self.env, **more)
                     results.append(again)
                     ending = again.ending
                 if ending in ("complete", "ended with exceptions"):
@@ -189,6 +192,14 @@ class Sweep(object):
                 if ending == "stopped":
                     reason = [l for l in again.lines if l.startswith("stopped: ")]
                     reason = reason[0][len("stopped: "):] if reason else ""
+                    if reason == "foreign" and self.child_outlives(point) and not settled:
+                        # G23-23: a kill as a child of the go runs leaves that child running, in a session of its own (the
+                        # runner's start): its effect can land between the rerun's two probe reads, which then read neither
+                        # state, `foreign`, and OP-6 stops. That is the frame's cell; "the next probe reads the world again":
+                        # once the dead invocation's children have ended, one more resume must reach the reference end
+                        wait_for_children(machine)
+                        settled = True
+                        continue
                     break
             found = scan_point(machine, results)            # SEC-11 over this kill point's executions (S1)
             with self.lock:
@@ -205,12 +216,18 @@ class Sweep(object):
                     return "differs", "point %d (%s): the finished run differs from the reference: %s" % (
                         point, self.describe(point), diff(self.facts, facts))
                 unproven = sorted(op for op, st in statuses.items() if st == "not proven")
-                return ("not proven: " + ",".join(unproven)) if unproven else "complete", None
+                word = ("not proven: " + ",".join(unproven)) if unproven else "complete"
+                return ("stopped foreign, then " + word) if settled else word, None
             if ending == "stopped" and reason in self.plain_stops:
                 return "stopped: " + reason, None
             return "bad ending", "point %d (%s): the rerun ended %s (%s)" % (point, self.describe(point), ending, reason)
         finally:
             shutil.rmtree(folder, True)
+
+    def child_outlives(self, point):
+        """Whether the kill point falls while a child the go started may still be running (`mid child`)."""
+        event = self.boundaries[point]
+        return event["stage"] == "mid" and event["op"] == "child"
 
     def describe(self, point):
         event = self.boundaries[point]
@@ -249,6 +266,26 @@ class Sweep(object):
                     "failed": len(failures), "workers": len(threads), "scanned": self.scanned,
                     "scanned_reference": self.scanned_reference}
         return sorted(failures)
+
+
+def wait_for_children(machine, most=120.0):
+    """Wait until every process a fake recorded for this machine has ended (by its recorded pid), or `most` seconds."""
+    import time
+    pids = set()
+    root = os.path.join(machine.home, ".fakes")
+    for tool in sorted(os.listdir(root)) if os.path.isdir(root) else []:
+        pids.update(c.get("pid") for c in machine.fake(tool, "calls.jsonl", []) or [] if isinstance(c.get("pid"), int))
+    deadline = time.time() + most
+    while pids and time.time() < deadline:
+        for pid in list(pids):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                pids.discard(pid)
+            except PermissionError:
+                pass
+        if pids:
+            time.sleep(0.05)
 
 
 def diff(want, got):

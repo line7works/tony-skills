@@ -551,7 +551,8 @@ class MoreItems(harness.Case):
                  ("a key added between the two reads", [keys_doc("FIXTURE_URL", "FIXTURE_KEY"), keys_doc("FIXTURE_URL", "FIXTURE_KEY", "NEW")], "stopped"),
                  ("a returned key the copy lacks", [keys_doc("FIXTURE_URL", "FIXTURE_KEY", "LOST")] * 2, "stopped"),
                  ("a key of the copy that is neither returned nor listed apart", [keys_doc("FIXTURE_URL")] * 2, "stopped"),
-                 ("a key whose value is never returned, listed apart", [sensitive] * 2, "complete"))
+                 # three reads: the look's (G23-8: it names the keys set apart in the preview), and the keep's two
+                 ("a key whose value is never returned, listed apart", [sensitive] * 3, "complete"))
         for label, docs, ending in cases:
             with self.subTest(case=label):
                 m = self.machine("i%d" % len(label), "i%d" % len(label))

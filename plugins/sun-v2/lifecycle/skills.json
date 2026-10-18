@@ -8,6 +8,6 @@
   "summonses": {
     "sunrise": "sunrise-v2",
     "sunset": "sunset-v2",
-    "restore": null
+    "restore": "sunset-v2"
   }
 }
