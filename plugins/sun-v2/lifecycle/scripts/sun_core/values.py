@@ -12,6 +12,8 @@ A row writes a value as one of these marks:
     {"text": [V, ...]}             a text the tool builds from other values
     {"output": "name.field"}       a field of an output an operation of the same plan provides
     {"record": {...}}              a reference to a protected record
+    {"identity": "planned"}        in a retiring row's tests: its target's identity as the look read it, kept as a protected
+                                   record and compared in memory (`plan.bind_planned`; G25-1)
     {"saved": 0}                   in a reverse row: the input its forward row saved at that place of its
                                    `reverse_inputs` (LOG-2); a restore binds it to its own copy of that record (EV-5, EV-6)
     {"clock": "date"}               the run's date by the tool's own clock, settled at the look and frozen into the manifest

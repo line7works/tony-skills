@@ -165,6 +165,9 @@
          },
          "text": {
           "$ref": "#/$defs/value"
+         },
+         "under": {
+          "$ref": "#/$defs/value"
          }
         },
         "required": [
@@ -338,6 +341,9 @@
           "type": "string"
          },
          "text": {
+          "$ref": "#/$defs/value"
+         },
+         "under": {
           "$ref": "#/$defs/value"
          }
         },
@@ -594,6 +600,9 @@
           "type": "string"
          },
          "text": {
+          "$ref": "#/$defs/value"
+         },
+         "under": {
           "$ref": "#/$defs/value"
          }
         },
@@ -2314,6 +2323,9 @@
          },
          "text": {
           "$ref": "#/$defs/value"
+         },
+         "under": {
+          "$ref": "#/$defs/value"
          }
         },
         "required": [
@@ -2981,6 +2993,9 @@
            },
            "text": {
             "$ref": "#/$defs/value"
+           },
+           "under": {
+            "$ref": "#/$defs/value"
            }
           },
           "required": [
@@ -3381,6 +3396,9 @@
          },
          "text": {
           "$ref": "#/$defs/value"
+         },
+         "under": {
+          "$ref": "#/$defs/value"
          }
         },
         "required": [
@@ -3554,6 +3572,9 @@
           "type": "string"
          },
          "text": {
+          "$ref": "#/$defs/value"
+         },
+         "under": {
           "$ref": "#/$defs/value"
          }
         },
@@ -3743,6 +3764,9 @@
           "type": "string"
          },
          "text": {
+          "$ref": "#/$defs/value"
+         },
+         "under": {
           "$ref": "#/$defs/value"
          }
         },
@@ -5436,6 +5460,9 @@
          },
          "text": {
           "$ref": "#/$defs/value"
+         },
+         "under": {
+          "$ref": "#/$defs/value"
          }
         },
         "required": [
@@ -6086,6 +6113,9 @@
            },
            "text": {
             "$ref": "#/$defs/value"
+           },
+           "under": {
+            "$ref": "#/$defs/value"
            }
           },
           "required": [
@@ -6567,6 +6597,18 @@
      },
      "required": [
       "read"
+     ],
+     "type": "object"
+    },
+    {
+     "additionalProperties": false,
+     "properties": {
+      "identity": {
+       "const": "planned"
+      }
+     },
+     "required": [
+      "identity"
      ],
      "type": "object"
     },
