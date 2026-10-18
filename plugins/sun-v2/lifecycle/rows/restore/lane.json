@@ -1,0 +1,404 @@
+{
+ "alias_reads": [],
+ "checklist": [
+  {
+   "answered_by": {
+    "form_line": "passed"
+   },
+   "item": "F18 passed / answered: form lines `passed`, `answered`"
+  },
+  {
+   "answered_by": {
+    "reason": "FORM-2's own `not applicable` line carries slice 1's EV-7 reason words"
+   },
+   "item": "F18 EV-7's missing keep or record"
+  },
+  {
+   "answered_by": {
+    "reason": "slice 3's lines, which the sunset's last record renders; no test load is ruled (A2)"
+   },
+   "item": "F18 clocks and what expires; no test load"
+  },
+  {
+   "answered_by": {
+    "reason": "the sunset lane's row T02 states it; a restore saves nothing"
+   },
+   "item": "F18 the not-saved list"
+  },
+  {
+   "answered_by": {
+    "reason": "no row here takes a type or names Notion; backup is slice 3's; the tombstone says the database is not paused"
+   },
+   "item": "D20 R3/R4, A1 P6/P7/P8"
+  },
+  {
+   "answered_by": {
+    "row": "V30"
+   },
+   "item": "D20 A1 P9/P10 inventory (T12, T13, T14, T16, T17, T05, T18, T19, T11, T10a to T10d, T30; the hand-off prompt)"
+  },
+  {
+   "answered_by": {
+    "reason": "the reason is the required input `description`; dirty work is the look question G8; loose ends are the lane's preview lines, never acted on; other trackers are the skill's summary line (A152); the rest is sunrise's"
+   },
+   "item": "D20 E16-1"
+  },
+  {
+   "answered_by": {
+    "reason": "a restore saves nothing; T03 and T04 are slice 3's"
+   },
+   "item": "D20 A1 P11, A2"
+  },
+  {
+   "answered_by": {
+    "reason": "the sunset lane's T10a and T10b, put back by V14b and V14a"
+   },
+   "item": "D20 A4 (a launch agent unloaded and its file moved)"
+  },
+  {
+   "answered_by": {
+    "row": "V30"
+   },
+   "item": "D20 A6 (restore on the machine holding the run directory; owner steps carried; private schedule records named)"
+  },
+  {
+   "answered_by": {
+    "reason": "the phases of rows-set 3.3, as the lane declares them, and `putting back the indexes` after the machine's, so that V06 puts each note back before V03 and V05 (ORD-4)"
+   },
+   "item": "D20 C1's phase order"
+  },
+  {
+   "answered_by": {
+    "reason": "slice 1's (G19 to G22); launchctl's exit is not definite, so C6 with an after-check"
+   },
+   "item": "D20 shared schemas; provider primitives"
+  }
+ ],
+ "facts": [],
+ "fixed_text": {
+  "summary": [
+   {
+    "text": [
+     {
+      "literal": "RESTORE COMPLETE: "
+     },
+     {
+      "name": 0
+     }
+    ]
+   }
+  ]
+ },
+ "form_changes": {
+  "a loose end": "loose end, yours to handle, never acted on: {file} in {REPO}",
+  "a receipt due": "a secret may have been received and lost: operation {operation}, execution {execution}, field {field}",
+  "a safe ground disproved": "a value this run held as safe is withheld ({count} on record)",
+  "answered": "you answered: {what}",
+  "not offered": "not offered by this restore ({reason}): {what}",
+  "not proven, on his word": "runs on your word; it was not proven the retirement's: {what}",
+  "passed": "the check passed: {what}",
+  "the RK18 mark": "carried under v1's own risk for this step (RK18): {what}",
+  "waiting, not shown": "waiting on you: {what}; its read was not made or got no answer, so its step is not shown"
+ },
+ "kind": "restore",
+ "lane_version": 1,
+ "last_record_head": [
+  {
+   "literal": "---"
+  },
+  {
+   "text": [
+    {
+     "literal": "created: "
+    },
+    {
+     "clock": "date"
+    }
+   ]
+  },
+  {
+   "literal": "source: sun-v2"
+  },
+  {
+   "literal": "type: restore"
+  },
+  {
+   "literal": "---"
+  },
+  {
+   "literal": ""
+  },
+  {
+   "text": [
+    {
+     "literal": "# Restore: "
+    },
+    {
+     "name": 0
+    }
+   ]
+  },
+  {
+   "literal": ""
+  },
+  {
+   "text": [
+    {
+     "literal": "- Date: "
+    },
+    {
+     "clock": "date"
+    }
+   ]
+  },
+  {
+   "text": [
+    {
+     "literal": "- Reason: "
+    },
+    {
+     "input": "description"
+    }
+   ]
+  },
+  {
+   "literal": ""
+  }
+ ],
+ "phases": [
+  "putting back on this machine",
+  "putting back the indexes",
+  "putting back at the providers",
+  "starting again",
+  "the last record"
+ ],
+ "questions": [],
+ "rows": [
+  {
+   "after_check": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       },
+       {
+        "text": [
+         {
+          "literal": "_restore-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       },
+       {
+        "text": [
+         {
+          "literal": "_restore-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       },
+       {
+        "text": [
+         {
+          "literal": "_restore-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": "none",
+   "condition": "none",
+   "construction": {
+    "id": "C1",
+    "last_record": true,
+    "mode": 420,
+    "single_file": true
+   },
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "records by label and path"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "write this restore's entry at <path>; the tombstone and the sunset folder stay; a restore runs only on the machine that holds the sunset's run directory",
+    "status": "this restore's entry is <path>; the tombstone and the sunset folder stay"
+   },
+   "id": "V30",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "build",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "vault folder back",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       },
+       {
+        "text": [
+         {
+          "literal": "_restore-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "name": "restore entry"
+   },
+   "owner_names": "none",
+   "phase": "the last record",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "location": "vault_projects"
+       },
+       {
+        "name": 1
+       },
+       {
+        "text": [
+         {
+          "literal": "_restore-"
+         },
+         {
+          "run": "id"
+         },
+         {
+          "literal": ".md"
+         }
+        ]
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "place": {
+     "path": [
+      {
+       "location": "vault_projects"
+      },
+      {
+       "name": 1
+      },
+      {
+       "text": [
+        {
+         "literal": "_restore-"
+        },
+        {
+         "run": "id"
+        },
+        {
+         "literal": ".md"
+        }
+       ]
+      }
+     ]
+    },
+    "role": "this restore's record",
+    "tracked": [
+     "exists",
+     "identity",
+     "sha256"
+    ]
+   },
+   "way_back": "none"
+  }
+ ]
+}
