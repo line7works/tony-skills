@@ -6,6 +6,7 @@ RUN-13 say of a caught value is in `test_withheld_read.py` and `test_secrets_end
 """
 import json
 import os
+import time
 import unittest
 
 import fab
@@ -809,7 +810,22 @@ class RUN5to8(RunCase):
                 m = harness.Machine(self.tmp, "rd%d" % index, cause)
                 rowlib.install(m, rowlib.lane("sunrise", [rowlib.create("C1")]), providers=providers)
                 m.plan_fake("fakehost", plan)
-                stopped = m.look()
+
+                # the join's J2b (the class of J1b item 6): the read's one-second limit counts from the runner's `mid child`
+                # event (the child started); under load the fake's own first act, its call record, came 1.6 to 2.7 s after
+                # it, and the limit ended a child that was about to answer. The limit is made to fall where the test means it,
+                # after the fake has started and recorded its call, by that event: at `mid child`, before the limit counts,
+                # wait (60 s at most) for this child's own record (one more than at its `pre child` event: the look's
+                # identity read is a child of the fake too). Its rule, each cause ending the look named, is unchanged
+                def started(e, m=m, seen={}):
+                    if e["op"] == "child" and e["subject"] == "fakehost" and e["stage"] == "pre":
+                        seen["before"] = len(m.calls("fakehost"))
+                    if e["op"] == "child" and e["stage"] == "mid" and e.get("started") and e["subject"] == "fakehost":
+                        until = time.time() + 60
+                        while len(m.calls("fakehost")) <= seen.get("before", 0) and time.time() < until:
+                            time.sleep(0.01)
+                    return False
+                stopped = m.look(kill=started)
                 self.assertEqual(stopped.ending, "refused", stopped.text)
                 self.assertTrue(any(line.startswith(cause) for line in stopped.lines), stopped.lines)
         m = harness.Machine(self.tmp, "acct", "acct")

@@ -89,6 +89,8 @@ FIXTURES = {"clean": clean, "credentials": credentials, "owner-step": owner_step
 def plant(m, facts, what):
     """One planted condition, by its name. Each is a fact about the fixture, not an outcome."""
     kind = what["plant"]
+    if kind in JOINED_PLANTS:
+        return JOINED_PLANTS[kind](m, facts, what)
     if kind == "no-vault":
         shutil.rmtree(m.vault)
     elif kind == "stub-vault":
@@ -146,3 +148,159 @@ def make_family(family, cases):
                       fh, indent=1, sort_keys=True)
     print(json.dumps({"family": family, "built": sorted(cases), "out": os.path.abspath(args.out)}))
     return 0
+
+
+# ---- the joined lanes (the join's part J2): the families L0, L2, L3, L5, L7 and L8 ---------------------------------------
+# A case of these families is built on the join's one fixture machine (`tests/test_join_sequence.seed`): the three lanes as
+# they ship, every shipped declaration, and every lane's fakes (slice 2's scaffolders and recorded git, slice 3's `gh`,
+# `vercel`, `psql`, `pg_dump`, `curl` and the fake host of the frame's own requests, slice 4's schedule tools and adapter).
+# What the fixture machine holds only in memory (the system folders the fakes stand in, the hosting token, the fake host) is
+# kept in `case.json` under `wiring`, and `joined_machine` gives it back when `observe.py` drives the case.
+JOINED = ("joined",)
+JOINED_NAMES = ("demo", "demo")                      # --also, as the join's sequence gives them
+JOINED_CAPS = ("canary", "memory stores", "routines")
+
+
+def join_sequence():
+    import test_join_sequence  # noqa: E402  (the join's fixture; it brings the lanes' helpers onto the path)
+    return test_join_sequence
+
+
+def joined(m, facts):
+    """The join's sequence's machine before any run, and the project's own memory store (as the sequence makes it)."""
+    js = join_sequence()
+    js.seed(m)
+    os.makedirs(js.store(m))
+    with open(os.path.join(js.store(m), "MEMORY.md"), "w") as fh:
+        fh.write("# memory\n")
+    facts["wiring"] = {"system_folders": list(m.system_folders), "token": m.token}
+    facts["password"] = m.password
+    pg = js.provlib.state(m, "pg")
+    facts["held"] = {"identity": pg.get("identity"), "tables": sorted(pg.get("tables") or {})}    # for the observation's scan
+
+
+FIXTURES["joined"] = joined
+
+
+def joined_machine(out, case, facts):
+    """The case's fixture machine as `observe.py` drives it: its wiring given back (`joined`'s note)."""
+    js = join_sequence()
+    m = harness.Machine(os.path.join(out, case), "home", case, create=False)
+    m.rows_root = facts.get("rows_root")
+    m.system_folders = tuple(facts["wiring"]["system_folders"])
+    m.token = facts["wiring"]["token"]
+    m.env[js.provlib.TOKEN] = m.token
+    m.transport = js.provlib.prov_fake.VercelAPI(m.home, m.token)
+    return m
+
+
+def _put(m, facts, what):
+    m.put(what["rel"], what["text"], int(what.get("mode", "644"), 8))
+    if what.get("note_sha256_as"):
+        facts[what["note_sha256_as"]] = hashlib.sha256(what["text"].encode("utf-8")).hexdigest()
+
+
+def _program_on_login_path(m, facts, what):
+    m.put(os.path.join("opt", "pm", "bin", what["name"]), "#!/bin/sh\n", 0o755)
+    m.put(".zprofile", "path+=(%s)\n" % m.path("opt", "pm", "bin"))
+
+
+def _provider_state(m, facts, what):
+    join_sequence().provlib.put_state(m, what["provider"], **what["fields"])
+
+
+def _provider_plan(m, facts, what):
+    join_sequence().provlib.plan(m, what["provider"], *what["entries"])
+
+
+def _provider_thing_gone(m, facts, what):
+    provlib = join_sequence().provlib
+    state = provlib.state(m, what["provider"])
+    del state["things"][what["name"]]
+    provlib.prov_fake.save_at(m.home, what["provider"], state)
+
+
+def _remote_with_a_commit(m, facts, what):
+    """A repository of the project's name at the fake GitHub, with another's commit on its main."""
+    provlib = join_sequence().provlib
+    bare = provlib.prov_fake.remote(provlib.ACCOUNT, "demo", m.home)
+    os.makedirs(os.path.dirname(bare), exist_ok=True)
+    provlib.git(m.home, "init", "-q", "--bare", bare)
+    other = m.path("other")
+    os.makedirs(other)
+    provlib.git(other, "init", "-q")
+    m.put("other/x.txt", "another's\n")
+    provlib.git(other, "add", "-A")
+    provlib.git(other, "commit", "-q", "-m", "another's")
+    provlib.git(other, "push", "-q", bare, "main")
+    provlib.put_state(m, "gh", account=provlib.ACCOUNT,
+                      things={"demo": {"id": "R_another1", "kind": "repo", "state": "active", "name": "demo"}})
+
+
+def _committed_secret(m, facts, what):
+    """His folder at the project's place, a repository on main whose one commit holds a value of its env file."""
+    provlib = join_sequence().provlib
+    facts["leak"] = canary(facts["case"], "leak")
+    repo = m.path("dev", "demo")
+    os.makedirs(repo)
+    provlib.git(repo, "init", "-q")
+    m.put("dev/demo/notes.txt", "his notes %s\n" % facts["leak"])
+    m.put("dev/demo/.gitignore", ".env*\n")
+    provlib.git(repo, "add", "-A")
+    provlib.git(repo, "commit", "-q", "-m", "his")
+    m.put("dev/demo/.env.local", "DATABASE_URL=%s\n" % facts["leak"], 0o600)
+
+
+def _tag_push_refused(m, facts, what):
+    """The fake GitHub's repository refuses every tag pushed to it (a hook of the bare repository's own)."""
+    provlib = join_sequence().provlib
+    hook = os.path.join(provlib.prov_fake.remote(provlib.ACCOUNT, "demo", m.home), "hooks", "pre-receive")
+    with open(hook, "w") as fh:
+        fh.write("#!/bin/sh\nwhile read old new ref; do case $ref in refs/tags/*) echo 'tags are refused here' >&2; exit 1;; "
+                 "esac; done\nexit 0\n")
+    os.chmod(hook, 0o755)
+
+
+def _edit_text(m, facts, what):
+    path = m.path(what["rel"])
+    with open(path) as fh:
+        text = fh.read()
+    with open(path, "w") as fh:
+        fh.write(text.replace(what["old"], what["new"], 1))
+
+
+def _schedule_layers(m, facts, what):
+    """The set lane's schedule layers for the project, as its own fixture plants them (`test_lane_set_lib.plant`): a launch
+    agent naming the project's folder and another's, both loaded; a crontab with another's line and the project's; two
+    routines of the adapter, one naming the project's folder. Planted once the project's folder stands (after a sunrise)."""
+    setlib = join_sequence().setlib
+    repo = m.path("dev", "demo")
+    m.put("agents/com.fixture.demo.plist", setlib.PLIST % ("com.fixture.demo", os.path.join(repo, "run.sh")))
+    m.put("agents/com.fixture.other.plist", setlib.PLIST % ("com.fixture.other", "/elsewhere/run.sh"))
+    setlib.fake_state(m, "launchctl", loaded=["com.fixture.demo", "com.fixture.other"])
+    setlib.fake_state(m, "crontab", table="0 1 * * * other\n5 * * * * %s/run.sh\n" % repo)
+    setlib.fake_state(m, "sun-adapter", routines={
+        "r-one": {"text": "nightly build in %s" % repo, "state": "active", "definition": "nightly build, every night\n"},
+        "r-two": {"text": "nightly build elsewhere", "state": "active", "definition": "elsewhere\n"}})
+
+
+def _dump_of_another_database(m, facts, what):
+    """The fake `pg_dump` alone, in the case's own program folder, first turns the fake database into another one (another
+    identity, another table) and then dumps it: the inventory read before it sees the database the project names (the
+    reviewer's probe, J2-3)."""
+    provlib = join_sequence().provlib
+    helper = os.path.join(m.root, "dump-of-another-database.py")
+    with open(helper, "w") as fh:
+        fh.write("import json, os, runpy\n"
+                 "path = os.path.join(os.environ['HOME'], '.fakes', 'pg', 'state.json')\n"
+                 "state = json.load(open(path))\nstate.update(%s)\njson.dump(state, open(path, 'w'))\n"
+                 "runpy.run_path(%r, run_name='__main__')\n" % (repr(what["becomes"]), provlib.FAKE))
+    programs = os.path.join(m.root, "prov-programs-" + m.seed.replace("/", "_"))
+    provlib.wrapper(os.path.join(programs, "pg_dump"), "exec /usr/bin/python3 -B '%s' pg_dump \"$@\"" % helper)
+
+
+JOINED_PLANTS = {"put": _put, "program-on-login-path": _program_on_login_path, "provider-state": _provider_state,
+                 "provider-plan": _provider_plan, "provider-thing-gone": _provider_thing_gone,
+                 "remote-with-a-commit": _remote_with_a_commit, "committed-secret": _committed_secret,
+                 "tag-push-refused": _tag_push_refused, "edit-text": _edit_text, "schedule-layers": _schedule_layers,
+                 "dump-of-another-database": _dump_of_another_database}
