@@ -1,0 +1,330 @@
+{
+ "commands": {
+  "astro": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [],
+   "repository_writes": "off",
+   "template": [
+    {
+     "literal": "create"
+    },
+    {
+     "literal": "--yes"
+    },
+    {
+     "literal": "astro@latest"
+    },
+    {
+     "literal": "--"
+    },
+    {
+     "literal": "."
+    },
+    {
+     "literal": "--template"
+    },
+    {
+     "literal": "minimal"
+    },
+    {
+     "literal": "--install"
+    },
+    {
+     "literal": "--no-git"
+    },
+    {
+     "literal": "--yes"
+    },
+    {
+     "literal": "--skip-houston"
+    }
+   ],
+   "time_limit": 900,
+   "tool": "npm",
+   "trace_flags": [
+    "--verbose",
+    "--debug",
+    "--trace"
+   ]
+  },
+  "build": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "--prefix"
+    },
+    {
+     "param": "work"
+    },
+    {
+     "literal": "run"
+    },
+    {
+     "literal": "build"
+    }
+   ],
+   "time_limit": 900,
+   "tool": "npm",
+   "trace_flags": [
+    "--verbose",
+    "--debug",
+    "--trace"
+   ]
+  },
+  "electron": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [],
+   "repository_writes": "off",
+   "template": [
+    {
+     "literal": "create"
+    },
+    {
+     "literal": "--yes"
+    },
+    {
+     "literal": "@quick-start/electron@latest"
+    },
+    {
+     "literal": "."
+    },
+    {
+     "literal": "--"
+    },
+    {
+     "literal": "--template"
+    },
+    {
+     "literal": "vanilla"
+    }
+   ],
+   "time_limit": 900,
+   "tool": "npm",
+   "trace_flags": [
+    "--verbose",
+    "--debug",
+    "--trace"
+   ]
+  },
+  "next": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [],
+   "repository_writes": "off",
+   "template": [
+    {
+     "literal": "--yes"
+    },
+    {
+     "literal": "create-next-app@latest"
+    },
+    {
+     "literal": "."
+    },
+    {
+     "literal": "--yes"
+    },
+    {
+     "literal": "--disable-git"
+    }
+   ],
+   "time_limit": 900,
+   "tool": "npx",
+   "trace_flags": [
+    "--verbose",
+    "--debug",
+    "--trace"
+   ]
+  },
+  "npm": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [],
+   "repository_writes": "off",
+   "template": [
+    {
+     "literal": "init"
+    },
+    {
+     "literal": "--yes"
+    }
+   ],
+   "time_limit": 120,
+   "tool": "npm",
+   "trace_flags": [
+    "--verbose",
+    "--debug",
+    "--trace"
+   ]
+  },
+  "package": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "--prefix"
+    },
+    {
+     "param": "work"
+    },
+    {
+     "literal": "pkg"
+    },
+    {
+     "literal": "get"
+    },
+    {
+     "literal": "name"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "npm",
+   "trace_flags": [
+    "--verbose",
+    "--debug",
+    "--trace"
+   ]
+  },
+  "run-py": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-I"
+    },
+    {
+     "literal": "-B"
+    },
+    {
+     "param": "script"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "python3",
+   "trace_flags": [
+    "--verbose",
+    "--debug",
+    "--trace"
+   ]
+  },
+  "uv": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [],
+   "repository_writes": "off",
+   "template": [
+    {
+     "literal": "init"
+    },
+    {
+     "literal": "--vcs"
+    },
+    {
+     "literal": "none"
+    },
+    {
+     "literal": "--app"
+    },
+    {
+     "literal": "."
+    }
+   ],
+   "time_limit": 120,
+   "tool": "uv",
+   "trace_flags": [
+    "--verbose",
+    "--debug",
+    "--trace"
+   ]
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "scaffold",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": [
+  "--verbose",
+  "--debug",
+  "--trace"
+ ]
+}

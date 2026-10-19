@@ -6,6 +6,7 @@ declarations here are fixtures under the tests, written with `rowlib`; none is a
 import copy
 import json
 import os
+import signal
 import subprocess
 
 import harness
@@ -805,9 +806,42 @@ class SweepChildRace(harness.Case):
 
         def prepare(machine):
             test_kill_sweep.prepare(machine)
-            machine.plan_fake("fakegit", {"command": "cas", "do": "late", "seconds": 1.0})
+            machine.plan_fake("fakegit", {"command": "cas", "do": "late", "seconds": 5.0})
+            drive = machine.drive
 
+            def drive_then_hold(*argv, **kw):
+                # the join's J1b item 6: the cas the kill left running is held (SIGSTOP) as soon as the go's child is dead,
+                # and let go (SIGCONT) by the hook below at the rerun's first read, so it lands between that read and the
+                # next by those two events, not by its delay racing the rerun under load; the race and its rule unchanged
+                result = drive(*argv, **kw)
+                if kw.get("kill_at") is not None and result.killed:
+                    import time
+                    until = time.time() + 60            # the cas child records its call first thing: wait for that event
+                    cas = []
+                    while not cas and time.time() < until:
+                        cas = [c for c in (machine.fake("fakegit", "calls.jsonl", []) or []) if (c.get("argv") or [None])[0] == "cas"]
+                        time.sleep(0 if cas else 0.01)
+                    if cas:
+                        held["pid"] = cas[-1]["pid"]
+                        try:
+                            os.kill(held["pid"], signal.SIGSTOP)
+                        except OSError:
+                            held.pop("pid")
+                return result
+            machine.drive = drive_then_hold
+
+        held = {}
+
+        def let_go():
+            # a held child is never left stopped, whatever the test's ending
+            try:
+                if held.get("pid"):
+                    os.kill(held["pid"], signal.SIGCONT)
+            except OSError:
+                pass
+        self.addCleanup(let_go)
         sweep = killlib.Sweep(self, self.tmp, prepare)
+        held.clear()
         # the go's cas: the `mid child fakegit` right after its operation's start record (point 190 on the reference rows)
         point = [p for p in sweep.points if sweep.describe(p) == "mid child fakegit" and sweep.describe(p - 2) == "post journal start"][0]
         seen = {"reads": 0}
@@ -817,6 +851,8 @@ class SweepChildRace(harness.Case):
                 seen["reads"] += 1
                 if seen["reads"] == 1:
                     import time
+                    if held.get("pid"):
+                        os.kill(held["pid"], signal.SIGCONT)
                     deadline = time.time() + 60
                     while ((machine.fake("fakegit", "state.json") or {}).get("refs") or {}).get("main") != "c1" and time.time() < deadline:
                         time.sleep(0.05)

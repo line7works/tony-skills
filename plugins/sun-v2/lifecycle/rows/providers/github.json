@@ -1,0 +1,430 @@
+{
+ "commands": {
+  "archive-set": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GH_NO_UPDATE_NOTIFIER": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "GH_PROMPT_DISABLED": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "NO_COLOR": {
+     "class": "fixed",
+     "value": "1"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other",
+    "4": "auth"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "name": "archived",
+     "place": [
+      "archived"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "flag"
+    }
+   ],
+   "template": [
+    {
+     "literal": "api"
+    },
+    {
+     "literal": "-X"
+    },
+    {
+     "literal": "PATCH"
+    },
+    {
+     "param": "repo_path"
+    },
+    {
+     "literal": "-F"
+    },
+    {
+     "param": "archived_arg"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "gh"
+  },
+  "create": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GH_NO_UPDATE_NOTIFIER": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "GH_PROMPT_DISABLED": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "NO_COLOR": {
+     "class": "fixed",
+     "value": "1"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other",
+    "4": "auth"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_=-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "node_id"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "alphabet": "A-Za-z0-9._-",
+     "disposition": "equal",
+     "equals": {
+      "param": "name"
+     },
+     "max_length": 100,
+     "name": "name",
+     "place": [
+      "name"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    },
+    {
+     "alphabet": "A-Za-z0-9-",
+     "disposition": "equal",
+     "equals": {
+      "settings": "github"
+     },
+     "max_length": 39,
+     "name": "owner",
+     "place": [
+      "owner",
+      "login"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    }
+   ],
+   "template": [
+    {
+     "literal": "api"
+    },
+    {
+     "literal": "-X"
+    },
+    {
+     "literal": "POST"
+    },
+    {
+     "literal": "user/repos"
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "param": "name_arg"
+    },
+    {
+     "literal": "-F"
+    },
+    {
+     "param": "private_arg"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "gh"
+  },
+  "push": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other",
+    "128": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "push"
+    },
+    {
+     "param": "lease_arg"
+    },
+    {
+     "param": "remote_url"
+    },
+    {
+     "param": "refspec"
+    }
+   ],
+   "time_limit": 120,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "repo-read": {
+   "definite": {
+    "refusals": [
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GH_NO_UPDATE_NOTIFIER": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "GH_PROMPT_DISABLED": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "NO_COLOR": {
+     "class": "fixed",
+     "value": "1"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other",
+    "4": "auth"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_=-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "data",
+      "viewer",
+      "repository",
+      "id"
+     ],
+     "required_in": [],
+     "type": "id"
+    },
+    {
+     "disposition": "fixed",
+     "name": "archived",
+     "place": [
+      "data",
+      "viewer",
+      "repository",
+      "isArchived"
+     ],
+     "required_in": [],
+     "type": "flag"
+    },
+    {
+     "alphabet": "A-Za-z0-9._-",
+     "disposition": "equal",
+     "equals": {
+      "param": "name"
+     },
+     "max_length": 100,
+     "name": "name",
+     "place": [
+      "data",
+      "viewer",
+      "repository",
+      "name"
+     ],
+     "required_in": [],
+     "type": "name"
+    },
+    {
+     "disposition": "equal",
+     "equals": {
+      "param": "commit"
+     },
+     "form": "^[0-9a-f]{40}$",
+     "name": "head",
+     "place": [
+      "data",
+      "viewer",
+      "repository",
+      "ref",
+      "target",
+      "oid"
+     ],
+     "required_in": [],
+     "type": "hash"
+    }
+   ],
+   "template": [
+    {
+     "literal": "api"
+    },
+    {
+     "literal": "graphql"
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "literal": "query=query($name:String!,$ref:String!){viewer{repository(name:$name){id isArchived name ref(qualifiedName:$ref){target{oid}}}}}"
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "param": "name_arg"
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "param": "ref_arg"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "gh"
+  },
+  "whoami": {
+   "definite": {
+    "refusals": [
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GH_NO_UPDATE_NOTIFIER": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "GH_PROMPT_DISABLED": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "NO_COLOR": {
+     "class": "fixed",
+     "value": "1"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other",
+    "4": "auth"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9-",
+     "disposition": "equal",
+     "equals": {
+      "settings": "github"
+     },
+     "max_length": 39,
+     "name": "login",
+     "place": [
+      "data",
+      "viewer",
+      "login"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    }
+   ],
+   "template": [
+    {
+     "literal": "api"
+    },
+    {
+     "literal": "graphql"
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "literal": "query=query{viewer{login}}"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "gh"
+  }
+ },
+ "credential_env": [
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
+  "GH_ENTERPRISE_TOKEN",
+  "GITHUB_ENTERPRISE_TOKEN"
+ ],
+ "host": null,
+ "identity": {
+  "command": "whoami",
+  "field": "login"
+ },
+ "provider": "github",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": [
+  "--verbose",
+  "--debug"
+ ]
+}

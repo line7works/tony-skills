@@ -1,0 +1,1116 @@
+{
+ "commands": {
+  "cli-team": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [
+    {
+     "alphabet": "a-z0-9-",
+     "disposition": "equal",
+     "equals": {
+      "settings": "vercel"
+     },
+     "max_length": 64,
+     "name": "slug",
+     "place": [
+      "slug"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    }
+   ],
+   "template": [
+    {
+     "literal": "api"
+    },
+    {
+     "text": [
+      {
+       "literal": "/v2/teams/"
+      },
+      {
+       "param": "team"
+      }
+     ]
+    },
+    {
+     "literal": "--non-interactive"
+    },
+    {
+     "literal": "--no-color"
+    },
+    {
+     "literal": "--scope"
+    },
+    {
+     "param": "team"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel"
+  },
+  "create": {
+   "body": {
+    "gitRepository": {
+     "repo": {
+      "param": "repo_full"
+     },
+     "type": {
+      "literal": "github"
+     }
+    },
+    "name": {
+     "param": "slug"
+    }
+   },
+   "definite": {
+    "refusals": [
+     "conflict",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "200": "success",
+    "400": "other",
+    "401": "auth",
+    "403": "auth",
+    "409": "conflict"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "id"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "alphabet": "A-Za-z0-9._-",
+     "disposition": "equal",
+     "equals": {
+      "param": "slug"
+     },
+     "max_length": 100,
+     "name": "name",
+     "place": [
+      "name"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    },
+    {
+     "alphabet": "A-Za-z0-9_",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "account",
+     "place": [
+      "accountId"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    }
+   ],
+   "method": "POST",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v11"
+    },
+    {
+     "literal": "projects"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  },
+  "db-add": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "resource",
+     "place": [
+      "resource",
+      "id"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    }
+   ],
+   "template": [
+    {
+     "literal": "integration"
+    },
+    {
+     "literal": "add"
+    },
+    {
+     "literal": "supabase"
+    },
+    {
+     "literal": "--name"
+    },
+    {
+     "param": "name"
+    },
+    {
+     "literal": "--no-connect"
+    },
+    {
+     "literal": "--format"
+    },
+    {
+     "literal": "json"
+    },
+    {
+     "literal": "--non-interactive"
+    },
+    {
+     "literal": "--no-color"
+    },
+    {
+     "literal": "--scope"
+    },
+    {
+     "param": "team"
+    }
+   ],
+   "time_limit": 180,
+   "tool": "vercel"
+  },
+  "db-connect": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "integration"
+    },
+    {
+     "literal": "resource"
+    },
+    {
+     "literal": "connect"
+    },
+    {
+     "param": "name"
+    },
+    {
+     "param": "slug"
+    },
+    {
+     "literal": "--yes"
+    },
+    {
+     "literal": "--format"
+    },
+    {
+     "literal": "json"
+    },
+    {
+     "literal": "--non-interactive"
+    },
+    {
+     "literal": "--no-color"
+    },
+    {
+     "literal": "--scope"
+    },
+    {
+     "param": "team"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "vercel"
+  },
+  "db-installed": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "name": "installed",
+     "place": [
+      "installed"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "flag"
+    }
+   ],
+   "template": [
+    {
+     "literal": "integration"
+    },
+    {
+     "literal": "installations"
+    },
+    {
+     "literal": "--integration"
+    },
+    {
+     "literal": "supabase"
+    },
+    {
+     "literal": "--format"
+    },
+    {
+     "literal": "json"
+    },
+    {
+     "literal": "--non-interactive"
+    },
+    {
+     "literal": "--no-color"
+    },
+    {
+     "literal": "--scope"
+    },
+    {
+     "param": "team"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "vercel"
+  },
+  "db-list": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "resource",
+     "place": [
+      "resource",
+      "id"
+     ],
+     "required_in": [],
+     "type": "id"
+    },
+    {
+     "disposition": "fixed",
+     "name": "connected",
+     "place": [
+      "resource",
+      "connected"
+     ],
+     "required_in": [],
+     "type": "flag"
+    }
+   ],
+   "template": [
+    {
+     "literal": "integration"
+    },
+    {
+     "literal": "list"
+    },
+    {
+     "param": "slug"
+    },
+    {
+     "literal": "--format"
+    },
+    {
+     "literal": "json"
+    },
+    {
+     "literal": "--non-interactive"
+    },
+    {
+     "literal": "--no-color"
+    },
+    {
+     "literal": "--scope"
+    },
+    {
+     "param": "team"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "vercel"
+  },
+  "deployment-read": {
+   "definite": {
+    "refusals": [
+     "not-found",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "200": "success",
+    "401": "auth",
+    "403": "auth",
+    "404": "not-found"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "BLOCKED",
+      "BUILDING",
+      "CANCELED",
+      "ERROR",
+      "INITIALIZING",
+      "QUEUED",
+      "READY"
+     ],
+     "name": "ready",
+     "place": [
+      "readyState"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    },
+    {
+     "disposition": "equal",
+     "equals": {
+      "param": "commit"
+     },
+     "form": "^[0-9a-f]{40}$",
+     "name": "commit",
+     "place": [
+      "gitSource",
+      "sha"
+     ],
+     "required_in": [],
+     "type": "hash"
+    }
+   ],
+   "method": "GET",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    },
+    {
+     "name": "withGitRepoInfo",
+     "value": {
+      "literal": "true"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v13"
+    },
+    {
+     "literal": "deployments"
+    },
+    {
+     "param": "host"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  },
+  "env-keys": {
+   "definite": {
+    "refusals": [
+     "not-found",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "200": "success",
+    "401": "auth",
+    "403": "auth",
+    "404": "not-found"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_",
+     "disposition": "held",
+     "max_length": 256,
+     "name": "keys",
+     "place": [
+      "envs",
+      "*",
+      "key"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    },
+    {
+     "alphabet": "a-z",
+     "disposition": "held",
+     "max_length": 32,
+     "name": "types",
+     "place": [
+      "envs",
+      "*",
+      "type"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    },
+    {
+     "alphabet": "a-z",
+     "disposition": "held",
+     "lists": true,
+     "max_length": 32,
+     "name": "targets",
+     "place": [
+      "envs",
+      "*",
+      "target"
+     ],
+     "required_in": [],
+     "type": "name"
+    },
+    {
+     "disposition": "held",
+     "name": "next",
+     "place": [
+      "pagination",
+      "next"
+     ],
+     "required_in": [],
+     "type": "count"
+    },
+    {
+     "disposition": "equal",
+     "equals": {
+      "literal": 0
+     },
+     "name": "hidden",
+     "place": [
+      "hiddenProductionEnvCount"
+     ],
+     "required_in": [],
+     "type": "count"
+    }
+   ],
+   "method": "GET",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v10"
+    },
+    {
+     "literal": "projects"
+    },
+    {
+     "param": "slug"
+    },
+    {
+     "literal": "env"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  },
+  "env-pull": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [],
+   "secret_output": "staging",
+   "template": [
+    {
+     "literal": "env"
+    },
+    {
+     "literal": "pull"
+    },
+    {
+     "param": "out"
+    },
+    {
+     "literal": "--environment"
+    },
+    {
+     "param": "env"
+    },
+    {
+     "literal": "--yes"
+    },
+    {
+     "literal": "--cwd"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "--non-interactive"
+    },
+    {
+     "literal": "--no-color"
+    },
+    {
+     "literal": "--scope"
+    },
+    {
+     "param": "team"
+    }
+   ],
+   "time_limit": 120,
+   "tool": "vercel"
+  },
+  "env-values": {
+   "definite": {
+    "refusals": [
+     "not-found",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "200": "success",
+    "401": "auth",
+    "403": "auth",
+    "404": "not-found"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_",
+     "disposition": "secret",
+     "max_length": 256,
+     "name": "pairs",
+     "pairs": {
+      "key": "key",
+      "value": "value"
+     },
+     "place": [
+      "envs",
+      "*"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    },
+    {
+     "alphabet": "a-z",
+     "disposition": "held",
+     "max_length": 32,
+     "name": "types",
+     "place": [
+      "envs",
+      "*",
+      "type"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    },
+    {
+     "disposition": "held",
+     "name": "next",
+     "place": [
+      "pagination",
+      "next"
+     ],
+     "required_in": [],
+     "type": "count"
+    }
+   ],
+   "method": "GET",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    },
+    {
+     "name": "customEnvironmentId",
+     "value": {
+      "param": "env_id"
+     }
+    },
+    {
+     "name": "decrypt",
+     "value": {
+      "literal": "true"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v10"
+    },
+    {
+     "literal": "projects"
+    },
+    {
+     "param": "slug"
+    },
+    {
+     "literal": "env"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  },
+  "environments": {
+   "definite": {
+    "refusals": [
+     "not-found",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "200": "success",
+    "401": "auth",
+    "403": "auth",
+    "404": "not-found"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "custom",
+     "place": [
+      "environments",
+      "*",
+      "id"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    }
+   ],
+   "method": "GET",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v9"
+    },
+    {
+     "literal": "projects"
+    },
+    {
+     "param": "slug"
+    },
+    {
+     "literal": "custom-environments"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  },
+  "pause": {
+   "definite": {
+    "refusals": [
+     "not-found",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "200": "success",
+    "400": "not-found",
+    "401": "auth",
+    "403": "auth",
+    "404": "not-found"
+   },
+   "fields": [],
+   "method": "POST",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v1"
+    },
+    {
+     "literal": "projects"
+    },
+    {
+     "param": "id"
+    },
+    {
+     "literal": "pause"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  },
+  "project-read": {
+   "definite": {
+    "refusals": [
+     "not-found",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "200": "success",
+    "401": "auth",
+    "403": "auth",
+    "404": "not-found"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "id"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "alphabet": "A-Za-z0-9_",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "account",
+     "place": [
+      "accountId"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    },
+    {
+     "alphabet": "A-Za-z0-9._-",
+     "disposition": "equal",
+     "equals": {
+      "param": "repo"
+     },
+     "max_length": 100,
+     "name": "repo",
+     "place": [
+      "link",
+      "repo"
+     ],
+     "required_in": [],
+     "type": "name"
+    },
+    {
+     "disposition": "fixed",
+     "name": "paused",
+     "place": [
+      "paused"
+     ],
+     "required_in": [],
+     "type": "flag"
+    }
+   ],
+   "method": "GET",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v9"
+    },
+    {
+     "literal": "projects"
+    },
+    {
+     "param": "slug"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  },
+  "team": {
+   "definite": {
+    "refusals": [
+     "not-found",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "200": "success",
+    "401": "auth",
+    "403": "auth",
+    "404": "not-found"
+   },
+   "fields": [
+    {
+     "alphabet": "a-z0-9-",
+     "disposition": "equal",
+     "equals": {
+      "settings": "vercel"
+     },
+     "max_length": 64,
+     "name": "slug",
+     "place": [
+      "slug"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "name"
+    }
+   ],
+   "method": "GET",
+   "provider": "vercel",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v2"
+    },
+    {
+     "literal": "teams"
+    },
+    {
+     "param": "team"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  },
+  "unpause": {
+   "definite": {
+    "refusals": [
+     "not-found",
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "200": "success",
+    "400": "not-found",
+    "401": "auth",
+    "403": "auth",
+    "404": "not-found"
+   },
+   "fields": [],
+   "method": "POST",
+   "query": [
+    {
+     "name": "slug",
+     "value": {
+      "param": "team"
+     }
+    }
+   ],
+   "template": [
+    {
+     "literal": "v1"
+    },
+    {
+     "literal": "projects"
+    },
+    {
+     "param": "id"
+    },
+    {
+     "literal": "unpause"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "vercel",
+   "trace_flags": [],
+   "via": "request"
+  }
+ },
+ "credential_env": [
+  "VERCEL_TOKEN",
+  "VERCEL_ORG_ID",
+  "VERCEL_PROJECT_ID"
+ ],
+ "host": "api.vercel.com",
+ "identity": {
+  "request": {
+   "command": "team",
+   "field": "slug",
+   "params": {
+    "team": {
+     "settings": "vercel"
+    }
+   }
+  },
+  "runner": {
+   "command": "cli-team",
+   "field": "slug",
+   "params": {
+    "team": {
+     "settings": "vercel"
+    }
+   }
+  }
+ },
+ "provider": "vercel",
+ "provider_version": 1,
+ "token": {
+  "credentials": {
+   "field": "token",
+   "location": "vercel_credentials"
+  },
+  "env": "VERCEL_TOKEN"
+ },
+ "trace_flags": [
+  "--debug",
+  "--verbose"
+ ]
+}

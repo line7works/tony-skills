@@ -1,0 +1,64 @@
+{
+ "commands": {
+  "read": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "1": "not-found"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-l"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "crontab",
+   "trace_flags": []
+  },
+  "replace": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [],
+   "protected_inputs": [
+    {
+     "accepts": "after-image",
+     "slot": "table"
+    }
+   ],
+   "template": [
+    {
+     "slot": "table"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "crontab",
+   "trace_flags": []
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "cron",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": []
+}

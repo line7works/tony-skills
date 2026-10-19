@@ -1030,6 +1030,18 @@ class TheRefusedSend(OpCase):
                 if plan:
                     n.plan_fake("fakehost", plan)
                 looked = n.look()
+                if kill is None:
+                    # the join's J1b item 6: the create's one-second limit counts from the runner's `mid child` event (the
+                    # child started); under load the fake's own first act, its call record, came later than that, and the
+                    # limit ended the child before it. The limit is made to fall where the test means it, after the fake has
+                    # started and recorded its call, by that event: at `mid child`, before the limit counts, wait (60 s at
+                    # most) for the record. Its rule, no step record of a refusal where a child started, is unchanged
+                    def kill(e, n=n):
+                        if e["op"] == "child" and e["stage"] == "mid" and e.get("started") and e["subject"] == "fakehost":
+                            until = time.time() + 60
+                            while not n.calls("fakehost", "create") and time.time() < until:
+                                time.sleep(0.01)
+                        return False
                 went = n.go(looked, kill=kill)
                 self.assertTrue(went.killed or went.ending == "stopped", went.text)
                 self.assertTrue([e for e in went.events if e["op"] == "child" and e["stage"] == "mid" and e.get("started")],

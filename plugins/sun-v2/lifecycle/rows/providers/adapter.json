@@ -1,0 +1,242 @@
+{
+ "commands": {
+  "canary": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "same",
+      "differs"
+     ],
+     "name": "match",
+     "place": [
+      "match"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    }
+   ],
+   "template": [
+    {
+     "literal": "canary"
+    },
+    {
+     "literal": "--in"
+    },
+    {
+     "param": "work"
+    }
+   ],
+   "time_limit": 120,
+   "tool": "sun-adapter",
+   "trace_flags": [],
+   "via": "adapter"
+  },
+  "routine": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "5": "other"
+   },
+   "fields": [
+    {
+     "disposition": "fixed",
+     "list": [
+      "active",
+      "disabled"
+     ],
+     "name": "state",
+     "place": [
+      "state"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "state"
+    }
+   ],
+   "protected_inputs": [
+    {
+     "accepts": "held field",
+     "slot": "id"
+    }
+   ],
+   "secret_output": "staging",
+   "template": [
+    {
+     "literal": "routine"
+    },
+    {
+     "literal": "--id-file"
+    },
+    {
+     "slot": "id"
+    },
+    {
+     "literal": "--out"
+    },
+    {
+     "param": "out"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "sun-adapter",
+   "trace_flags": [],
+   "via": "adapter"
+  },
+  "routine_disable": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "5": "other"
+   },
+   "fields": [],
+   "protected_inputs": [
+    {
+     "accepts": "held field",
+     "slot": "id"
+    }
+   ],
+   "template": [
+    {
+     "literal": "routine-disable"
+    },
+    {
+     "literal": "--id-file"
+    },
+    {
+     "slot": "id"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "sun-adapter",
+   "trace_flags": [],
+   "via": "adapter"
+  },
+  "routine_enable": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "exits": {
+    "0": "success",
+    "3": "not-found",
+    "5": "other"
+   },
+   "fields": [],
+   "protected_inputs": [
+    {
+     "accepts": "held field",
+     "slot": "id"
+    }
+   ],
+   "template": [
+    {
+     "literal": "routine-enable"
+    },
+    {
+     "literal": "--id-file"
+    },
+    {
+     "slot": "id"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "sun-adapter",
+   "trace_flags": [],
+   "via": "adapter"
+  },
+  "routines": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "5": "other"
+   },
+   "fields": [
+    {
+     "alphabet": "a-z0-9-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "routines",
+     "place": [
+      "routines",
+      "*"
+     ],
+     "required_in": [
+      "success"
+     ],
+     "type": "id"
+    }
+   ],
+   "template": [
+    {
+     "literal": "routines"
+    },
+    {
+     "literal": "--holding"
+    },
+    {
+     "param": "text"
+    },
+    {
+     "literal": "--format"
+    },
+    {
+     "literal": "json"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "sun-adapter",
+   "trace_flags": [],
+   "via": "adapter"
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "adapter",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": []
+}
