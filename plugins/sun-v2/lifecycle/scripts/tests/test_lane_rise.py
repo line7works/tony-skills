@@ -1,24 +1,30 @@
 """Slice 2: sunrise's own rows, the local half (rows-rise.md revision 4), as shipped in `lifecycle/rows/sunrise/lane.json`
 with the scaffold declarations in `lifecycle/rows/providers/scaffold.json`.
 
-Every test's name carries the row's id and the frame's rule it rests on. The other lanes are stand-ins here (the common
-brief, section 2): slice 3's git declaration and slice 4's `adapter.canary` under `fixtures/rise/`, and the rows that give
-slice 3's outputs by its names, built by `standin_rows`. The programs are fakes (`fakes/rise_tools.py`): git is recorded
-and then the system's own git runs on the test's own temporary repository; each scaffolder writes a small tree.
+Every test's name carries the row's id and the frame's rule it rests on. Since the join (slice 5) the lane file holds slice
+3's remote rows too, and every declaration is the shipped one (slice 3's `github`, `vercel`, `postgres` and `web`, slice 4's
+`adapter`): no stand-in is left. The programs are fakes: slice 2's own (`fakes/rise_tools.py`: git is recorded and then the
+system's own git runs on the test's own temporary repository; each scaffolder writes a small tree; the adapter's canary),
+and slice 3's, which `provlib.wire` adds (`gh`, `vercel`, `psql`, `pg_dump`, `curl` and the fake host of the frame's own
+requests).
 """
 import copy
 import json
 import os
 import subprocess
+import sys
 
 import harness
 import rowlib
 from sun_core import facts as factsmod, plan, rows as rowsmod
 
+sys.path.insert(0, os.path.join(harness.TESTS, "fixtures", "prov"))
+import provlib  # noqa: E402
+
 ROWS = os.path.join(harness.LIFECYCLE, "rows")
-FIXTURES = os.path.join(harness.TESTS, "fixtures", "rise")
+FIXTURES = os.path.join(harness.TESTS, "fixtures", "rise")      # gone at the join: it held only stand-ins
 TOOLS = os.path.join(harness.FAKES, "rise_tools.py")
-PROGRAMS = ("git", "npx", "npm", "uv", "python3", "riseadapter")
+PROGRAMS = ("git", "npx", "npm", "uv", "python3", "sun-adapter")
 L = rowlib.lit
 F = {"output": "project folder.path"}
 CAPS = ("canary", "memory stores")
@@ -34,74 +40,18 @@ def shipped():
     return lane, scaffold
 
 
-def standin_providers():
-    out = {}
-    for name in ("standin-git.json", "standin-adapter.json"):
-        with open(os.path.join(FIXTURES, name)) as fh:
-            doc = json.load(fh)
-        out[doc["provider"]] = doc
-    return out
-
-
 def providers():
-    lane, scaffold = shipped()
-    out = standin_providers()
-    out["scaffold"] = scaffold
-    out["fakehost"] = rowlib.providers()["fakehost"]      # the stand-in creates of slice 3's outputs
-    return out
+    """Every shipped declaration, as it stands (the join's: no stand-in)."""
+    return provlib.providers()
 
 
-def standin_rows(env_value):
-    """The rows that give slice 3's outputs by its names and fields (seams 1 to 5): STAND-INS, each replaced at the join."""
-    slug = {"name": 1}
-    remote = rowlib.create("SR08-standin", "sunrise", name={"text": [slug, L("-repo")]}, output="remote repository",
-                           needs=[{"output": "first commit", "level": "made", "treatment": "then not applicable"}])
-    remote["output"]["fields"] = {"id": {"held": "id"}, "name": {"text": [slug, L("-repo")]},
-                                  "address": {"text": [L("https://github.invalid/"), slug]}}
-    remote["thing"]["layer"] = "github"
-    host = rowlib.create("SR09-standin", "sunrise", name={"text": [slug, L("-host")]}, output="hosting project",
-                         needs=[{"output": "remote repository", "level": "made", "treatment": "then not applicable"}])
-    host["output"]["fields"] = {"id": {"held": "id"}, "account": {"held": "id"}, "slug": slug,
-                                "address": {"text": [L("https://"), slug, L(".vercel.invalid")]}}
-    host["thing"]["layer"] = "hosting"
-    ledger = rowlib.path(rowlib.DEV, "remote-ledger.txt")
-    push = rowlib.row("change", "SR15-standin", "sunrise",
-                      thing={"role": "the remote's branch, as the fake ledger records it", "identity": "path", "place": ledger,
-                             "tracked": ["exists", "sha256"], "commit_of": {"repo": F, "ref": "main"}, "layer": "github"},
-                      planning_test=[{"read": "path", "path": ledger, "is": "file"}],
-                      before_test=[{"read": "line", "path": ledger, "line": L("pushed main"), "present": False}],
-                      after_test=[{"read": "line", "path": ledger, "line": L("pushed main"), "count": 1}],
-                      construction={"id": "C3", "risks": ["RK2"], "edit": {"kind": "append-line", "line": L("pushed main")}},
-                      after_check=[{"read": "line", "path": ledger, "line": L("pushed main"), "count": 1}],
-                      way_back={"none": "a stand-in: the push is slice 3's"},
-                      output={"name": "push", "fields": {"commit": {"observed": "commit"}}},
-                      needs=[{"output": "scanned for the push", "level": "passed", "treatment": "then not applicable"},
-                             {"output": "remote repository", "level": "made", "treatment": "then not applicable"}])
-    deployed = rowlib.check("SR16-standin", "sunrise", place=F, output="deployment",
-                            thing={"layer": "hosting", "passes": [{"read": "path", "path": F, "is": "dir"}]},
-                            needs=[{"output": "push", "level": "made", "treatment": "then not applicable"}])
-    env_file = rowlib.path(F, ".env.local")
-    pulled = rowlib.row("build", "SR19-standin", "sunrise",
-                        thing={"role": "the pulled env file", "identity": "path", "place": env_file, "tracked": ["exists", "identity"],
-                               "layer": "hosting"},
-                        planning_test=[{"read": "path", "path": env_file, "is": "absent"}],
-                        before_test=[{"id": "free", "read": "path", "path": env_file, "is": "absent"}],
-                        after_test=[{"read": "path", "path": env_file, "is": "file"}],
-                        construction={"id": "C1", "mode": 0o600, "single_file": True,
-                                      "files": [{"rel": "env", "text": L("DATABASE_URL=%s\nVERCEL=1\n" % env_value)}]},
-                        after_check=[{"read": "path", "path": env_file, "is": "file"}],
-                        output={"name": "env file", "fields": {"path": env_file}},
-                        needs=[{"output": "hosting project", "level": "made", "treatment": "then not applicable"}])
-    return [remote, host, push, deployed, pulled]
-
-
-def install(m, extra=(), lane_edit=None, standins=True):
-    """A rows root for the machine: the shipped lane and scaffold declarations, the stand-ins, and `extra` rows."""
+def install(m, extra=(), lane_edit=None):
+    """A rows root for the machine: the shipped lane and every shipped declaration, and `extra` rows (a test's own reader)."""
     lane, _scaffold = shipped()
-    lane["rows"] += (standin_rows(harness.canary("env")) if standins else []) + list(extra)
+    lane["rows"] += list(extra)
     if lane_edit:
         lane_edit(lane)
-    root = os.path.join(m.root, "rows-" + m.seed)
+    root = os.path.join(m.root, "rows-" + m.seed.replace("/", "_"))
     for folder in ("providers", "sunrise"):
         os.makedirs(os.path.join(root, folder), exist_ok=True)
     for name, decl in providers().items():
@@ -132,7 +82,7 @@ def programs(m, into_system=True):
 
 def machine_for_sunrise(m, wired=True, identity=True, into_system=True):
     """His machine as sunrise reads it: the locations of rows-rise 3.0, git's identity, the vault's root index, the memory
-    index, the shortcut file wired into his shell startup, and a fake remote's ledger."""
+    index, the shortcut file wired into his shell startup; and slice 3's fakes (`provlib.wire`)."""
     loc = m.settings["locations"]
     loc.update({"staged_docs": m.path("staged"), "vault_projects": os.path.join(m.vault, "projects"),
                 "vault_index": os.path.join(m.vault, "_index.md"), "vault_link_prefix": "projects",
@@ -144,19 +94,24 @@ def machine_for_sunrise(m, wired=True, identity=True, into_system=True):
     m.put("memory/MEMORY.md", "# Memory\n- [Other](project_other.md): another project\n")
     m.put("shortcuts.txt", "alias oth=\"cd /x/other\"\n")
     m.put(".zshrc", ("source $HOME/shortcuts.txt  # project-shortcuts\n" if wired else "export X=1\n"))
-    m.put("dev/remote-ledger.txt", "ledger\n")
     if identity:
         m.put(".gitconfig", "[user]\n\temail = fixture@example.invalid\n\tname = Fixture Owner\n")
     else:
         m.put(".gitconfig", "[user]\n\tname = Fixture Owner\n")
     programs(m, into_system)
+    provlib.wire(m)
     return m
 
 
-def sunrise_inputs(m, type_="web app", scaffold="web app", drop=(), local_proof=None, hosting=True, shortcut="dm", **more):
+def sunrise_inputs(m, type_="web app", scaffold="web app", drop=(), local_proof=None, hosting=True, shortcut="dm", public=None,
+                   **more):
+    """The inputs of rows-rise 3.0, and no other: since the join's J1b (item 5) slice 3's rows read the dropped layers and
+    the name as slice 2's do."""
     flags = {"scaffold": scaffold, "hosting": hosting}
     if local_proof:
         flags["local_proof"] = local_proof
+    if public is not None:
+        flags["public"] = public        # his `--public` (v1's; the join's J1c), `true`; `false` as J1d's case gives it
     doc = {"type": type_, "flags": flags, "drop_layers": list(drop), "answers": {"shortcut": shortcut}}
     doc.update(more)
     return m.inputs(**doc)
@@ -182,7 +137,7 @@ def git_writes(m):
     out = []
     for call in m.calls("git"):
         argv = call["argv"]
-        word = next((a for a in argv if a in ("init", "add", "commit", "branch")), None)
+        word = next((a for a in argv if a in ("init", "remote", "add", "commit", "branch")), None)
         if word:
             out.append(word)
     return out
@@ -215,11 +170,11 @@ def operation(m, run, rid):
 
 class Base(harness.Case):
     def sun(self, label, type_="web app", scaffold="web app", drop=(), local_proof=None, extra=(), wired=True, identity=True,
-            caps=CAPS, lane_edit=None, standins=True, prepare=None, ending="complete", **more):
+            caps=CAPS, lane_edit=None, prepare=None, ending="complete", **more):
         m = machine_for_sunrise(self.machine(label, label), wired=wired, identity=identity)
         if prepare:
             prepare(m)
-        install(m, extra, lane_edit, standins)
+        install(m, extra, lane_edit)
         looked = m.look(also=ALSO, inputs=sunrise_inputs(m, type_, scaffold, drop, local_proof, hosting=not drop, **more), caps=caps)
         if ending is None:
             return m, looked, None
@@ -239,7 +194,7 @@ class Admission(harness.Case):
         self.assertEqual(plan.admit_all(lane, expanded, decls), [])
         self.assertEqual(rowsmod.checklist_findings(lane), [])
         ids = [r["id"] for r in lane["rows"]]
-        self.assertEqual(len(ids), 52)
+        self.assertEqual(len(ids), 63)          # 52 of slice 2's, 7 of slice 3's, J1b's SR15-origin and SR15-upstream, J1c's SR08-public, J1d's SR08-false
         self.assertEqual(lane["kind"], "sunrise")
         self.assertEqual(lane["phases"], ["sunrise"])
         self.assertEqual(lane["types"], ["web app", "static site", "desktop app", "script or CLI"])
@@ -310,7 +265,7 @@ class EndToEnd(Base):
         # the vault, the memory store, the shortcut
         seed = read(m.vault, "projects", "demo", "_index.md")
         for line in ("status: active", "- **Local path:** %s" % project, "- **Terminal shortcut:** `dm`", "- **Branch:** main",
-                     "- **GitHub:** https://github.invalid/demo", "- **Vercel:** https://demo.vercel.invalid",
+                     "- **GitHub:** https://github.com/fixture-account/demo", "- **Vercel:** https://demo.vercel.app",
                      "- **Database:** Supabase via Vercel Marketplace"):
             self.assertEqual(seed.split("\n").count(line), 1, line)
         self.assertIn("- [[projects/demo/_index|demo]]\n", read(m.vault, "_index.md"))
@@ -320,14 +275,27 @@ class EndToEnd(Base):
         self.assertNotIn("status:", read(note))
         self.assertEqual(os.stat(note).st_mode & 0o777, 0o600)
         self.assertTrue(read(m.path("shortcuts.txt")).endswith('alias dm="cd %s"\n' % project))
-        # OP-11: the fake git's record of state-changing calls equals the manifest's list, in order
-        listed = []
+        # OP-11: the fake git's record of state-changing calls equals the manifest's list, in order; slice 3's two (SR08's
+        # create at the fake GitHub, SR15's one push) are the providers' own records
+        listed, remote = [], []
         for operation in manifest_of(m, run)["operations"]:
             for name in operation.get("repo_commands") if isinstance(operation.get("repo_commands"), list) else []:
                 if statuses.get(operation["id"]) == "done":
-                    listed.append({"init": "init", "rename": "branch", "stage": "add", "commit": "commit"}[name])
+                    word = {"init": "init", "rename": "branch", "stage": "add", "commit": "commit", "add": "remote",
+                            "upstream": "branch"}.get(name)
+                    (listed if word else remote).append(word or (operation["id"], name))
         self.assertEqual(git_writes(m), listed)
-        self.assertEqual(listed, ["init", "add", "commit"])
+        self.assertEqual(listed, ["init", "add", "commit", "remote", "branch"])
+        self.assertEqual(remote, [("SR08", "make"), ("SR15", "push")])
+        # the join's J1b item 2: `origin` is the GitHub address, `refs/remotes/origin/main` the scanned commit SR15 pushed,
+        # and main's upstream `origin/main`, as v1's `gh repo create --remote=origin --push` left them
+        self.assertEqual(git(project, "remote", "get-url", "origin").strip(), "https://github.com/fixture-account/demo")
+        self.assertEqual(git(project, "rev-parse", "refs/remotes/origin/main").strip(), git(project, "rev-parse", "main").strip())
+        self.assertEqual(git(project, "rev-parse", "--abbrev-ref", "main@{upstream}").strip(), "origin/main")
+        self.assertEqual(git(project, "rev-list", "--count", "--branches", "--not", "--remotes").strip(), "0")
+        self.assertEqual([c["command"] for c in provlib.calls(m, "gh")].count("create"), 1)
+        self.assertEqual(provlib.remote_head(m), git(project, "rev-parse", "main").strip())
+        self.assertEqual(len([c for c in m.calls("git") if "push" in c["argv"]]), 1)
         # the forms, kept for the report
         forms = dict((os.path.basename(p), read(p)) for p in looked.doc["forms"] + went.doc["forms"])
         out = os.environ.get("RISE_FORMS_OUT")
@@ -337,6 +305,9 @@ class EndToEnd(Base):
                     fh.write("==== %s ====\n%s\n" % (name, forms[name]))
         self.assertIn("SUNRISE PREVIEW: demo  \"a fixture project\"", forms["preview-1.txt"])
         self.assertIn("SUNRISE COMPLETE: demo  \"a fixture project\"", forms["summary-1.txt"])
+        # the join's punch list (a), the reviewer's C2: the summary renders the kit result, here the canary passed (rows-rise
+        # section 5's "kit 2/2, canary <passed or unavailable>", in the frame's own `passed` line; Machinery request 2)
+        self.assertIn("[SR13-canary] the check passed: kit 2/2, canary", forms["summary-1.txt"])
         self.assertIn("- GitHub: the private repository", forms["handoff-1.txt"])
 
 
@@ -396,6 +367,8 @@ class Rows(Base):
                     self.assertEqual(len(call), 1, m.calls(tool))
                     staged = os.path.join(m.facts.run_dir(looked.doc["run"]), "staging", rid[0], "object")
                     self.assertEqual(os.path.realpath(call[0]["cwd"]), os.path.realpath(staged))
+                    # the join's punch list (e), rise C3's SR02-electron row: the staged folder was empty at the call
+                    self.assertTrue(call[0]["empty"], call[0])
                 else:
                     self.assertEqual(read(m.path("dev", "demo", "index.html")),
                                      "<!doctype html>\n<title>demo</title>\n<p>a fixture project</p>\n")
@@ -413,8 +386,15 @@ class Rows(Base):
         marks = [(r["op"], r["risk"]) for r in m.journal(looked.doc["run"]) if r["kind"] == "step" and r.get("step") == "risk-mark"]
         self.assertIn(("SR03-agents", "RK18"), marks)
         self.assertIn(("SR03-agents", "RK2"), marks)
+        # the join's punch list (e), rise C3's SR03-claude row: the name's claim, CLAUDE.md the stub (the scaffolder's own
+        # `@AGENTS.md` here, so `already so`); the lifted condition read just before the swap is
+        # `test_g21_machinery.test_G21_3_RISK2_A151_RK18_on_a_C1_row_admits_its_condition_on_another_file_read_just_before_the_effect`
+        # and the lift itself `Required.test_SR03_agents_SR03_claude_G23_13_OP2_A147_where_AGENTS_is_absent_...`
+        self.assertEqual(read(m.path("dev", "demo", "CLAUDE.md")), "@AGENTS.md\n")
 
     def test_SR05_SR05_main_OP3_RK18_the_repository_is_made_on_main_and_an_existing_main_is_never_replaced(self):
+        """The join's J1b item 1 (J1's Stop 1): `git.branch-main` is `git -C <repo> branch -m main`, rows-rise 3.1's own
+        command and v1's, renaming the current branch; an adopted repository on `master` ends on `main`."""
         def prepare(m):
             os.makedirs(m.path("dev", "demo"))
             m.put("dev/demo/a.txt", "a\n")
@@ -479,9 +459,15 @@ class Rows(Base):
         self.assertEqual(read(m.path("dev", "demo", "docs", "notes.md")), "his notes\n")
 
     def test_SR06_scope_SR06_architecture_OP6_EV1_C7_staged_docs_move_into_the_folders_the_folder_rows_lay(self):
+        """The moves, by their bytes, the staged copies gone, their order, and (the join's punch list (e), rise C3's SR06-scope
+        row) the moved file's identity kept (C7: a rename). A move killed after its rename is `not proven`, never claimed:
+        `test_kill_sweep`'s reference run, whose M1 is a C7 move killed at every boundary (OP-6, EV-1)."""
+        inode = {}
+
         def staged(m):
             m.put("staged/demo-scope.md", "# demo scope doc (2026-09-03)\nbody\n")
             m.put("staged/demo-architecture.md", "# demo architecture (2026-09-04)\nbody\n")
+            inode["scope"] = os.stat(m.path("staged", "demo-scope.md")).st_ino
         m, looked, went = self.sun("staged", prepare=staged)
         statuses = m.statuses(looked.doc["run"])
         self.assertEqual((statuses["SR06-scope"], statuses["SR06-architecture"]), ("done", "done"))
@@ -490,6 +476,7 @@ class Rows(Base):
         self.assertEqual(read(project, "docs", "architecture", "2026-09-04-demo.md"), "# demo architecture (2026-09-04)\nbody\n")
         self.assertFalse(os.path.exists(m.path("staged", "demo-scope.md")))
         self.assertFalse(os.path.exists(m.path("staged", "demo-architecture.md")))
+        self.assertEqual(os.stat(os.path.join(project, "docs", "scope", "2026-09-03-demo.md")).st_ino, inode["scope"])
         tracked = git(project, "ls-files").split()
         self.assertIn("docs/scope/2026-09-03-demo.md", tracked)
         self.assertIn("docs/architecture/2026-09-04-demo.md", tracked)
@@ -596,6 +583,10 @@ class Rows(Base):
         statuses = m.statuses(looked.doc["run"])
         self.assertEqual(statuses["SR13-canary"], "unavailable")
         self.assertEqual(statuses["SR25"], "passed")
+        # the join's punch list (a), C2's unavailable case: the summary renders the kit result with FORM-2's `unavailable` line
+        summary = [p for p in went.doc["forms"] if os.path.basename(p).startswith("summary-")]
+        self.assertEqual(len(summary), 1)
+        self.assertIn("[SR13-canary] the check could not be made on this harness: kit 2/2, canary", read(summary[0]))
 
     def test_SR20_RUN7_a_vault_folder_already_there_is_a_planning_stop(self):
         m, looked, _ = self.sun("vault", prepare=lambda m: m.put("vault/projects/demo/_index.md", "x\n"), ending=None)
@@ -689,8 +680,8 @@ class Rows(Base):
         m, looked, went = self.sun("ends")
         project = m.path("dev", "demo")
         head = git(project, "rev-parse", "main").strip()
-        pushed = [r for r in m.journal(looked.doc["run"]) if r["kind"] == "completion" and r["op"] == "SR15-standin"][0]
-        self.assertEqual(pushed["observed"]["commit"], head)
+        self.assertEqual(m.statuses(looked.doc["run"])["SR15"], "done")
+        self.assertEqual(provlib.remote_head(m), head)
         self.assertEqual(m.statuses(looked.doc["run"])["SR25"], "passed")
         self.assertEqual(git(project, "status", "--porcelain"), "")
 
@@ -721,6 +712,18 @@ class Required(Base):
         self.assertEqual(git_writes(m), ["init", "add", "commit"])
         scaffolder = [c for c in m.calls("npm") if c["argv"][:1] == ["create"]]
         self.assertEqual(len(scaffolder), 1)
+
+    def test_J1b_4_RUN5_a_sunrise_with_no_github_layer_on_a_machine_with_no_gh_ends_complete(self):
+        """The join's J1b item 4 (J1's Question 2): git's local commands are the module `git`, identity none, so a sunrise
+        whose GitHub layer is dropped reads no `gh` identity and needs no `gh` at all, as in v1."""
+        def no_gh(m):
+            for folder in m.settings["program_folders"]:
+                if os.path.exists(os.path.join(folder, "gh")):
+                    os.remove(os.path.join(folder, "gh"))
+        m, looked, went = self.sun("nogh", drop=LOCAL_ONLY, local_proof="build next", prepare=no_gh)
+        self.assertEqual(m.statuses(looked.doc["run"])["SR25"], "passed")
+        self.assertEqual(provlib.calls(m, "gh"), [])
+        self.assertNotIn("github", (manifest_of(m, looked.doc["run"]).get("accounts") or {}))
 
     def test_M1_G22_7c_RUN6_a_scaffold_with_no_typecheck_entry_has_no_typecheck_line_in_AGENTS(self):
         m, looked, went = self.sun("astro", type_="static site", scaffold="static site", drop=LOCAL_ONLY, local_proof="build astro")
@@ -754,6 +757,9 @@ class Required(Base):
         self.assertEqual(scanned["subject"]["word"], head)
 
     def test_SR03_agents_G23_13_RUN6_merge_adds_each_missing_line_under_its_heading_and_keeps_his_own(self):
+        """What this proves (the join's punch list (e), rise C3's SR03-agents row, narrowed): his lines kept, the kit's Gates
+        line under his own heading, one heading each, no lift. Every line of the body under its heading is
+        `test_g23_machinery`'s `test_G23_13_RUN6_merge_adds_each_missing_line_under_its_heading_and_keeps_what_stands`."""
         def prepare(m):
             m.put("dev/demo/AGENTS.md", "# His agents file\n## Gates\n- his own gate\n")
             m.put("dev/demo/CLAUDE.md", "@AGENTS.md\n")

@@ -31,6 +31,8 @@ What exists today, and where:
   `hosting` and `database`; `--no-github` drops `github`, `hosting` and `database`. A static site and a script have no
   `database`; a script has no `hosting`. `flags.hosting` is false where `hosting` is dropped or the type has none, and
   then `flags.local_proof` is, by the scaffold, `build next`, `build astro`, `build electron`, `npm`, `uv` or `html`.
+- `flags.public`: `true` only where he asks for a public GitHub repository (v1's `--public`); leave it out otherwise, and
+  the repository is private.
 - The capabilities file names `canary` where the harness can have a fresh session quote a project's first instruction
   line, and `memory stores` where it keeps memory notes.
 - `--dry-run` is the look alone: show its preview and stop.

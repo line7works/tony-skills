@@ -62,9 +62,10 @@ writes a secret-bearing output outside staging (SEC-8), or takes a held value on
 
 ## 3. The rows
 
-Thirty rows: seventeen for sunset, thirteen for restore (twelve reverses written as their forward rows'
-way back, and the restore's entry). By kind: build 5, keep 1, move 6, change 18. No owner step, owner
-answer or check: nothing waits on him after the go. Not written: V04 (replaced by V30, KEEP-5), V09
+Thirty-one rows, as the lane ships them: eighteen for sunset, thirteen for restore (twelve reverses written
+as their forward rows' way back, and the restore's entry). By kind: build 5, keep 1, move 6, change 18, check 1 (T12m, the
+join's punch list C5). No owner step or owner answer: nothing waits on him after the go. (Slice 3's nine sunset rows, T04c
+a family, and its two reverses join this lane's files at the join; rows-prov counts them.) Not written: V04 (replaced by V30, KEEP-5), V09
 (EV-5; a keep declares no way back, OP-2, and no row takes the store away), T15 (no draft row), the
 catalog's E2 markers, G8 as a row (a look question, section 4), T22's and V12's needs (cut by slice 3).
 Split by OP-1: T10 into T10a to T10d, V14 into V14a to V14d. Added because v1 does it: T02a, T13a.
@@ -212,6 +213,14 @@ shortcut {each.name} to {REPO}, its line saved first". None: 7, 8, 11 to 13, 17 
 stood" = REPO. 23 empty list (the copy comes first by ORD-4 and KEEP-3). 24 safe; none; none.
 25 "move {REPO} to {REPO_A}". None: 7, 8, 12, 13, 16 to 22.
 
+**T12m, the repository stands moved, for the providers' steps** (the join's punch list, C5: added in the build, so that
+slice 3's T20 and T21 have the output their rows need, `repository moved`, rows-prov 3.3 entry 11)
+1 T12m; check; `retiring on this machine`. 2 the moved repository; `path`, place `out:repository archived.path`; tracked
+`exists`, `identity`; passes: `out:repository archived.path` `dir`. 7 none. 10 `repository moved`, fields none: a check's
+output, so slice 3's T20 and T21 need it at the `passed` level (ORD-1). 11 `repository archived`, made, `then not
+applicable`. 24 reads, stores, shows safe; validators none; resting places none. 25 preview "the repository stands moved,
+for the providers' steps"; status "the repository stands moved". None: 3 to 6, 8, 9, 12 to 23 (a check's, ROW-1).
+
 **T13a, the vault's archive folder where it is missing** (v1's `mkdir -p`)
 1 T13a; build; `keeping`. 2 `path`, place `loc:vault_archive`; tracked `exists`, `identity`. 3 absent.
 4 `free`. 5 `dir`. 6 C1, empty folder, 0755. 9 `dir`. 10 `vault archive folder`, field `path`.
@@ -278,6 +287,10 @@ span; capability `memory stores`; retires, `machine`, `memory note`. 3 MI `file`
 applicable`. 14 V08. 15 `file` `before-image`; `value` `after-image` (computed). 16 `in place`,
 ordered. 23 empty list. 24 as T16. 25 "move the memory index line under ## Archived". None: 7, 8, 12,
 13, 17 to 22.
+As shipped (the join's J1e, the reviewer's J4; the control room's second-part reading, G23's family read): T19 is a
+family over the index lines holding `(project_{name2}.md)`, item `n`; entry 15 saves the line and its two neighbours (the
+line above it and the line below it, the file's start or end where it stood at an edge), not the whole images; entry 16
+`in place`, `ordered: false`.
 
 **T30, the tombstone** (A4; KEEP-5)
 1 T30; build; `the last record`, alone. 2 this sunset's record; `path`, place `[out:vault folder
@@ -329,6 +342,11 @@ folder back`, state, `then not applicable`. 24 as V03. 25 "the root index as it 
 `memory stores`. 3 `file`. 4 `saved:1` once. 5 `saved:0` stands. 6 C3, RK2, `replace` `saved:1` by
 `saved:0`. 7 none. 9 as 5. 10 `memory index active`, field `file` = MI. 11 none. 24 as V03. 25 "the
 memory index as it was".
+As shipped (the join's J1e, the reviewer's J4; the same reading, and the join's J1b item 3): V08 is T19's family reverse,
+`V08-n`; entry 6 is `move-line` back, the line taken from under `## Archived` and put back between its saved neighbours,
+found next to each other exactly once (EV-6); where its saved line below was the file's end, right after its saved line
+above, found exactly once; the heading T19 added stays (G19-14). A file changed since the restore's look is in neither
+state the reverse names, and the restore stops there (its tracked state, OP-5).
 
 **V13** (T11, family) 1 change; this machine. 2 `path`, place SC; tracked `exists`, `sha256`; span.
 3 `file`. 4 `lacks`: `saved:0` absent; `name`: `saved:1` name-free (safe by T11's validator; 8 item 3).

@@ -2,8 +2,9 @@
 (the common brief's section 4, item 3; contract section 12, L6; the frame's LOG-1, OP-6).
 
 The sweep is slice 1's helper (`killlib.Sweep`), given this lane's fixture: its summonses carry the lane's three names
-(rows-set C3) and the adapter's capabilities, and its rows are the lane's files as they ship with slice 3's stand-ins
-(`test_lane_set_lib`). At every kill point the rerun ends in the unkilled run's end state, or in that state with an
+(rows-set C3) and the adapter's capabilities, and its rows are the lane's files as they ship, slice 3's rows among them since
+the join (`test_lane_set_lib`); its child drive is `provlib`'s (the fixture's system folders, the fake host of the frame's own
+requests, the hosting token). At every kill point the rerun ends in the unkilled run's end state, or in that state with an
 operation listed as not proven where the frame says so, or stops plainly; no effect is applied twice.
 """
 import hashlib
@@ -11,17 +12,21 @@ import os
 import re
 import sys
 
+import subprocess
+
 import harness
 import killlib
 import test_lane_set_lib as lib
 
+provlib = lib.provlib
 
-def prepared(machine, then_sunset=False, case=None):
-    lib.programs(machine)
-    lib.locations(machine)
-    machine.write_settings()
-    lib.plant(machine)
-    lib.install(machine)
+
+class SetMachine(provlib.Machine):
+    pass
+
+
+def prepared(machine, then_sunset=False, **world):
+    lib.prepare(machine, **world)
     caps = machine.capabilities(list(lib.CAPS))
     look, go, drive, summon = machine.look, machine.go, machine.drive, machine.summon
     also = []
@@ -51,7 +56,7 @@ def prepared(machine, then_sunset=False, case=None):
 
 class EndToEnd(harness.Case):
     def test_E2E_EV5_EV7_a_sunset_over_fakes_looked_previewed_approved_and_executed_then_its_restore_both_complete(self):
-        m = harness.Machine(self.tmp, "e2e", "e2e")
+        m = SetMachine(self.tmp, "e2e", "e2e")
         prepared(m)
         before = harness.tree(m.home)
         looked = m.look("demo", "sunset")
@@ -68,9 +73,11 @@ class EndToEnd(harness.Case):
         rwent = m.go(rlooked, "demo", "restore")
         self.assertEqual(rwent.ending, "complete", rwent.text)
         self.assertEqual(sorted(set(m.statuses(rlooked.doc["run"]).values())), ["done"])
-        after = harness.tree(m.home)
         # every layer back, byte-equal where the bytes are ours, the copies and records still in the archive (L7's clean case)
+        # the repository's own `.git` is git's bytes, not ours (its index holds the files' stamps)
         skip = (".sun-v2", ".fakes", ".config")
+        before = dict((rel, v) for rel, v in before.items() if ".git" not in rel.split(os.sep))
+        after = dict((rel, v) for rel, v in harness.tree(m.home).items() if ".git" not in rel.split(os.sep))
         kept = dict((rel, v) for rel, v in before.items() if rel.split(os.sep)[0] not in skip)
         changed = sorted(rel for rel, v in kept.items() if after.get(rel) != v)
         # the memory index keeps its `## Archived` heading (G19-14, T19's way back); every note T17 repointed is back byte for
@@ -79,10 +86,12 @@ class EndToEnd(harness.Case):
         self.assertEqual(lib.read(m, "mem", "home", "MEMORY.md"), "- [Demo](project_demo_notes.md) the demo\n"
                                                                  "- [Other](project_other.md) other\n## Archived\n")
         added = sorted(rel for rel in after if rel not in before and rel.split(os.sep)[0] not in skip)
-        tomb = os.path.join("vault", "projects", "demo-vault", "_sunset-%s.md" % looked.doc["run"])
-        entry = os.path.join("vault", "projects", "demo-vault", "_restore-%s.md" % rlooked.doc["run"])
+        tomb = os.path.join("vault", "projects", "demo", "_sunset-%s.md" % looked.doc["run"])
+        entry = os.path.join("vault", "projects", "demo", "_restore-%s.md" % rlooked.doc["run"])
         sf = os.path.join("dev", "_archive", "demo.sunset-2026-01-01")
-        self.assertEqual(added, sorted([os.path.join("dev", "_archive"), sf, os.path.join(sf, "memory"),
+        # slice 3's keeps, since the join: the dump and the three environments' saved values, in the sunset folder
+        self.assertEqual(added, sorted([os.path.join("dev", "_archive"), sf, os.path.join(sf, "memory"), os.path.join(sf, "demo-db.sql")]
+                                       + [os.path.join(sf, "hosting-env." + env) for env in provlib.ALL_ENVS] + [
                                         os.path.join(sf, "memory", "MEMORY.md"), os.path.join(sf, "memory", "notes"),
                                         os.path.join(sf, "memory", "notes", "one.md"), os.path.join("vault", "archive"), tomb, entry]))
         for name in ("preview", "status", "summary", "handoff"):
@@ -94,12 +103,14 @@ class EndToEnd(harness.Case):
 def world_facts(machine):
     """`killlib.world_facts`, with the fixture home's own path read out of the files' names and bytes: the project's memory
     store is named by the project folder's path (E16-12) and a launch agent's file holds it, and every kill point has a home
-    of its own. A run's last record is compared by its head lines (below)."""
+    of its own. A run's last record is compared by its head lines (below). The repository (slice 3's world, since the join)
+    is compared as git reads it, where it stands: its branch, its head commit's tree and message, its status; git writes each
+    machine's file stamps into `.git`."""
     home = machine.home
     munged = re.sub(r"[^A-Za-z0-9]", "-", home)
     files = {}
     for rel, (kind, mode, digest) in harness.tree(home).items():
-        if rel.split(os.sep)[0] in killlib.SKIP:
+        if rel.split(os.sep)[0] in killlib.SKIP or ".git" in rel.split(os.sep):
             continue
         if kind == "file":
             with open(os.path.join(home, rel), "rb") as fh:
@@ -110,6 +121,14 @@ def world_facts(machine):
                 data = re.split(rb"\n(SUNSET|RESTORE): the record of run ", data)[0]
             digest = hashlib.sha256(data).hexdigest()
         files[rel.replace(munged, "<home>")] = (kind, mode, digest)
+    for where in (("dev", "demo"), ("dev", "_archive", "demo")):
+        repo = machine.path(*where)
+        if os.path.isdir(os.path.join(repo, ".git")):
+            def git(*a):
+                return subprocess.run(["/usr/bin/git", "-C", repo] + list(a), stdout=subprocess.PIPE,
+                                      stderr=subprocess.DEVNULL).stdout.decode()
+            files[os.path.join(*where) + " (as git reads it)"] = ("repo", 0, "|".join(
+                [git("rev-parse", "--abbrev-ref", "HEAD").strip(), git("log", "--format=%T %s").strip(), git("status", "--porcelain")]))
     return {"files": files, "fakes": REAL_FACTS(machine)["fakes"]}
 
 
@@ -126,7 +145,8 @@ class EveryBoundary(harness.Case):
         # a kill after a move's rename and before its completion leaves the move `not proven` (OP-6), and ORD-1 meets no
         # `made` need on a `not proven` provider: rows-set's T14, T16 and T30 need `vault folder archived` made, so the rerun
         # stops plainly on that need (the report's section 8)
-        sweep = killlib.Sweep(self, self.tmp, lambda machine: prepared(machine, then_sunset=kind == "restore"), "demo", kind,
+        sweep = provlib.Sweep(self, self.tmp, lambda machine: prepared(machine, then_sunset=kind == "restore"),
+                              harness.canary("sweep-vercel-token"), machine_kind=SetMachine, name="demo", kind=kind,
                               plain_stops=("need unmet",))
         failures = sweep.everywhere()
         ran = sweep.ran

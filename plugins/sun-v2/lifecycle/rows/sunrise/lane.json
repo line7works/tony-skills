@@ -216,6 +216,75 @@
     "reason": "slice 3's; this lane's one refusal relied on is git's own (SR05-main, `branch -m`)"
    },
    "item": "D20: provider support for a refusing primitive"
+  },
+  {
+   "answered_by": {
+    "row": "SR16"
+   },
+   "item": "F18: no line for passed or answered"
+  },
+  {
+   "answered_by": {
+    "reason": "not this lane's: restore's not applicable lines are slice 4's"
+   },
+   "item": "F18: EV-7's missing or corrupt keep/protected record"
+  },
+  {
+   "answered_by": {
+    "reason": "rows SR08 to SR19: GitHub, Vercel, Supabase through the Marketplace; no Notion, no Neon"
+   },
+   "item": "D20: R3/R4 permitted providers"
+  },
+  {
+   "answered_by": {
+    "reason": "not this lane's: slice 2's inputs"
+   },
+   "item": "D20: removed layers/flags/column, rejection of dropped types"
+  },
+  {
+   "answered_by": {
+    "row": "SR09"
+   },
+   "item": "D20: E16-1 type/flag dependencies",
+   "must": {
+    "thing": {
+     "layer": "hosting"
+    }
+   }
+  },
+  {
+   "answered_by": {
+    "row": "SR16"
+   },
+   "item": "D20: verified end proofs"
+  },
+  {
+   "answered_by": {
+    "row": "SR09"
+   },
+   "item": "D20: A4 hosting creation must refuse taken names",
+   "must": {
+    "construction": {
+     "id": "C2"
+    }
+   }
+  },
+  {
+   "answered_by": {
+    "row": "SR15"
+   },
+   "item": "D20: a refusing or atomic primitive remains a lane measurement",
+   "must": {
+    "construction": {
+     "id": "C4"
+    }
+   }
+  },
+  {
+   "answered_by": {
+    "reason": "not this lane's: slices 2 and 4"
+   },
+   "item": "D20: description, cross-links, dirty work, loose ends"
   }
  ],
  "facts": [
@@ -584,19 +653,19 @@
       "name": 0
      },
      {
-      "literal": " · slug "
+      "literal": " \u00b7 slug "
      },
      {
       "name": 1
      },
      {
-      "literal": " · memory project_"
+      "literal": " \u00b7 memory project_"
      },
      {
       "name": 2
      },
      {
-      "literal": ".md · shortcut "
+      "literal": ".md \u00b7 shortcut "
      },
      {
       "input": "answers.shortcut"
@@ -3616,7 +3685,7 @@
      "where_it_stands": "merge"
     },
     "id": "C3",
-    "risk_line": "a merge or lift v1 would have shown you first is written without showing it; nothing is removed but the old pointer line",
+    "risk_line": "a merge or lift v1 would have shown you first is written without showing it; nothing is removed but v1's two-line stub, where its two lines are the file's whole content",
     "risks": [
      "RK2",
      "RK18"
@@ -5354,7 +5423,7 @@
     {
      "name": "init",
      "params": {
-      "work": {
+      "path": {
        "output": "project folder.path"
       }
      },
@@ -5546,11 +5615,11 @@
     {
      "name": "rename",
      "params": {
-      "work": {
+      "repo": {
        "output": "project folder.path"
       }
      },
-     "use": "git.rename-main"
+     "use": "git.branch-main"
     }
    ],
    "condition": "none",
@@ -6840,11 +6909,11 @@
     {
      "name": "stage",
      "params": {
-      "work": {
+      "repo": {
        "output": "project folder.path"
       }
      },
-     "use": "git.stage"
+     "use": "git.add-all"
     }
    ],
    "condition": "none",
@@ -7194,7 +7263,7 @@
       "message": {
        "literal": "sunrise: the scaffold, the repo doc kit and the adopted docs"
       },
-      "work": {
+      "repo": {
        "output": "project folder.path"
       }
      },
@@ -7316,6 +7385,761 @@
    "way_back": {
     "none": "the row declares none: no sunrise undo, a commit is history"
    }
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "compare_held": true,
+     "equals": {
+      "output": "remote repository.id"
+     },
+     "field": "id",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "look",
+     "field": "name",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "present": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "id": "free",
+     "on": "target",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "name": "look",
+     "params": {
+      "name": {
+       "name": 1
+      },
+      "name_arg": {
+       "text": [
+        {
+         "literal": "name="
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "ref_arg": {
+       "literal": "ref=refs/heads/main"
+      }
+     },
+     "use": "github.repo-read"
+    },
+    {
+     "name": "make",
+     "params": {
+      "account": {
+       "account": "github"
+      },
+      "name": {
+       "name": 1
+      },
+      "name_arg": {
+       "text": [
+        {
+         "literal": "name="
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "private_arg": {
+       "literal": "private=true"
+      }
+     },
+     "use": "github.create"
+    }
+   ],
+   "condition": {
+    "equals": null,
+    "fact": "flags.public",
+    "on": "fact",
+    "reason": "a flag"
+   },
+   "construction": {
+    "command": "make",
+    "document": "GitHub's create answers with the new repository's node_id (D1, https://docs.github.com/en/rest/repos/repos); its refusal of a taken name is M-P2, to be measured",
+    "id": "C2",
+    "id_field": "id"
+   },
+   "content_classes": {
+    "reads": [
+     "safe",
+     "held"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "held"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "GitHub: create the private repository <name> as <account> (no push)",
+    "status": "GitHub: create the private repository <name> as <account> (no push)"
+   },
+   "id": "SR08",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "create",
+   "lost_answer": {
+    "way": "by dropping the layer only"
+   },
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "first commit",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "address": {
+      "text": [
+       {
+        "literal": "https://github.com/"
+       },
+       {
+        "account": "github"
+       },
+       {
+        "literal": "/"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "id": {
+      "held": "id"
+     },
+     "name": {
+      "name": 1
+     }
+    },
+    "name": "remote repository"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": [
+    "make"
+   ],
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "provider id",
+    "layer": "github",
+    "role": "the project's repository at GitHub",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "compare_held": true,
+     "equals": {
+      "output": "remote repository.id"
+     },
+     "field": "id",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "look",
+     "field": "name",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "present": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "id": "free",
+     "on": "target",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "name": "look",
+     "params": {
+      "name": {
+       "name": 1
+      },
+      "name_arg": {
+       "text": [
+        {
+         "literal": "name="
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "ref_arg": {
+       "literal": "ref=refs/heads/main"
+      }
+     },
+     "use": "github.repo-read"
+    },
+    {
+     "name": "make",
+     "params": {
+      "account": {
+       "account": "github"
+      },
+      "name": {
+       "name": 1
+      },
+      "name_arg": {
+       "text": [
+        {
+         "literal": "name="
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "private_arg": {
+       "literal": "private=false"
+      }
+     },
+     "use": "github.create"
+    }
+   ],
+   "condition": {
+    "equals": true,
+    "fact": "flags.public",
+    "on": "fact",
+    "reason": "a flag"
+   },
+   "construction": {
+    "command": "make",
+    "document": "GitHub's create answers with the new repository's node_id (D1, https://docs.github.com/en/rest/repos/repos); its refusal of a taken name is M-P2, to be measured",
+    "id": "C2",
+    "id_field": "id"
+   },
+   "content_classes": {
+    "reads": [
+     "safe",
+     "held"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "held"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "GitHub: create the public repository <name> as <account> (no push)",
+    "status": "GitHub: create the public repository <name> as <account> (no push)"
+   },
+   "id": "SR08-public",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "create",
+   "lost_answer": {
+    "way": "by dropping the layer only"
+   },
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "first commit",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "address": {
+      "text": [
+       {
+        "literal": "https://github.com/"
+       },
+       {
+        "account": "github"
+       },
+       {
+        "literal": "/"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "id": {
+      "held": "id"
+     },
+     "name": {
+      "name": 1
+     }
+    },
+    "name": "remote repository"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": [
+    "make"
+   ],
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "provider id",
+    "layer": "github",
+    "role": "the project's repository at GitHub",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "compare_held": true,
+     "equals": {
+      "output": "remote repository.id"
+     },
+     "field": "id",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "look",
+     "field": "name",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "present": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "id": "free",
+     "on": "target",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "name": "look",
+     "params": {
+      "name": {
+       "name": 1
+      },
+      "name_arg": {
+       "text": [
+        {
+         "literal": "name="
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "ref_arg": {
+       "literal": "ref=refs/heads/main"
+      }
+     },
+     "use": "github.repo-read"
+    },
+    {
+     "name": "make",
+     "params": {
+      "account": {
+       "account": "github"
+      },
+      "name": {
+       "name": 1
+      },
+      "name_arg": {
+       "text": [
+        {
+         "literal": "name="
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "private_arg": {
+       "literal": "private=true"
+      }
+     },
+     "use": "github.create"
+    }
+   ],
+   "condition": {
+    "equals": false,
+    "fact": "flags.public",
+    "on": "fact",
+    "reason": "a flag"
+   },
+   "construction": {
+    "command": "make",
+    "document": "GitHub's create answers with the new repository's node_id (D1, https://docs.github.com/en/rest/repos/repos); its refusal of a taken name is M-P2, to be measured",
+    "id": "C2",
+    "id_field": "id"
+   },
+   "content_classes": {
+    "reads": [
+     "safe",
+     "held"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "held"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "GitHub: create the private repository <name> as <account> (no push)",
+    "status": "GitHub: create the private repository <name> as <account> (no push)"
+   },
+   "id": "SR08-false",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "create",
+   "lost_answer": {
+    "way": "by dropping the layer only"
+   },
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "first commit",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "address": {
+      "text": [
+       {
+        "literal": "https://github.com/"
+       },
+       {
+        "account": "github"
+       },
+       {
+        "literal": "/"
+       },
+       {
+        "name": 1
+       }
+      ]
+     },
+     "id": {
+      "held": "id"
+     },
+     "name": {
+      "name": 1
+     }
+    },
+    "name": "remote repository"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "command": "look",
+     "field": "id",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": [
+    "make"
+   ],
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "provider id",
+    "layer": "github",
+    "role": "the project's repository at GitHub",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "compare_held": true,
+     "equals": {
+      "output": "hosting project.id"
+     },
+     "field": "id",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "look",
+     "field": "repo",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "field": "repo",
+     "is_equal": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "id": "free",
+     "on": "target",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "commands": [
+    {
+     "name": "look",
+     "params": {
+      "repo": {
+       "name": 1
+      },
+      "slug": {
+       "name": 1
+      },
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.project-read"
+    },
+    {
+     "name": "make",
+     "params": {
+      "repo_full": {
+       "text": [
+        {
+         "account": "github"
+        },
+        {
+         "literal": "/"
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "slug": {
+       "name": 1
+      },
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.create"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "make",
+    "document": "Vercel's create a project: 409, A project with the provided name already exists (D5, https://vercel.com/docs/rest-api/reference/endpoints/projects/create-a-new-project)",
+    "id": "C2",
+    "id_field": "id"
+   },
+   "content_classes": {
+    "reads": [
+     "safe",
+     "held"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "held"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "Hosting: create <slug> as <team>, connected to <repo_full>",
+    "status": "Hosting: create <slug> as <team>, connected to <repo_full>"
+   },
+   "id": "SR09",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "create",
+   "lost_answer": {
+    "document": "409: A project with the provided name already exists (D5)",
+    "way": "provider-unique"
+   },
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "remote repository",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "account": {
+      "held": "account"
+     },
+     "address": {
+      "text": [
+       {
+        "literal": "https://"
+       },
+       {
+        "name": 1
+       },
+       {
+        "literal": ".vercel.app"
+       }
+      ]
+     },
+     "id": {
+      "held": "id"
+     },
+     "slug": {
+      "name": 1
+     }
+    },
+    "name": "hosting project"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "command": "look",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "provider id",
+    "layer": "hosting",
+    "role": "the project at the hosting provider",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": "none"
   },
   {
    "after_check": [
@@ -7734,7 +8558,7 @@
    },
    "form_lines": {
     "preview": "the canary: a fresh session quotes AGENTS.md's first line",
-    "status": "the canary: a fresh session quotes AGENTS.md's first line"
+    "status": "kit 2/2, canary"
    },
    "id": "SR13-canary",
    "keep_scope": "none",
@@ -7914,6 +8738,1237 @@
     },
     "role": "every commit the push sends",
     "subject_git": "head"
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "origin-is",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "origin-push",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "origin-is",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "origin-push",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "origin-url",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "commands": [
+    {
+     "name": "add",
+     "params": {
+      "repo": {
+       "output": "project folder.path"
+      },
+      "url": {
+       "output": "remote repository.address"
+      }
+     },
+     "use": "git.remote-add"
+    },
+    {
+     "name": "origin-url",
+     "params": {
+      "key": {
+       "literal": "remote.origin.url"
+      },
+      "repo": {
+       "output": "project folder.path"
+      }
+     },
+     "use": "git.config-get"
+    },
+    {
+     "name": "origin-is",
+     "params": {
+      "key": {
+       "literal": "remote.origin.url"
+      },
+      "repo": {
+       "output": "project folder.path"
+      },
+      "value": {
+       "output": "remote repository.address"
+      }
+     },
+     "use": "git.config-equals"
+    },
+    {
+     "name": "origin-push",
+     "params": {
+      "key": {
+       "literal": "remote.origin.pushurl"
+      },
+      "repo": {
+       "output": "project folder.path"
+      }
+     },
+     "use": "git.config-get"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "add",
+    "id": "C6",
+    "risk_line": "a remote named origin made by hand between the read and the add is refused by git itself, and the run stops",
+    "risks": [
+     "RK18"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "the repository's own config values, compared by git (exits only)",
+     "exits"
+    ],
+    "resting_places": [
+     "the repository's .git"
+    ],
+    "shows": [
+     "safe text"
+    ],
+    "stores": [
+     "hashes"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "name the GitHub repository the remote origin (v1's gh repo create --remote=origin)",
+    "status": "name the GitHub repository the remote origin (v1's gh repo create --remote=origin)"
+   },
+   "id": "SR15-origin",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "remote repository",
+     "treatment": "then not applicable"
+    },
+    {
+     "level": "state",
+     "output": "branch main",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".git"
+       },
+       {
+        "literal": "config"
+       }
+      ]
+     }
+    },
+    "name": "origin remote"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".git"
+       },
+       {
+        "literal": "config"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": [
+    "add"
+   ],
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "layer": "github",
+    "place": {
+     "path": [
+      {
+       "output": "project folder.path"
+      },
+      {
+       "literal": ".git"
+      },
+      {
+       "literal": "config"
+      }
+     ]
+    },
+    "role": "the repository's remote origin",
+    "tracked": [
+     "exists",
+     "sha256"
+    ]
+   },
+   "way_back": {
+    "none": "the row declares none: no sunrise undo (A2, Q5)"
+   }
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "equals": {
+      "output": "scanned for the push.commit"
+     },
+     "field": "head",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "equals": {
+      "output": "scanned for the push.commit"
+     },
+     "field": "head",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "enforced": "in the same request",
+     "field": "head",
+     "id": "nohead",
+     "on": "target",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "name": "look",
+     "params": {
+      "commit": {
+       "output": "scanned for the push.commit"
+      },
+      "name": {
+       "name": 1
+      },
+      "name_arg": {
+       "text": [
+        {
+         "literal": "name="
+        },
+        {
+         "name": 1
+        }
+       ]
+      },
+      "ref_arg": {
+       "literal": "ref=refs/heads/main"
+      }
+     },
+     "use": "github.repo-read"
+    },
+    {
+     "name": "push",
+     "params": {
+      "lease_arg": {
+       "literal": "--force-with-lease=refs/heads/main:"
+      },
+      "refspec": {
+       "text": [
+        {
+         "output": "scanned for the push.commit"
+        },
+        {
+         "literal": ":refs/heads/main"
+        }
+       ]
+      },
+      "remote_url": {
+       "literal": "origin"
+      },
+      "repo": {
+       "output": "project folder.path"
+      }
+     },
+     "use": "github.push"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "push",
+    "conditions": [
+     "nohead"
+    ],
+    "id": "C4"
+   },
+   "content_classes": {
+    "reads": [
+     "safe",
+     "held"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "GitHub: push main once (the scanned commit)",
+    "status": "GitHub: push main once (the scanned commit)"
+   },
+   "id": "SR15",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "passed",
+     "output": "scanned for the push",
+     "treatment": "then not applicable"
+    },
+    {
+     "level": "made",
+     "output": "remote repository",
+     "treatment": "then not applicable"
+    },
+    {
+     "level": "state",
+     "output": "origin remote",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "commit": {
+      "output": "scanned for the push.commit"
+     }
+    },
+    "name": "push"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "command": "look",
+     "field": "head",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": [
+    "push"
+   ],
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "after_word": "the scanned commit",
+    "before_word": "absent",
+    "identity": "named value",
+    "layer": "github",
+    "role": "the remote's main branch"
+   },
+   "way_back": {
+    "none": "no sunrise undo (A2 Q5)"
+   }
+  },
+  {
+   "after_check": [
+    {
+     "command": "main-remote-is",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "main-merge-is",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "main-remote-is",
+     "read": "command",
+     "result": "success"
+    },
+    {
+     "command": "main-merge-is",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "main-remote",
+     "read": "command",
+     "result": "not-found"
+    },
+    {
+     "command": "main-merge",
+     "read": "command",
+     "result": "not-found"
+    }
+   ],
+   "commands": [
+    {
+     "name": "upstream",
+     "params": {
+      "repo": {
+       "output": "project folder.path"
+      }
+     },
+     "use": "git.set-upstream"
+    },
+    {
+     "name": "main-remote",
+     "params": {
+      "key": {
+       "literal": "branch.main.remote"
+      },
+      "repo": {
+       "output": "project folder.path"
+      }
+     },
+     "use": "git.config-get"
+    },
+    {
+     "name": "main-merge",
+     "params": {
+      "key": {
+       "literal": "branch.main.merge"
+      },
+      "repo": {
+       "output": "project folder.path"
+      }
+     },
+     "use": "git.config-get"
+    },
+    {
+     "name": "main-remote-is",
+     "params": {
+      "key": {
+       "literal": "branch.main.remote"
+      },
+      "repo": {
+       "output": "project folder.path"
+      },
+      "value": {
+       "literal": "origin"
+      }
+     },
+     "use": "git.config-equals"
+    },
+    {
+     "name": "main-merge-is",
+     "params": {
+      "key": {
+       "literal": "branch.main.merge"
+      },
+      "repo": {
+       "output": "project folder.path"
+      },
+      "value": {
+       "literal": "refs/heads/main"
+      }
+     },
+     "use": "git.config-equals"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "upstream",
+    "id": "C6",
+    "risk_line": "an upstream set by hand between the read and the request is replaced by origin/main",
+    "risks": [
+     "RK18"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "the repository's own config values, compared by git (exits only)",
+     "exits"
+    ],
+    "resting_places": [
+     "the repository's .git"
+    ],
+    "shows": [
+     "safe text"
+    ],
+    "stores": [
+     "hashes"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "make main track origin/main, as v1's push did",
+    "status": "make main track origin/main, as v1's push did"
+   },
+   "id": "SR15-upstream",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "push",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".git"
+       },
+       {
+        "literal": "config"
+       }
+      ]
+     }
+    },
+    "name": "main upstream"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".git"
+       },
+       {
+        "literal": "config"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": [
+    "upstream"
+   ],
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "layer": "github",
+    "place": {
+     "path": [
+      {
+       "output": "project folder.path"
+      },
+      {
+       "literal": ".git"
+      },
+      {
+       "literal": "config"
+      }
+     ]
+    },
+    "role": "main's upstream",
+    "tracked": [
+     "exists",
+     "sha256"
+    ]
+   },
+   "way_back": {
+    "none": "the row declares none: no sunrise undo (A2, Q5)"
+   }
+  },
+  {
+   "after_check": "none",
+   "after_test": "none",
+   "answers": "none",
+   "before_test": "none",
+   "commands": [
+    {
+     "name": "dep",
+     "params": {
+      "commit": {
+       "output": "push.commit"
+      },
+      "host": {
+       "text": [
+        {
+         "name": 1
+        },
+        {
+         "literal": ".vercel.app"
+        }
+       ]
+      },
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.deployment-read"
+    },
+    {
+     "name": "web",
+     "params": {
+      "url": {
+       "text": [
+        {
+         "literal": "https://"
+        },
+        {
+         "name": 1
+        },
+        {
+         "literal": ".vercel.app/"
+        }
+       ]
+      }
+     },
+     "use": "web.status"
+    }
+   ],
+   "condition": "none",
+   "construction": "none",
+   "content_classes": {
+    "reads": [
+     "safe"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "Verify: the production deployment and <url> for the pushed commit",
+    "status": "Verify: the deployment reads <ready> and <url> answered <status>, for the pushed commit"
+   },
+   "id": "SR16",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "check",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "push",
+     "treatment": "then not applicable"
+    },
+    {
+     "level": "made",
+     "output": "hosting project",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {},
+    "name": "deployment"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": "none",
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "none",
+    "layer": "hosting",
+    "passes": [
+     {
+      "command": "dep",
+      "equals": "READY",
+      "field": "ready",
+      "read": "command",
+      "result": "success"
+     },
+     {
+      "command": "dep",
+      "field": "commit",
+      "is_equal": true,
+      "read": "command",
+      "result": "success"
+     },
+     {
+      "command": "web",
+      "equals": "200",
+      "field": "status",
+      "read": "command",
+      "result": "success"
+     }
+    ],
+    "role": "the production deployment and its clean address"
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "compare_held": true,
+     "equals": {
+      "output": "database.resource"
+     },
+     "field": "resource",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "field": "resource",
+     "present": true,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "field": "resource",
+     "id": "free",
+     "on": "target",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "name": "add",
+     "params": {
+      "name": {
+       "text": [
+        {
+         "name": 1
+        },
+        {
+         "literal": "-db"
+        }
+       ]
+      },
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.db-add"
+    },
+    {
+     "name": "look",
+     "params": {
+      "slug": {
+       "name": 1
+      },
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.db-list"
+    },
+    {
+     "name": "inst",
+     "params": {
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.db-installed"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "add",
+    "document": "vercel integration add provisions a new resource; --name: Custom name for the resource (D9, https://vercel.com/docs/cli/integration)",
+    "id": "C2",
+    "id_field": "resource",
+    "risk_line": "a resource of that name made by another between the probe and the create leaves two of that name; the run's is the one its answer names",
+    "risks": [
+     "RK18"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "safe",
+     "held"
+    ],
+    "resting_places": [
+     "the protected folder"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "held"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "Database: Supabase through the Marketplace, <name>",
+    "status": "Database: Supabase through the Marketplace, <name>"
+   },
+   "id": "SR17",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "create",
+   "lost_answer": {
+    "way": "by dropping the layer only"
+   },
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "hosting project",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "name": {
+      "text": [
+       {
+        "name": 1
+       },
+       {
+        "literal": "-db"
+       }
+      ]
+     },
+     "resource": {
+      "held": "resource"
+     }
+    },
+    "name": "database"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "command": "inst",
+     "equals": "true",
+     "field": "installed",
+     "read": "command",
+     "result": "success",
+     "stop_line": "Accept the Marketplace's terms for Supabase once: run `vercel integration accept-terms supabase`, then summon sunrise again."
+    },
+    {
+     "command": "look",
+     "field": "resource",
+     "present": false,
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "provider id",
+    "layer": "database",
+    "role": "the project's database resource",
+    "tracked": [
+     "exists",
+     "identity"
+    ]
+   },
+   "way_back": "none"
+  },
+  {
+   "after_check": [
+    {
+     "command": "look",
+     "equals": "true",
+     "field": "connected",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "after_test": [
+    {
+     "command": "look",
+     "equals": "true",
+     "field": "connected",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "command": "look",
+     "equals": "false",
+     "field": "connected",
+     "id": "apart",
+     "on": "target",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "commands": [
+    {
+     "name": "look",
+     "params": {
+      "slug": {
+       "name": 1
+      },
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.db-list"
+    },
+    {
+     "name": "connect",
+     "params": {
+      "name": {
+       "output": "database.name"
+      },
+      "slug": {
+       "name": 1
+      },
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.db-connect"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "command": "connect",
+    "id": "C6",
+    "risk_line": "another connects it between the read and the request, and the run records the connect as its own",
+    "risks": [
+     "RK18"
+    ]
+   },
+   "content_classes": {
+    "reads": [
+     "safe",
+     "held"
+    ],
+    "resting_places": [],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "safe"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "Database: connect the database to <slug>",
+    "status": "Database: connect the database to <slug>"
+   },
+   "id": "SR17c",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "change",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "made",
+     "output": "database",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {},
+    "name": "database connected"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "command": "look",
+     "equals": "false",
+     "field": "connected",
+     "read": "command",
+     "result": "success"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "after_word": "connected",
+    "before_word": "not connected",
+    "identity": "provider id",
+    "layer": "database",
+    "role": "the database's connection to the project"
+   },
+   "way_back": {
+    "none": "no sunrise undo (A2 Q5)"
+   }
+  },
+  {
+   "after_check": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".env.local"
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "at_most": 384,
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".env.local"
+       }
+      ]
+     },
+     "read": "mode"
+    }
+   ],
+   "after_test": [
+    {
+     "is": "file",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".env.local"
+       }
+      ]
+     },
+     "read": "path"
+    },
+    {
+     "at_most": 384,
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".env.local"
+       }
+      ]
+     },
+     "read": "mode"
+    }
+   ],
+   "answers": "none",
+   "before_test": [
+    {
+     "id": "free",
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".env.local"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "commands": [
+    {
+     "name": "pull",
+     "params": {
+      "env": {
+       "literal": "development"
+      },
+      "repo": {
+       "output": "project folder.path"
+      },
+      "team": {
+       "account": "vercel"
+      }
+     },
+     "use": "vercel.env-pull"
+    }
+   ],
+   "condition": "none",
+   "construction": {
+    "builder": "pull",
+    "id": "C1",
+    "mode": 384,
+    "out_param": "out",
+    "single_file": true
+   },
+   "content_classes": {
+    "reads": [
+     "secret"
+    ],
+    "resting_places": [
+     "the pulled env file in the working tree"
+    ],
+    "shows": [
+     "safe"
+    ],
+    "stores": [
+     "secret"
+    ],
+    "validators": []
+   },
+   "form_lines": {
+    "preview": "Env: pull the development values to .env.local (owner-only, ignored)",
+    "status": "Env: pull the development values to .env.local (owner-only, ignored)"
+   },
+   "id": "SR19",
+   "keep_scope": "none",
+   "keeps_required": "none",
+   "kind": "build",
+   "lost_answer": "none",
+   "mode": "none",
+   "needs": [
+    {
+     "level": "state",
+     "output": "database connected",
+     "treatment": "then not applicable"
+    },
+    {
+     "level": "made",
+     "output": "hosting link",
+     "treatment": "then not applicable"
+    }
+   ],
+   "output": {
+    "fields": {
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".env.local"
+       }
+      ]
+     }
+    },
+    "name": "env file"
+   },
+   "owner_names": "none",
+   "phase": "sunrise",
+   "planning_test": [
+    {
+     "is": "absent",
+     "path": {
+      "path": [
+       {
+        "output": "project folder.path"
+       },
+       {
+        "literal": ".env.local"
+       }
+      ]
+     },
+     "read": "path"
+    }
+   ],
+   "repo_commands": "none",
+   "reverse_inputs": "none",
+   "review_file": "none",
+   "safe_content": "none",
+   "span": "none",
+   "thing": {
+    "identity": "path",
+    "layer": "database",
+    "place": {
+     "path": [
+      {
+       "output": "project folder.path"
+      },
+      {
+       "literal": ".env.local"
+      }
+     ]
+    },
+    "role": "the pulled env file",
+    "tracked": [
+     "exists",
+     "identity",
+     "sha256",
+     "mode"
+    ]
    },
    "way_back": "none"
   },
@@ -9734,7 +11789,7 @@
     {
      "name": "clean",
      "params": {
-      "work": {
+      "repo": {
        "output": "project folder.path"
       }
      },

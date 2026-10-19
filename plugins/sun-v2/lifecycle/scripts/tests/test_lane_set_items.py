@@ -1,7 +1,7 @@
 """E16 slice 4: the lane brief's required items, the seams this lane provides, and the lane's files as shipped (ROW-3).
 
 Each test's name carries the item or the row and the frame's rule. The lane's files are read as they ship
-(`test_lane_set_lib`); slice 3's are stand-ins.
+(`test_lane_set_lib`), slice 3's rows among them since the join (no stand-in).
 """
 import copy
 import json
@@ -149,7 +149,7 @@ class RequiredItems(harness.Case):
     def test_item3_Q3_G22_7_G23_15_RUN6_T17_the_tree_read_finds_notes_at_every_depth_each_path_safe_inside_ones_by_rel(self):
         from sun_core import plan
         m = lib.machine(self)
-        m.put("vault/deep/a/b/note.md", "see [[projects/demo-vault/_index]]\n")
+        m.put("vault/deep/a/b/note.md", "see [[projects/demo/_index]]\n")
         row = self.shipped_t17()
         self.assertTrue(row["thing"]["family"]["tree"])
         self.assertEqual(row["thing"]["family"]["validators"], {"path": "a path a shell line may hold"})
@@ -169,7 +169,7 @@ class RequiredItems(harness.Case):
         # Question 3, the control room's reading: each path made safe by `a path a shell line may hold`, so no place is held;
         # a note outside the moved folder is placed where it stands, and one inside it by the move's output and its path
         # relative to the folder (G21-12, G23-15's `rel`)
-        vf = m.path("vault", "projects", "demo-vault")
+        vf = m.path("vault", "projects", "demo")
         places = {}
         for member in members:
             place = member["thing"]["place"]
@@ -200,10 +200,12 @@ class Seams(harness.Case):
         self.assertEqual(outputs["sunset folder"], {"path": m.path("dev", "_archive", "demo.sunset-2026-01-01")})
         self.assertEqual(outputs["repository archived"], {"path": m.path("dev", "_archive", "demo")})
         statuses = m.statuses(looked.doc["run"])
-        # `repository moved` has no field: its check passed, and the stand-in of slice 3's T21, which needs it at `passed`, ran
-        self.assertEqual((statuses["T12m"], statuses["T20"], statuses["T21"], statuses["T03"]), ("passed", "done", "done", "passed"))
+        # `repository moved` has no field: its check passed, and slice 3's T20 and T21, which need it at `passed`, ran; T03 is
+        # slice 3's keep, `done` (the join: it was a stand-in check, `passed`, before)
+        self.assertEqual((statuses["T12m"], statuses["T20"], statuses["T21"], statuses["T03"]), ("passed", "done", "done", "done"))
         t21 = [o for o in lib.manifest(m, looked.doc["run"])["operations"] if o["id"] == "T21"][0]
         self.assertEqual([n["output"] for n in t21["needs"]], ["repository moved"])
+        self.assertEqual([n["level"] for n in t21["needs"]], ["passed"])
         rlooked, rwent = lib.run(self, m, "restore")
         routputs = self.bound(m, rlooked.doc["run"])
         self.assertEqual(routputs["repository back"], {"path": m.path("dev", "demo")})

@@ -27,4 +27,6 @@ What the lane's rows need of this skill (rows-set C2, C3, C10, section 4, and th
   (`--also`, in that order). Resolve them and confirm them with the owner before the summons.
 - His one-line reason is the input `description`. A not-proven line he asks the restore to reverse goes in its
   input `restore_lines`. His "archive it as it is" is the flag `archive_as_is`.
+- His `--keep-github`, `--keep-vercel` and `--keep-db` are the layers they keep out of the run, given in `drop_layers` as
+  `github`, `hosting` and `database`; `--keep-local` drops `repository`, `memory store` and `shortcut`.
 - In the summary you give the owner, mention any other tracker you notice in the repository, beyond the hosting config files the tool lists; add no tool step for it and do not act on it.

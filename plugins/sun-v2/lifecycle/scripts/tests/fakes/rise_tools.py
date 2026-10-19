@@ -3,7 +3,7 @@
 
     rise_tools.py <tool> <arguments ...>
 
-A test puts a wrapper of each name (`git`, `npx`, `npm`, `uv`, `python3`, `riseadapter`) in a folder of its own fixture and
+A test puts a wrapper of each name (`git`, `npx`, `npm`, `uv`, `python3`, `sun-adapter`) in a folder of its own fixture and
 names that folder first among the fixture's system folders, so the runner finds these in place of any real program. Every
 call is recorded, in the shape `fakeprov.py` records it, under `$HOME/.fakes/<tool>/calls.jsonl`, with `changing` true for a
 call that writes a repository or a project. `plan.json` there tells a call what to do (`fail`, `dot_git`, `stale`,
@@ -19,7 +19,8 @@ call that writes a repository or a project. `plan.json` there tells a call what 
                             it also writes `next-env.d.ts` at the project's top, as a real Next.js build does
     uv init --vcs none --app .
     python3 -I -B FILE      runs nothing: answers the hello line where FILE stands
-    riseadapter canary --work DIR    the canary: "same" where DIR/AGENTS.md stands (a plan entry may answer "differs")
+    sun-adapter canary --in DIR    the canary (slice 4's shipped `adapter.canary`): "same" where DIR/AGENTS.md stands (a
+                            plan entry may answer "differs")
 
 Each scaffolder writes a small tree in its working folder, as the real one documents; none runs git. The Electron one, with
 the plan entry `dot_git`, also makes a `.git` folder of its own there (R7: the frame publishes none of it, G21-4). The
@@ -51,7 +52,9 @@ def record(changing):
     with open(os.path.join(ROOT, "counts.json"), "w") as fh:
         json.dump(counts, fh)
     with open(os.path.join(ROOT, "calls.jsonl"), "a") as fh:
-        fh.write(json.dumps({"tool": TOOL, "argv": ARGV, "cwd": os.getcwd(), "changing": changing, "nth": nth}, sort_keys=True) + "\n")
+        # `empty`: the working folder held nothing when the call was made (a scaffolder's staged folder, R7)
+        fh.write(json.dumps({"tool": TOOL, "argv": ARGV, "cwd": os.getcwd(), "changing": changing, "nth": nth,
+                             "empty": not os.listdir(os.getcwd())}, sort_keys=True) + "\n")
     plan = [p for p in load(os.path.join(ROOT, "plan.json"), []) if p.get("when") in (None, ARGV[0] if ARGV else None)]
     return plan[0] if plan else {}
 
@@ -171,10 +174,10 @@ def main():
         if todo.get("do") == "fail" or not os.path.isfile(script):
             answer(1, "")
         answer(0, "Hello from script!\n")
-    if TOOL == "riseadapter":
+    if TOOL == "sun-adapter":
         todo = record(False)
         opts = dict(zip(ARGV[1::2], ARGV[2::2]))
-        work = opts.get("--work", "")
+        work = opts.get("--in", "")
         if not os.path.isfile(os.path.join(work, "AGENTS.md")):
             answer(1, "{}")
         answer(0, json.dumps({"match": todo.get("match", "same")}))

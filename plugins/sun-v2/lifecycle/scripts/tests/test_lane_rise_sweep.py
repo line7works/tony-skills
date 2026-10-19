@@ -1,5 +1,6 @@
 """Slice 2's lane under slice 1's kill-sweep helper (`killlib.Sweep`): a kill at every write boundary of the reference run
-of sunrise's own rows (a web app, every layer, the stand-ins giving slice 3's outputs), a real SIGKILL of a child process,
+of the joined sunrise lane (a web app, every layer, slice 3's remote rows among them since the join), a real SIGKILL of a
+child process,
 then a status summons and a resume on its position, as an executor would make them (LOG-1, OP-6, E16-6).
 
 Two things of this lane's world are not the same bytes on two fixture machines, and the comparison of end states reads them
@@ -7,8 +8,9 @@ by what they are, said plainly: a file that holds the machine's own home path (t
 memory note) is compared with that path written as `<HOME>`; the repository is compared by its branch, its head commit's
 tree, its message and its status, since git writes a commit's time and each machine's file stamps into `.git`; and the
 hosting link file, which holds the fake host's ids (made from each machine's own home), by its keys and its mode. The
-child drive finds git and python3 in the system folders, as a real run would: the system's own git, on the test's own
-temporary repository, and the scaffolder fakes in a program folder he names.
+child drive is `provlib`'s (the fixture's system folders, the fake host of the frame's own requests, the hosting token):
+it finds the system's own git in the fixture's system folder of slice 3's, on the test's own temporary repository, and the
+scaffolder fakes in a program folder he names.
 """
 import hashlib
 import json
@@ -20,12 +22,14 @@ import harness
 import killlib
 import test_lane_rise as rise
 
+provlib = rise.provlib
 
-class RiseMachine(harness.Machine):
+
+class RiseMachine(provlib.Machine):
     """A fixture machine whose look carries the three names by place and the sunrise inputs, as an executor gives them."""
 
     def look(self, name="demo", kind="sunrise", also=(), inputs=None, caps=None, **kw):
-        return harness.Machine.look(self, name, kind, also=rise.ALSO, inputs=inputs or self.rise_inputs, caps=caps, **kw)
+        return provlib.Machine.look(self, name, kind, also=rise.ALSO, inputs=inputs or self.rise_inputs, caps=caps, **kw)
 
 
 def prepare(machine):
@@ -65,18 +69,14 @@ def world_facts(machine):
 ORIGINAL = killlib.world_facts
 
 
-class Sweep(killlib.Sweep):
-    """`killlib.Sweep`, its machines `RiseMachine`s. A plain stop besides an outstanding create: `need unmet`, where a kill
+class Sweep(provlib.Sweep):
+    """`provlib.Sweep`, its machines `RiseMachine`s. A plain stop besides an outstanding create: `need unmet`, where a kill
     falls after SR07's commit and before its completion record, so that OP-6 records SR07 `not proven` and a row that needs
-    `first commit` at the `made` level (slice 3's SR08, as its stand-in has it) stops naming that need (ORD-1)."""
+    `first commit` at the `made` level (slice 3's SR08) stops naming that need (ORD-1)."""
 
     def __init__(self, test, tmp, prepare):
-        killlib.Sweep.__init__(self, test, tmp, prepare, plain_stops=("an outstanding create", "need unmet"))
-
-    def fresh(self, label):
-        machine = RiseMachine(os.path.join(self.tmp, label), "home", "sweep")
-        self.prepare(machine)
-        return machine
+        provlib.Sweep.__init__(self, test, tmp, prepare, harness.canary("sweep-vercel-token"), machine_kind=RiseMachine,
+                               plain_stops=("an outstanding create", "need unmet"))
 
 
 class EveryBoundaryOfTheLanesReferenceRun(harness.Case):

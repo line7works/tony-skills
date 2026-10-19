@@ -2,7 +2,7 @@
 own items of its second brief (T17, T19 and V08, T10d with no table, T10c's capability, the restore summons).
 
 Every test's name carries the row's id or the item, and the frame's rule. The rows are the lane's files as they ship
-(`test_lane_set_lib`); slice 3's are stand-ins.
+(`test_lane_set_lib`), slice 3's rows among them since the join (no stand-in).
 """
 import json
 import os
@@ -10,8 +10,8 @@ import os
 import harness
 import test_lane_set_lib as lib
 
-OUTSIDE = "links [[projects/demo-vault/_index]] and [[archive/old/_index]]\n"
-PLAN = "the plan, from [[projects/demo-vault/_index]]\n"
+OUTSIDE = "links [[projects/demo/_index]] and [[archive/old/_index]]\n"
+PLAN = "the plan, from [[projects/demo/_index]]\n"
 MEMORY_INDEX = "- [Demo](project_demo_notes.md) the demo\n- [Other](project_other.md) other\n"
 
 
@@ -32,9 +32,9 @@ class NotesRepointed(harness.Case):
         looked, went = lib.run(self, m)
         run = looked.doc["run"]
         self.assertEqual(lib.read(m, "vault", "notes", "elsewhere.md"),
-                         "links [[archive/demo-vault/_index]] and [[archive/old/_index]]\n", "a link already elsewhere is kept")
-        self.assertEqual(lib.read(m, "vault", "archive", "demo-vault", "plan.md"), "the plan, from [[archive/demo-vault/_index]]\n")
-        self.assertIn("see [[archive/demo-vault/plan]]\n", lib.read(m, "vault", "archive", "demo-vault", "_index.md"))
+                         "links [[archive/demo/_index]] and [[archive/old/_index]]\n", "a link already elsewhere is kept")
+        self.assertEqual(lib.read(m, "vault", "archive", "demo", "plan.md"), "the plan, from [[archive/demo/_index]]\n")
+        self.assertIn("see [[archive/demo/plan]]\n", lib.read(m, "vault", "archive", "demo", "_index.md"))
         self.assertEqual(lib.read(m, "vault", "notes", "unrelated.md"), "nothing here\n")
         ops = manifest_ops(m, run)
         family = sorted(i for i in ops if i.startswith("T17-"))

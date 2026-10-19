@@ -1112,6 +1112,14 @@ def edited(data, edit, value_of, read_other=None):
                 heads = [len(lines) - 1]
             lines.insert(heads[0] + 1, line)
             return reads.join_lines(lines, True).encode("utf-8")
+        if str(value_of(edit["below"])) == enginemod.EDGE_END and str(value_of(edit["above"])) != enginemod.EDGE_START:
+            # the join's J1b item 3 (J1's Stop 3): the line was its file's last, so its saved line below stood nowhere, and the
+            # move put a heading after its line above; it goes back right after that line above, found exactly once
+            above = str(value_of(edit["above"]))
+            after = [i + 1 for i, l in enumerate(lines) if l == above]
+            if len(after) != 1:
+                return None
+            return reads.join_lines(lines[:after[0]] + [line] + lines[after[0]:], ended).encode("utf-8")
         back = edited(reads.join_lines(lines, ended).encode("utf-8"),
                       {"kind": "insert-between", "line": {"literal": line}, "above": edit["above"], "below": edit["below"]},
                       lambda mark: mark["literal"] if isinstance(mark, dict) and "literal" in mark and len(mark) == 1 else value_of(mark))

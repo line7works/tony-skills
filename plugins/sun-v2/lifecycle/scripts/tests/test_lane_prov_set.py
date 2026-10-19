@@ -1,5 +1,6 @@
-"""Slice 3, the providers: the sunset rows (rows-prov section 3.3) and restore's two ways back (3.4), over the four fakes
-with slice 4's outputs from stand-in rows (provlib), as slice 4's `sunset/lane.json` will hold them at the join; this lane's
+"""Slice 3, the providers: the sunset rows (rows-prov section 3.3) and restore's two ways back (3.4) as the join leaves them,
+in slice 4's shipped `sunset/lane.json`, over the four fakes on slice 4's own fixture machine (`test_lane_set_lib`, slice 3's
+world planted by `provlib.sunset_world`): a whole sunset, slice 4's rows giving the outputs these rows need; this lane's
 required items 1 (the hosting keep's mark) and 2 (N3, the reversible encoding); and part two's rows and mechanisms (T01 on
 G23-1, T21 and V11 on G23-5, T03 on G23-9, T04 on G23-6 and G23-8, T04c on G23-3 and G23-7, `repository moved` at
 slice 4's level).
@@ -15,6 +16,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "prov"))
 import provlib  # noqa: E402
 import harness  # noqa: E402
+import test_lane_set_lib as lib  # noqa: E402
 from sun_core import effects, plan, protected  # noqa: E402
 
 SET_ROWS = ("T01s", "T01", "T03", "T04-development", "T04-preview", "T04-production", "T04c", "T20", "T21")
@@ -37,13 +39,38 @@ def record(m, run, reference):
 
 
 def folder(m):
-    return os.path.join(m.archive, "demo-sunset")
+    """Slice 4's T02, the sunset folder (rows-set SF)."""
+    return os.path.join(m.archive, "demo.sunset-" + DATE)
 
 
-def sunset(m, part=None, extra=()):
-    """The test lane: slice 4's stand-ins, then slice 3's sunset part as shipped (part one's test-lane substitution for T04c's
-    family read is gone: G23-3 makes the family's read after the identity reads)."""
-    provlib.install(m, provlib.set_lane(part, extra))
+def tombstone(m, run):
+    """Slice 4's T30, the run's last record in the moved vault folder (rows-set T30)."""
+    return read_file(m.path("vault", "archive", "demo", "_sunset-%s.md" % run))
+
+
+def world(case, label="m", seed=None, **planted):
+    """Slice 4's fixture machine with slice 3's world (`planted`: `provlib.sunset_world`'s values, tables, custom) and the
+    shipped lanes; `m.world_made` is (the repository, its commit, the database's password)."""
+    return lib.machine(case, label, **planted)
+
+
+KEEP = {"keep_github": "github", "keep_vercel": "hosting", "keep_db": "database"}
+
+
+def look(m, **keep):
+    """The sunset look; v1's `--keep-github`, `--keep-vercel`, `--keep-db` given as the layers they drop (rows-set C4; the
+    join's J1b item 5)."""
+    return lib.look(m, drop_layers=[KEEP[k] for k, v in sorted(keep.items()) if v])
+
+
+def started(m, **flags):
+    looked = look(m, **flags)
+    assert looked.doc and looked.doc.get("manifest_sha256"), looked.text
+    return looked, lib.go(m, looked)
+
+
+def sunset_row(rid):
+    return [r for r in lib.shipped_lane("sunset")["rows"] if r["id"] == rid][0]
 
 
 def stop_of(m, run):
@@ -51,18 +78,18 @@ def stop_of(m, run):
 
 
 class Admission(harness.Case):
-    def test_ROW1_ROW3_the_sunset_and_restore_parts_with_stand_ins_are_admitted_with_their_checklists(self):
-        lane = provlib.set_lane()
+    def test_ROW1_ROW3_the_joined_sunset_and_restore_lanes_are_admitted_with_their_checklists(self):
+        lane = lib.shipped_lane("sunset")
         self.assertEqual(plan.admit_all(lane, plan.expand(lane, provlib.providers()), provlib.providers()), [])
-        self.assertEqual([r["id"] for r in provlib.shipped("sunset", "provider-rows.json")["rows"]], list(SET_ROWS))
-        restore = provlib.restore_lane()
+        self.assertEqual([r["id"] for r in lane["rows"] if r["id"] in SET_ROWS], list(SET_ROWS))
+        restore = lib.shipped_lane("restore")
         self.assertEqual(plan.admit_all(restore, plan.expand(restore, provlib.providers()), provlib.providers()), [])
         # V10 rides as T20's way back, admitted as a reverse (EV-4)
         t20 = [r for r in lane["rows"] if r["id"] == "T20"][0]
         self.assertEqual(t20["way_back"]["reverse"]["id"], "V10")
 
     def test_required_1_RK19_KEEP1_A149_every_hosting_keep_carries_the_mark_and_its_two_reads_are_admitted_only_with_it(self):
-        part = provlib.shipped("sunset", "provider-rows.json")
+        part = lib.shipped_lane("sunset")
         keeps = [r for r in part["rows"] if r["id"].startswith("T04")]
         self.assertEqual(sorted(r["id"] for r in keeps), ["T04-development", "T04-preview", "T04-production", "T04c"])
         self.assertTrue(all(r["construction"].get("hosting_env") is True for r in keeps))
@@ -72,20 +99,19 @@ class Admission(harness.Case):
         for r in unmarked["rows"]:
             if r["id"] == "T04-production":
                 del r["construction"]["hosting_env"]
-        lane = provlib.set_lane(unmarked)
+        lane = unmarked
         found = plan.admit_all(lane, plan.expand(lane, provlib.providers()), provlib.providers())
         self.assertEqual([(f["row"], f["entry"]) for f in found], [("T04-production", "keep_scope")])
 
 
 class EndToEnd(harness.Case):
     def test_T01s_T01_T03_T04_T04c_T20_T21_RUN8_KEEP1_KEEP3_a_sunset_over_the_fakes_looked_previewed_approved_and_complete(self):
-        m = provlib.wire(self.machine())
-        repo, commit, password = provlib.sunset_world(m, custom=[{"id": "env_customone", "slug": "staging"}])
+        m = world(self, custom=[{"id": "env_customone", "slug": "staging"}])
+        repo, commit, password = m.world_made
         state = provlib.state(m, "vercel")
         state["envs"]["demo"].append({"key": "STAGE_ONLY", "value": "staging-value-1", "type": "encrypted", "custom": "env_customone"})
         provlib.put_state(m, "vercel", envs=state["envs"])
-        sunset(m)
-        looked = m.look(kind="sunset", inputs=provlib.set_inputs(m))
+        looked = look(m)
         self.assertEqual(looked.ending, "preview", looked.text)
         run = looked.doc["run"]
         preview = read_file(looked.doc["forms"][0])
@@ -95,7 +121,7 @@ class EndToEnd(harness.Case):
                      "GitHub: tag sunset-%s at the head" % DATE, "Hosting: pause demo (production blocked, reversible)"):
             self.assertIn(line, preview)
         self.assertNotIn("staging", preview)                 # the custom environment's own name is held (SEC-4; N2)
-        went = m.go(looked, kind="sunset")
+        went = lib.go(m, looked)
         self.assertEqual(went.ending, "complete", went.text)
         statuses = m.statuses(run)
         self.assertEqual(statuses.get("T01s"), "passed")
@@ -105,7 +131,7 @@ class EndToEnd(harness.Case):
         self.assertEqual(provlib.remote_head(m, ref=TAG), commit)
         self.assertEqual(provlib.git(repo if os.path.isdir(repo) else os.path.join(m.archive, "demo"), "tag", "--list"), "")
         # T03: the whole database, owner-only, its inventory pg_dump's own CREATE TABLE lines, the source read before the copy
-        dump = os.path.join(m.archive, "demo-sunset", "demo-db.sql")
+        dump = os.path.join(folder(m), "demo-db.sql")
         self.assertEqual(stat.S_IMODE(os.stat(dump).st_mode), 0o600)
         text = read_file(dump)
         self.assertTrue(text.endswith("-- PostgreSQL database dump complete\n--\n\n"))
@@ -142,25 +168,25 @@ class EndToEnd(harness.Case):
         self.assertNotIn("prj_fixture1", json.dumps(m.journal(run)))
         status = "".join(read_file(p) for p in went.doc["forms"])
         self.assertIn("Saved copies: hosting env values of development, owner-only", status)
+        # the join's punch list (b), the reviewer's P4: T03's line says that no test load ran (rows-prov section 5's Backup
+        # line; its table count and its empty-database words are Machinery request 3)
+        self.assertIn("[T03] done: Backup: dump the whole database to the sunset folder. A test load was not done.", status)
         self.assertNotIn("prj_fixture1", status)
         with open(os.path.join(os.environ.get("SUN_V2_PROV_FORMS", m.root), "set-forms-2.txt"), "w") as fh:
-            fh.write(preview + "\n=====\n" + status + "\n=====\n" + provlib.tombstone(m, run))
+            fh.write(preview + "\n=====\n" + status + "\n=====\n" + tombstone(m, run))
 
     def test_V10_V11_EV4_EV5_G23_5_restore_offers_T20s_and_T21s_ways_back_un_archives_and_un_pauses_by_the_saved_id(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
-        _looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m))
+        m = world(self)
+        _looked, went = started(m)
         self.assertEqual(went.ending, "complete", went.text)
         self.assertEqual(provlib.state(m, "vercel")["things"]["demo"]["state"], "paused")
-        provlib.install(m, provlib.set_lane(), provlib.restore_lane())
-        looked = m.look(kind="restore", inputs=m.inputs())
+        looked = lib.look(m, "restore")
         self.assertEqual(looked.ending, "preview", looked.text)
         preview = read_file(looked.doc["forms"][0])
         self.assertIn("GitHub: un-archive fixture-account/demo", preview)
         self.assertIn("Hosting: un-pause", preview)
         self.assertNotIn("prj_fixture1", preview)
-        back = m.go(looked, kind="restore")
+        back = lib.go(m, looked, "restore")
         self.assertEqual(back.ending, "complete", back.text)
         statuses = m.statuses(looked.doc["run"])
         self.assertEqual((statuses.get("V10"), statuses.get("V11")), ("done", "done"))
@@ -183,10 +209,9 @@ class EndToEnd(harness.Case):
         to the dated tag and gives slice 4 `sunset tag` {ref, commit}."""
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from sun_core import journal as journalmod, state as statemod
-        m = provlib.wire(self.machine())
-        repo, commit, _ = provlib.sunset_world(m)
-        sunset(m)
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_vercel=True))
+        m = world(self)
+        repo, commit, _ = m.world_made
+        looked, went = started(m, keep_db=True, keep_vercel=True)
         self.assertEqual(went.ending, "complete", went.text)
         run = looked.doc["run"]
         with open(os.path.join(m.facts.run_dir(run), "manifest-1.json")) as fh:
@@ -197,14 +222,35 @@ class EndToEnd(harness.Case):
         self.assertEqual(provlib.remote_head(m, ref=TAG), commit)
 
 
+class PunchList(harness.Case):
+    def test_P4_T01s_FORM2_a_scan_that_stops_the_run_has_a_line_that_does_not_say_the_commits_are_clear(self):
+        """The join's punch list (b), the reviewer's P4 on T01s: a commit the tag push would send holds the env file's value;
+        the scan fails and the run stops before any push, and T01s's line in the status form does not say the commits hold no
+        guarded value (rows-prov section 5's two lines, one per outcome, are Machinery request 3)."""
+        m = world(self)
+        repo, _commit, password = m.world_made
+        m.put("dev/demo/notes.txt", "the url: %s\n" % password)
+        provlib.git(repo, "add", "notes.txt")
+        provlib.git(repo, "commit", "-q", "-m", "notes")
+        looked = lib.look(m, flags={"archive_as_is": True})          # G8 would ask about the unpushed commit
+        self.assertEqual(looked.ending, "preview", looked.text)
+        went = lib.go(m, looked)
+        self.assertEqual(went.ending, "stopped", went.text)
+        self.assertNotEqual(m.statuses(looked.doc["run"]).get("T01s"), "passed")
+        self.assertIsNone(provlib.remote_head(m, ref=TAG))
+        status = "".join(read_file(p) for p in went.doc["forms"])
+        t01s = [line for line in status.split("\n") if line.startswith("[T01s]")]
+        self.assertEqual(len(t01s), 1, status)
+        self.assertNotIn("hold no value", t01s[0])
+        self.assertNowhere(password, went)
+
+
 class RequiredItems(harness.Case):
     def test_required_1_T04_RK19_SEC4_a_saved_value_under_eight_bytes_is_saved_whole_and_makes_no_register_entry(self):
         """`FEATURE=on`, two bytes: saved whole in each environment's copy, and the lines holding "on" go out as they stand
         (an entry in the register would withhold every one of them: the status form would be the register's words)."""
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m))
+        m = world(self)
+        looked, went = started(m)
         self.assertEqual(went.ending, "complete", went.text)
         self.assertIn('FEATURE="on"', read_file(os.path.join(folder(m), "hosting-env.production")))
         status = "".join(read_file(p) for p in went.doc["forms"])
@@ -215,14 +261,12 @@ class RequiredItems(harness.Case):
         """The reviewer's N3 on T04c: a value holding a line break and then `OTHER=1`, a quote, a backslash and an empty value;
         the frame's reversible encoding (G19-29) writes one line each, and decoding the kept copy gives back exactly the
         answer's pairs."""
-        m = provlib.wire(self.machine())
         pairs = [["SPLIT", "a long first line\nOTHER=1"], ["QUOTED", 'say "hi" there'], ["SLASHED", "back\\slash value"], ["EMPTY", ""]]
-        provlib.sunset_world(m, custom=[{"id": "env_customone", "slug": "staging"}])
+        m = world(self, custom=[{"id": "env_customone", "slug": "staging"}])
         state = provlib.state(m, "vercel")
         state["envs"]["demo"] += [{"key": k, "value": v, "type": "encrypted", "custom": "env_customone"} for k, v in pairs]
         provlib.put_state(m, "vercel", envs=state["envs"])
-        sunset(m)
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m))
+        looked, went = started(m)
         self.assertEqual(went.ending, "complete", went.text)
         data = read_file(os.path.join(folder(m), "hosting-env.custom-1"), "rb")
         self.assertEqual(data.count(b"\n"), 4)                       # one line each: no `OTHER` entry of its own
@@ -234,22 +278,18 @@ class RequiredItems(harness.Case):
         """T04's copy is the provider's own pull (the CLI writes it, D10): her value is one quoted line there, the copy's keys
         equal the returned keys, and the keep is whole; a copy whose value broke onto a line of its own shows a key the listing
         never returned, and the keep fails and stops the run before anything is retired."""
-        m = provlib.wire(self.machine())
         every = provlib.ALL_ENVS
-        provlib.sunset_world(m, values=[{"key": "SPLIT", "value": "a long first line\nOTHER=1", "type": "encrypted", "target": every},
-                                        {"key": "QUOTED", "value": 'say "hi" \\ there', "type": "encrypted", "target": every},
-                                        {"key": "EMPTY", "value": "", "type": "encrypted", "target": every}])
-        sunset(m)
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        m = world(self, values=[{"key": "SPLIT", "value": "a long first line\nOTHER=1", "type": "encrypted", "target": every},
+                                {"key": "QUOTED", "value": 'say "hi" \\ there', "type": "encrypted", "target": every},
+                                {"key": "EMPTY", "value": "", "type": "encrypted", "target": every}])
+        looked, went = started(m, keep_db=True, keep_github=True)
         self.assertEqual(went.ending, "complete", went.text)
         kept = completion(m, looked.doc["run"], "T04-production")["keep"]
         self.assertEqual(sorted(record(m, looked.doc["run"], kept["inventory"])), ["EMPTY", "QUOTED", "SPLIT"])
         # the raw break: the pulled copy holds `OTHER` as a key of its own, which no listing returned
-        m2 = provlib.wire(self.machine("h2", "h2"))
-        provlib.sunset_world(m2, values=[{"key": "SPLIT", "value": "a long first line\nOTHER=1", "type": "encrypted", "target": every}])
-        sunset(m2)
+        m2 = world(self, "h2", "h2", values=[{"key": "SPLIT", "value": "a long first line\nOTHER=1", "type": "encrypted", "target": every}])
         provlib.plan(m2, "vercel", {"command": "env-pull", "nth": 1, "do": "raw-break"})
-        looked2, went2 = m2.started(kind="sunset", inputs=provlib.set_inputs(m2, keep_db=True, keep_github=True))
+        looked2, went2 = started(m2, keep_db=True, keep_github=True)
         self.assertEqual(went2.ending, "stopped", went2.text)
         stop = [r for r in m2.journal(looked2.doc["run"]) if r["kind"] == "invocation-end"][-1]["reason"]
         self.assertEqual(stop, {"kind": "the keep is not whole", "op": "T04-development"})
@@ -260,12 +300,10 @@ class PartTwo(harness.Case):
         """Part one's machinery request 10, met by G23-6: each T04's two-read inventory takes only the keys whose targets hold
         its environment, so a variable of preview alone is in preview's copy and inventory and in neither of the others, and
         every keep is whole."""
-        m = provlib.wire(self.machine())
         every = provlib.ALL_ENVS
-        provlib.sunset_world(m, values=[{"key": "FEATURE", "value": "on", "type": "plain", "target": every},
-                                        {"key": "PREVIEW_ONLY", "value": "preview-value-1", "type": "encrypted", "target": ["preview"]}])
-        sunset(m)
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        m = world(self, values=[{"key": "FEATURE", "value": "on", "type": "plain", "target": every},
+                                {"key": "PREVIEW_ONLY", "value": "preview-value-1", "type": "encrypted", "target": ["preview"]}])
+        looked, went = started(m, keep_db=True, keep_github=True)
         self.assertEqual(went.ending, "complete", went.text)
         for env in every:
             kept = completion(m, looked.doc["run"], "T04-" + env)["keep"]
@@ -277,15 +315,13 @@ class PartTwo(harness.Case):
         """Part one's machinery request 11, met by G23-7: a custom environment's Sensitive member is returned with no value;
         T04c's pairs read takes the members whose value is returned, the Sensitive one is set apart by its type, and the keep
         is whole: the copy decodes to the returned pair alone, its `apart` record names the Sensitive key."""
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m, custom=[{"id": "env_customone", "slug": "staging"}])
+        m = world(self, custom=[{"id": "env_customone", "slug": "staging"}])
         state = provlib.state(m, "vercel")
         state["envs"]["demo"] += [{"key": "STAGE_ONLY", "value": "staging-value-1", "type": "encrypted", "custom": "env_customone"},
                                   {"key": "STAGE_SECRET", "value": harness.canary("custom-sensitive"), "type": "sensitive",
                                    "custom": "env_customone"}]
         provlib.put_state(m, "vercel", envs=state["envs"])
-        sunset(m)
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        looked, went = started(m, keep_db=True, keep_github=True)
         self.assertEqual(went.ending, "complete", went.text)
         kept = completion(m, looked.doc["run"], "T04c-custom-1")["keep"]
         self.assertEqual(effects.decode_pairs(read_file(os.path.join(folder(m), "hosting-env.custom-1"), "rb")),
@@ -295,25 +331,23 @@ class PartTwo(harness.Case):
 
     def test_T04_T04c_SEC6_A148_G23_8_the_sensitive_keys_are_named_by_key_in_the_preview_and_in_the_tombstone(self):
         """Part one's machinery request 12, met by G23-8: each T04's Sensitive keys are named by key, never by value, as not
-        saved, in the sunset preview (the look's read of the keys) and in the tombstone (slice 4's T30, stand-in); T04c's,
+        saved, in the sunset preview (the look's read of the keys) and in the tombstone (slice 4's T30, as shipped); T04c's,
         set apart at the keep, in the tombstone. The line is this lane's (rows-prov section 5)."""
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m, custom=[{"id": "env_customone", "slug": "staging"}])
+        m = world(self, custom=[{"id": "env_customone", "slug": "staging"}])
         state = provlib.state(m, "vercel")
         sensitive = harness.canary("custom-sensitive")
         state["envs"]["demo"] += [{"key": "STAGE_ONLY", "value": "staging-value-1", "type": "encrypted", "custom": "env_customone"},
                                   {"key": "STAGE_SECRET", "value": sensitive, "type": "sensitive", "custom": "env_customone"}]
         provlib.put_state(m, "vercel", envs=state["envs"])
-        sunset(m)
-        looked = m.look(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        looked = look(m, keep_db=True, keep_github=True)
         self.assertEqual(looked.ending, "preview", looked.text)
         preview = read_file(looked.doc["forms"][0])
         for env in provlib.ALL_ENVS:
             self.assertIn(NOT_SAVED % ("SIGNING_KEY", "Saved copies: hosting env values of %s, owner-only" % env), preview)
         self.assertNotIn("FEATURE", preview)
-        went = m.go(looked, kind="sunset")
+        went = lib.go(m, looked)
         self.assertEqual(went.ending, "complete", went.text)
-        tomb = provlib.tombstone(m, looked.doc["run"])
+        tomb = tombstone(m, looked.doc["run"])
         for env in provlib.ALL_ENVS:
             self.assertIn(NOT_SAVED % ("SIGNING_KEY", "Saved copies: hosting env values of %s, owner-only" % env), tomb)
         self.assertIn(NOT_SAVED % ("STAGE_SECRET", "Saved copies: hosting env values of custom environment custom-1, owner-only"), tomb)
@@ -326,11 +360,9 @@ class Stops(harness.Case):
         """Part one's machinery request 8, met by G23-9: pg_dump's last line is checked as the keep is built, so a cut copy is
         never published and the run stops at T03 itself, before anything is retired (part one's test, which stopped at the
         barrier before T20 with the cut copy published, now passes on the mechanism)."""
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
+        m = world(self)
         provlib.plan(m, "pg", {"command": "pg_dump", "nth": 1, "do": "short"})
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m))
+        looked, went = started(m)
         self.assertEqual(went.ending, "stopped", went.text)
         self.assertEqual(stop_of(m, looked.doc["run"]), {"kind": "the keep is not whole", "op": "T03"})
         self.assertFalse(os.path.exists(os.path.join(folder(m), "demo-db.sql")))
@@ -342,12 +374,10 @@ class Stops(harness.Case):
         public.beta` and no `COPY public.beta` section fails the keep (G23-9's `has-section`, the whole name as F2 reads it)."""
         for drop, ending in ((None, "complete"), ("beta", "stopped")):
             with self.subTest(drop=drop):
-                m = provlib.wire(self.machine("d%s" % drop, "d%s" % drop))
-                provlib.sunset_world(m)
-                sunset(m)
+                m = world(self, "d%s" % drop, "d%s" % drop)
                 if drop:
                     provlib.plan(m, "pg", {"command": "pg_dump", "nth": 1, "drop": drop})
-                looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_vercel=True, keep_github=True))
+                looked, went = started(m, keep_vercel=True, keep_github=True)
                 self.assertEqual(went.ending, ending, went.text)
                 self.assertEqual(os.path.exists(os.path.join(folder(m), "demo-db.sql")), drop is None)
                 if drop:
@@ -357,11 +387,9 @@ class Stops(harness.Case):
         """The reviewer's P3, T03's own scope check, on G25-3: T03's `scope` read (`inventory` `unreadable` equal 0) refers to
         nothing the plan makes, so the look reads it though the dump's place is in the sunset folder the plan is to make; a
         table the role cannot read ends the look as KEEP-1's planning stop, before any approval (was: stopped at the dump)."""
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
+        m = world(self)
         provlib.put_state(m, "pg", unreadable=["beta"])
-        sunset(m)
-        looked = m.look(kind="sunset", inputs=provlib.set_inputs(m))
+        looked = look(m)
         self.assertEqual(looked.ending, "refused", looked.text)
         self.assertIn("the whole scope of a keep cannot be read or established: row T03", looked.text)
         self.assertEqual([c["command"] for c in provlib.calls(m, "pg")], ["psql"])      # no dump
@@ -369,12 +397,10 @@ class Stops(harness.Case):
         self.assertNotIn("beta", looked.text)
 
     def test_T04_KEEP1_A149_a_key_added_during_the_pull_fails_the_keep(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
+        m = world(self)
         provlib.plan(m, "vercel", {"command": "env-pull", "nth": 1,
                                    "then_add": {"key": "LATE", "value": "late-value-1", "type": "encrypted", "target": provlib.ALL_ENVS}})
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        looked, went = started(m, keep_db=True, keep_github=True)
         self.assertEqual(went.ending, "stopped", went.text)
         stop = [r for r in m.journal(looked.doc["run"]) if r["kind"] == "invocation-end"][-1]["reason"]
         self.assertEqual(stop, {"kind": "the keep is not whole", "op": "T04-development"})
@@ -385,26 +411,22 @@ class Stops(harness.Case):
         production values, ends the look before any approval, nothing pulled (was: a preview, then a stop at the probe)."""
         for label, fields in (("paged", {"next": 2}), ("hidden", {"hidden": 1})):
             with self.subTest(case=label):
-                m = provlib.wire(self.machine(label, label))
-                provlib.sunset_world(m)
+                m = world(self, label, label)
                 provlib.put_state(m, "vercel", **fields)
-                sunset(m)
-                looked = m.look(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+                looked = look(m, keep_db=True, keep_github=True)
                 self.assertEqual(looked.ending, "refused", looked.text)
                 self.assertIn("the whole scope of a keep cannot be read or established: row T04-", looked.text)
                 self.assertEqual(provlib.calls(m, "vercel", "env-pull"), [])
                 self.assertFalse(os.path.exists(folder(m)))
 
     def test_T20_RUN7_G10_a_repository_found_archived_is_already_so_and_no_archive_call_is_made(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
+        m = world(self)
         provlib.put_state(m, "gh", things={"demo": {"id": "R_fixturerepo1", "kind": "repo", "state": "archived", "name": "demo"}})
-        sunset(m)
-        looked = m.look(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_vercel=True))
+        looked = look(m, keep_db=True, keep_vercel=True)
         self.assertEqual(looked.ending, "preview", looked.text)
         self.assertIn("found already so; a restore will not reverse it: GitHub: archive <account>/<name> (read-only)",
                       read_file(looked.doc["forms"][0]))
-        went = m.go(looked, kind="sunset")
+        went = lib.go(m, looked)
         self.assertEqual(went.ending, "complete", went.text)
         self.assertEqual(provlib.calls(m, "gh", "archive-set"), [])
 
@@ -413,20 +435,16 @@ class Stops(harness.Case):
         mark, and is made after vercel's identity reads, so it settles and the sunset look builds where hosting is saved (part
         one's test of the refused look now passes on the mechanism); where hosting is kept, T04c is not read and is listed
         not applicable."""
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m, custom=[{"id": "env_customone", "slug": "staging"}])
-        sunset(m)
-        looked = m.look(kind="sunset", inputs=provlib.set_inputs(m))
+        m = world(self, custom=[{"id": "env_customone", "slug": "staging"}])
+        looked = look(m)
         self.assertEqual(looked.ending, "preview", looked.text)
         gets = [r["path"] for r in provlib.requests(m, "GET")]
         envs = gets.index(["v9", "projects", "demo", "custom-environments"])
         self.assertLess(gets.index(["v2", "teams", provlib.TEAM]), envs, "the family was read before the identity read")
         self.assertIn("Saved copies: hosting env values of custom environment custom-1, owner-only", read_file(looked.doc["forms"][0]))
         self.assertEqual(provlib.requests(m, "POST"), [])
-        m2 = provlib.wire(self.machine("h2", "h2"))
-        provlib.sunset_world(m2, custom=[{"id": "env_customone", "slug": "staging"}])
-        sunset(m2)
-        kept = m2.look(kind="sunset", inputs=provlib.set_inputs(m2, keep_vercel=True))
+        m2 = world(self, "h2", "h2", custom=[{"id": "env_customone", "slug": "staging"}])
+        kept = look(m2, keep_vercel=True)
         self.assertEqual(kept.ending, "preview", kept.text)
         self.assertNotIn(["v9", "projects", "demo", "custom-environments"], [r["path"] for r in provlib.requests(m2, "GET")])
 
@@ -436,8 +454,8 @@ class Stops(harness.Case):
         on the field holds a commit, not the scanned one), before-test false (the tag stands), `foreign` (OP-5), which stops
         (OP-6); before, on the tag's presence, it read `already so` and the run ended complete. The fresh tag, made and pushed,
         is `EndToEnd.test_T01_ORD1_OP8_G23_1_...` and the end-to-end run, on the same shipped row."""
-        m = provlib.wire(self.machine())
-        repo, commit, _ = provlib.sunset_world(m)
+        m = world(self)
+        repo, commit, _ = m.world_made
         provlib.git(repo, "checkout", "-q", "-b", "other")
         m.put("dev/demo/other.txt", "another's\n")
         provlib.git(repo, "add", "other.txt")
@@ -446,8 +464,7 @@ class Stops(harness.Case):
         provlib.git(repo, "push", "-q", "origin", "%s:%s" % (theirs, TAG), home=m.home)
         provlib.git(repo, "checkout", "-q", "main")
         provlib.git(repo, "branch", "-q", "-D", "other")
-        sunset(m)
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_vercel=True))
+        looked, went = started(m, keep_db=True, keep_vercel=True)
         self.assertEqual(went.ending, "stopped", went.text)
         self.assertIn("foreign", went.text)
         run = looked.doc["run"]
@@ -459,49 +476,42 @@ class Stops(harness.Case):
         self.assertNotEqual(theirs, commit)
         self.assertNotEqual(provlib.state(m, "gh")["things"]["demo"]["state"], "archived")      # nothing after T01 ran
         # the shipped row's after-test and after-check, rows-prov's T01 entries 5 and 9
-        t01 = [r for r in provlib.shipped("sunset", "provider-rows.json")["rows"] if r["id"] == "T01"][0]
+        t01 = sunset_row("T01")
         equality = {"read": "command", "command": "look", "result": "success", "field": "head", "equals": {"output": "tag scan.commit"}}
         self.assertEqual((t01["after_test"], t01["after_check"]), ([equality], [equality]))
 
     def test_T21_RUN7_G10_a_project_found_paused_is_already_so_and_no_pause_is_sent(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
+        m = world(self)
         state = provlib.state(m, "vercel")
         state["things"]["demo"]["state"] = "paused"
         provlib.put_state(m, "vercel", things=state["things"])
-        sunset(m)
-        looked = m.look(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        looked = look(m, keep_db=True, keep_github=True)
         self.assertEqual(looked.ending, "preview", looked.text)
         self.assertIn("found already so; a restore will not reverse it: Hosting: pause <slug> (production blocked, reversible)",
                       read_file(looked.doc["forms"][0]))
-        went = m.go(looked, kind="sunset")
+        went = lib.go(m, looked)
         self.assertEqual(went.ending, "complete", went.text)
         self.assertEqual(provlib.requests(m, "POST"), [])
 
     def test_T21_KEEP2_KEEP3_a_hosting_keep_that_fails_stops_the_run_and_the_project_is_not_paused(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
+        m = world(self)
         provlib.plan(m, "vercel", {"command": "env-pull", "nth": 3,
                                    "then_add": {"key": "LATE", "value": "late-value-1", "type": "encrypted", "target": provlib.ALL_ENVS}})
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        looked, went = started(m, keep_db=True, keep_github=True)
         self.assertEqual(went.ending, "stopped", went.text)
         self.assertEqual(provlib.state(m, "vercel")["things"]["demo"]["state"], "active")
         self.assertEqual(provlib.requests(m, "POST"), [])
 
     def test_seam_item4_ORD1_T20_and_T21_need_repository_moved_at_the_level_slice_4s_check_gives_it(self):
         """Item 4: slice 4 gives `repository moved` as a check's output (T12m), met at `passed` (lane-report-set item 5); T20's
-        and T21's needs on it are written at that level, and the stand-in's check passes before either runs."""
-        part = provlib.shipped("sunset", "provider-rows.json")
+        and T21's needs on it are written at that level, and slice 4's shipped check passes before either runs."""
         for rid in ("T20", "T21"):
-            r = [x for x in part["rows"] if x["id"] == rid][0]
+            r = sunset_row(rid)
             self.assertIn({"output": "repository moved", "level": "passed", "treatment": "then not needed"}, r["needs"], rid)
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m))
+        m = world(self)
+        looked, went = started(m)
         self.assertEqual(went.ending, "complete", went.text)
-        self.assertEqual(m.statuses(looked.doc["run"]).get("T12ms"), "passed")
+        self.assertEqual(m.statuses(looked.doc["run"]).get("T12m"), "passed")
 
 
 
@@ -512,26 +522,21 @@ class FixRound(harness.Case):
     9 and V11 entry 9), so a thing replaced under the same name between the sunset and the restore is never acted on."""
 
     def test_P1_V10_GOV1_EV4_a_repository_replaced_under_its_name_between_sunset_and_restore_is_never_unarchived(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
-        _looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_vercel=True))
+        m = world(self)
+        _looked, went = started(m, keep_db=True, keep_vercel=True)
         self.assertEqual(went.ending, "complete", went.text)
         things = provlib.state(m, "gh")["things"]
         things["demo"]["id"] = "R_replacement1"                 # another repository, archived, under the same name
         provlib.put_state(m, "gh", things=things)
-        provlib.install(m, provlib.set_lane(), provlib.restore_lane())
-        looked = m.look(kind="restore", inputs=m.inputs())
+        looked = lib.look(m, "restore")
         self.assertNotEqual(looked.ending, "preview", looked.text)
         self.assertIn("row V10", looked.text)
         self.assertEqual(len(provlib.calls(m, "gh", "archive-set")), 1, "the replacement was un-archived")
         self.assertEqual(provlib.state(m, "gh")["things"]["demo"]["state"], "archived")
 
     def test_P1_V11_GOV1_EV4_a_project_that_answers_with_another_id_than_the_saved_one_is_never_unpaused(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
-        _looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        m = world(self)
+        _looked, went = started(m, keep_db=True, keep_github=True)
         self.assertEqual(went.ending, "complete", went.text)
         original = m.transport
 
@@ -546,8 +551,7 @@ class FixRound(harness.Case):
                         data = json.dumps(found).encode()
                 return code, data
         m.transport = OtherId()
-        provlib.install(m, provlib.set_lane(), provlib.restore_lane())
-        looked = m.look(kind="restore", inputs=m.inputs())
+        looked = lib.look(m, "restore")
         self.assertNotEqual(looked.ending, "preview", looked.text)
         self.assertIn("row V11", looked.text)
         self.assertEqual([r["path"][-1] for r in provlib.requests(m, "POST")], ["pause"], "an unpause was sent")
@@ -584,17 +588,14 @@ class PartFour(harness.Case):
     def test_P1_T20_T21_GOV1_EV3_G25_1_a_thing_replaced_under_its_name_after_the_look_is_foreign_and_receives_no_effect(self):
         for provider, op in (("gh", "T20"), ("vercel", "T21")):
             with self.subTest(row=op):
-                m = provlib.wire(self.machine(op, op))
-                provlib.sunset_world(m)
-                sunset(m)
-                inputs = provlib.set_inputs(m, keep_db=True, **({"keep_vercel": True} if op == "T20" else {"keep_github": True}))
-                looked = m.look(kind="sunset", inputs=inputs)
+                m = world(self, op, op)
+                looked = look(m, keep_db=True, **({"keep_vercel": True} if op == "T20" else {"keep_github": True}))
                 self.assertEqual(looked.ending, "preview", looked.text)
                 if op == "T20":
                     replace_at(m, provider, "R_replacement1")
                 else:
                     replace_after_keeps(m, "prj_replacement1")
-                went = m.go(looked, kind="sunset")
+                went = lib.go(m, looked)
                 self.assertEqual(went.ending, "stopped", went.text)
                 self.assertIn(op, went.text)
                 self.assertIn("foreign" if op == "T20" else "the target is not the thing its keep copied", went.text)
@@ -606,17 +607,14 @@ class PartFour(harness.Case):
     def test_P1_T20_T21_OP5_EV3_G25_R1_a_replacement_already_in_the_after_state_is_foreign_never_already_so(self):
         for provider, op, after in (("gh", "T20", "archived"), ("vercel", "T21", "paused")):
             with self.subTest(row=op):
-                m = provlib.wire(self.machine(op, op))
-                provlib.sunset_world(m)
-                sunset(m)
-                inputs = provlib.set_inputs(m, keep_db=True, **({"keep_vercel": True} if op == "T20" else {"keep_github": True}))
-                looked = m.look(kind="sunset", inputs=inputs)
+                m = world(self, op, op)
+                looked = look(m, keep_db=True, **({"keep_vercel": True} if op == "T20" else {"keep_github": True}))
                 self.assertEqual(looked.ending, "preview", looked.text)
                 if op == "T20":
                     replace_at(m, provider, "R_replacement1", state=after)
                 else:
                     replace_after_keeps(m, "prj_replacement1", state=after)
-                went = m.go(looked, kind="sunset")
+                went = lib.go(m, looked)
                 self.assertEqual(went.ending, "stopped", went.text)
                 # T21's KEEP-2 tie, made before its probe, meets the replacement first (its keeps copied the planned project)
                 self.assertIn("foreign" if op == "T20" else "the target is not the thing its keep copied", went.text)
@@ -627,9 +625,7 @@ class PartFour(harness.Case):
                 self.assertEqual(provlib.requests(m, "POST"), [])
 
     def test_P1_T21_EV1_GOV1_G25_1_a_project_replaced_between_the_pause_and_its_confirming_read_fails_the_after_check(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m)
-        sunset(m)
+        m = world(self)
         original = m.transport
 
         class Replacing(object):
@@ -639,7 +635,7 @@ class PartFour(harness.Case):
                     replace_at(m, "vercel", "prj_replacement1")
                 return answer
         m.transport = Replacing()
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        looked, went = started(m, keep_db=True, keep_github=True)
         self.assertEqual(went.ending, "stopped", went.text)
         run = looked.doc["run"]
         self.assertNotIn(m.statuses(run).get("T21"), ("done", "already so"))
@@ -648,13 +644,11 @@ class PartFour(harness.Case):
         self.assertEqual([r["path"] for r in provlib.requests(m, "POST")], [["v1", "projects", "prj_fixture1", "pause"]])
 
     def test_P2_T21_KEEP2_G25_2_the_pause_waits_on_every_custom_environments_keep_and_one_not_final_stops_it(self):
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m, custom=[{"id": "env_customone", "slug": "staging"}, {"id": "env_customtwo", "slug": "qa"}])
+        m = world(self, custom=[{"id": "env_customone", "slug": "staging"}, {"id": "env_customtwo", "slug": "qa"}])
         state = provlib.state(m, "vercel")
         state["envs"]["demo"] += [{"key": "ONE", "value": "one-value-1", "type": "encrypted", "custom": "env_customone"},
                                   {"key": "TWO", "value": "two-value-1", "type": "encrypted", "custom": "env_customtwo"}]
         provlib.put_state(m, "vercel", envs=state["envs"])
-        sunset(m)
         original = m.transport
 
         class SecondFails(object):
@@ -664,7 +658,7 @@ class PartFour(harness.Case):
                     return 500, b"{}"
                 return original.request(host, method, path, headers, timeout, body)
         m.transport = SecondFails()
-        looked = m.look(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        looked = look(m, keep_db=True, keep_github=True)
         self.assertEqual(looked.ending, "preview", looked.text)
         run = looked.doc["run"]
         with open(os.path.join(m.facts.run_dir(run), "manifest-1.json")) as fh:
@@ -672,7 +666,7 @@ class PartFour(harness.Case):
         t21 = [o for o in manifest["operations"] if o["id"] == "T21"][0]
         self.assertEqual(t21["keeps_required"], ["T04-development", "T04-preview", "T04-production", "T04c-custom-1",
                                                  "T04c-custom-2"])
-        went = m.go(looked, kind="sunset")
+        went = lib.go(m, looked)
         self.assertEqual(went.ending, "stopped", went.text)
         statuses = m.statuses(run)
         self.assertEqual(statuses.get("T04c-custom-1"), "done")
@@ -684,12 +678,10 @@ class PartFour(harness.Case):
     def test_P2_T21_KEEP2_G25_2_a_custom_keep_whose_recorded_source_is_another_project_stops_the_pause(self):
         """Her custom-tie case: the project read just before the custom environment's copy answers another id, so that keep
         records another source; T21 compares each required keep's recorded source again before pausing, and stops."""
-        m = provlib.wire(self.machine())
-        provlib.sunset_world(m, custom=[{"id": "env_customone", "slug": "staging"}])
+        m = world(self, custom=[{"id": "env_customone", "slug": "staging"}])
         state = provlib.state(m, "vercel")
         state["envs"]["demo"].append({"key": "ONE", "value": "one-value-1", "type": "encrypted", "custom": "env_customone"})
         provlib.put_state(m, "vercel", envs=state["envs"])
-        sunset(m)
         original = m.transport
 
         class OtherSource(object):
@@ -703,7 +695,7 @@ class PartFour(harness.Case):
                     data = json.dumps(found).encode()
                 return code, data
         m.transport = OtherSource()
-        looked, went = m.started(kind="sunset", inputs=provlib.set_inputs(m, keep_db=True, keep_github=True))
+        looked, went = started(m, keep_db=True, keep_github=True)
         self.assertEqual(went.ending, "stopped", went.text)
         run = looked.doc["run"]
         self.assertEqual(m.statuses(run).get("T04c-custom-1"), "done")

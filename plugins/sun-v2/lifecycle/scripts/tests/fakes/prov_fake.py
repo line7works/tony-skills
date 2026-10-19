@@ -337,7 +337,9 @@ class VercelAPI(object):
                 doc["link"] = {"type": "github", "repo": thing["repo"]}
             return 200, json.dumps(doc).encode()
         if parts[:2] == ["v1", "projects"] and len(parts) == 4 and method == "POST":
-            found = [t for t in projects.values() if t["id"] == parts[2]]
+            # a thing of another kind (the database resource `db-add` records, with no id) is no project (the join's sequence
+            # holds both on one host)
+            found = [t for t in projects.values() if t.get("kind") == "project" and t.get("id") == parts[2]]
             if not found:
                 return 404, b"{}"
             found[0]["state"] = "paused" if parts[3] == "pause" else "active"

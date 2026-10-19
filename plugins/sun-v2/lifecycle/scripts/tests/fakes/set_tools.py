@@ -4,7 +4,7 @@ library only; never the network, never the real launchd, crontab or harness.
 
     set_tools.py <tool> <arguments...>
 
-The tool is one of `plutil`, `launchctl`, `crontab`, `sun-adapter` and `git` (a stand-in of slice 3's three git reads). A
+The tool is one of `plutil`, `launchctl`, `crontab` and `sun-adapter`. A
 test's wrappers, named `fixture-<tool>`, start this file; no real program of those names is ever on a test's search list
 (the tests rename the declarations' tools so). State lives in `$HOME/.fakes/<tool>/state.json`, every call in
 `calls.jsonl`; every state change is one rename.
@@ -18,7 +18,8 @@ test's wrappers, named `fixture-<tool>`, start this file; no real program of tho
     sun-adapter routines --holding T --format json      {"routines": [ids of the routines whose text holds T]}
     sun-adapter routine --id-file F --out O             {"state": ...}; the definition written to O; exit 3 where unknown
     sun-adapter routine-disable|routine-enable --id-file F   the routine's state set; the same id kept
-    git -C R diff-index ... | ls-files ... | rev-list --count ...   the state's `clean`, `untracked` and `unpushed`
+    sun-adapter canary --in DIR              {"match": "same"} where DIR/AGENTS.md stands, else exit 1 (the adapter's canary,
+                                             which a sunrise of the join's whole sequence asks of this one adapter)
 """
 import hashlib
 import json
@@ -115,6 +116,12 @@ def main():
         return 0
     if TOOL == "sun-adapter":
         routines = state.setdefault("routines", {})
+        if ARGV[:1] == ["canary"]:
+            record()
+            if not os.path.isfile(os.path.join(after("--in") or "", "AGENTS.md")):
+                return 1
+            sys.stdout.write(json.dumps({"match": "same"}))
+            return 0
         if ARGV[:1] == ["routines"]:
             record()
             holding = after("--holding") or ""
@@ -136,19 +143,6 @@ def main():
         state.setdefault("sets", []).append({"do": ARGV[0], "id": rid})
         save(state)
         return 0
-    if TOOL == "git":
-        record()
-        if "diff-index" in ARGV:
-            return 0 if state.get("clean", True) else 1
-        if "ls-files" in ARGV:
-            if state.get("untracked"):
-                sys.stdout.write("untracked.txt\n")
-                return 0
-            return 1
-        if "rev-list" in ARGV:
-            sys.stdout.write("%d\n" % int(state.get("unpushed", 0)))
-            return 0
-        return 128
     return 2
 
 

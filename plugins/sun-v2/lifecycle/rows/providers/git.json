@@ -1,0 +1,779 @@
+{
+ "commands": {
+  "add-all": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "128": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "add"
+    },
+    {
+     "literal": "-A"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "agents-committed": {
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "128": "not-found"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "work"
+    },
+    {
+     "literal": "cat-file"
+    },
+    {
+     "literal": "-e"
+    },
+    {
+     "literal": "HEAD:AGENTS.md"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "branch-main": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "128": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "branch"
+    },
+    {
+     "literal": "-m"
+    },
+    {
+     "literal": "main"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "clean": {
+   "definite": {
+    "refusals": [
+     "conflict"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "conflict",
+    "128": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "diff"
+    },
+    {
+     "literal": "--quiet"
+    },
+    {
+     "literal": "HEAD"
+    },
+    {
+     "literal": "--"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "commit": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other",
+    "128": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "commit"
+    },
+    {
+     "literal": "-q"
+    },
+    {
+     "literal": "-m"
+    },
+    {
+     "param": "message"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "config-email": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "not-found"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "config"
+    },
+    {
+     "literal": "--get"
+    },
+    {
+     "literal": "user.email"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "config-equals": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "not-found",
+    "2": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "config"
+    },
+    {
+     "literal": "--local"
+    },
+    {
+     "literal": "--get"
+    },
+    {
+     "literal": "--fixed-value"
+    },
+    {
+     "param": "key"
+    },
+    {
+     "param": "value"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "config-get": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "not-found",
+    "2": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "config"
+    },
+    {
+     "literal": "--local"
+    },
+    {
+     "literal": "--get"
+    },
+    {
+     "param": "key"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "config-name": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [
+     "not-found"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "not-found"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "config"
+    },
+    {
+     "literal": "--get"
+    },
+    {
+     "literal": "user.name"
+    }
+   ],
+   "time_limit": 10,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "init": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "128": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "init"
+    },
+    {
+     "literal": "-q"
+    },
+    {
+     "literal": "-b"
+    },
+    {
+     "literal": "main"
+    },
+    {
+     "param": "path"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "remote-add": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [
+     "conflict"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "128": "other",
+    "3": "conflict"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "remote"
+    },
+    {
+     "literal": "add"
+    },
+    {
+     "literal": "origin"
+    },
+    {
+     "param": "url"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "set-upstream": {
+   "changes_repository": true,
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 1,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "128": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "branch"
+    },
+    {
+     "literal": "--quiet"
+    },
+    {
+     "literal": "--set-upstream-to=origin/main"
+    },
+    {
+     "literal": "main"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "staged-diff": {
+   "definite": {
+    "refusals": [
+     "conflict"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "conflict"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "work"
+    },
+    {
+     "literal": "diff"
+    },
+    {
+     "literal": "--cached"
+    },
+    {
+     "literal": "--quiet"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "tracked_clean": {
+   "definite": {
+    "refusals": [
+     "conflict"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "conflict"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "diff-index"
+    },
+    {
+     "literal": "--quiet"
+    },
+    {
+     "literal": "HEAD"
+    },
+    {
+     "literal": "--"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "unpushed_count": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "128": "other"
+   },
+   "fields": [
+    {
+     "disposition": "equal",
+     "equals": {
+      "literal": 0
+     },
+     "name": "count",
+     "place": [],
+     "required_in": [
+      "success"
+     ],
+     "type": "count"
+    }
+   ],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "rev-list"
+    },
+    {
+     "literal": "--count"
+    },
+    {
+     "literal": "--branches"
+    },
+    {
+     "literal": "--not"
+    },
+    {
+     "literal": "--remotes"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  },
+  "untracked_none": {
+   "answer": "protected text",
+   "definite": {
+    "refusals": [
+     "conflict"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GIT_TERMINAL_PROMPT": {
+     "class": "fixed",
+     "value": "0"
+    }
+   },
+   "exits": {
+    "0": "conflict",
+    "1": "success",
+    "128": "other"
+   },
+   "fields": [],
+   "template": [
+    {
+     "literal": "-C"
+    },
+    {
+     "param": "repo"
+    },
+    {
+     "literal": "ls-files"
+    },
+    {
+     "literal": "--others"
+    },
+    {
+     "literal": "--exclude-standard"
+    },
+    {
+     "literal": "--error-unmatch"
+    },
+    {
+     "literal": "--"
+    },
+    {
+     "literal": "."
+    }
+   ],
+   "time_limit": 30,
+   "tool": "git",
+   "trace_flags": [
+    "--verbose",
+    "-v"
+   ]
+  }
+ },
+ "credential_env": [],
+ "host": null,
+ "identity": "none",
+ "provider": "git",
+ "provider_version": 1,
+ "token": null,
+ "trace_flags": [
+  "--verbose",
+  "-v"
+ ]
+}

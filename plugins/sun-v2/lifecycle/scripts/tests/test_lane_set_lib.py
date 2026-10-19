@@ -1,32 +1,39 @@
 """Slice 4's test helpers (sunset and restore): no tests here.
 
-The lane's own files are read as they ship, from the plugin's `lifecycle/rows/`. Three things are the tests' own:
+The lane's own files are read as they ship, from the plugin's `lifecycle/rows/`; since the join (slice 5) the sunset lane
+holds slice 3's rows too, and no stand-in is left. Three things are the tests' own:
 
-- the tools. Every declaration of the lane's providers (launchd, cron, the adapter) and the stand-in of slice 3's git reads
-  is installed with its tool renamed `fixture-<tool>`, whose wrapper in a folder of the fixture's own starts
-  `fakes/set_tools.py`. No real `plutil`, `launchctl`, `crontab`, harness adapter or `git` is ever on a test's search
-  list under the name a declaration uses, so no test can reach the real launchd, the real crontab or a real harness.
-- the stand-ins of slice 3 (the brief's section 1): its git declaration (`fixtures/set/standin-git.json`, the three reads
-  rows-set section 7 asks for) and its rows by its names and fields, `tag scan`, `sunset tag` {ref, commit}, `dump`
-  {path}, `hosting env production` {path}, `archived repository`, `paused project`, `restored repository`, `live project`,
-  in the phases rows-set section 7 gives them. The control room replaces each at the join.
-- the fixture machine: the locations rows-set C11 names, a project with every layer, and the fakes' states.
+- the tools. Every declaration of this lane's providers (launchd, cron, the adapter) is installed with its tool renamed
+  `fixture-<tool>`, whose wrapper in a folder of the fixture's own starts `fakes/set_tools.py`. No real `plutil`,
+  `launchctl`, `crontab` or harness adapter is ever on a test's search list under the name a declaration uses, so no test
+  can reach the real launchd, the real crontab or a real harness. Slice 3's declarations (`github`, `vercel`, `postgres`,
+  `web`) are installed as they ship, and `provlib.wire` puts their fakes on the search list (git is the system's own, on
+  the test's own repository).
+- the fixture machine: the locations rows-set C11 names, a project with every layer, and the fakes' states, slice 3's world
+  among them (`provlib.sunset_world`: the repository pushed to the fake GitHub, the project at the fake host, the database).
+- the inputs: rows-set's alone (since the join's J1b, item 5, slice 3's rows read the dropped layers and the names).
 """
 import copy
 import json
 import os
 import re
+import sys
 
 import harness
 import rowlib
+
+sys.path.insert(0, os.path.join(harness.TESTS, "fixtures", "prov"))
+import provlib  # noqa: E402
 
 LIFECYCLE = harness.LIFECYCLE
 # the lane's files as they ship; `SUN_V2_SET_ROWS` names another folder of the same shape, for a mutation copy's red only
 ROWS = os.environ.get("SUN_V2_SET_ROWS") or os.path.join(LIFECYCLE, "rows")
 SET_TOOLS = os.path.join(harness.FAKES, "set_tools.py")
-FIXTURES = os.path.join(harness.TESTS, "fixtures", "set")
-TOOLS = ("plutil", "launchctl", "crontab", "sun-adapter", "git")
-NAMES = ("demo", "demo-vault", "demo_notes")
+TOOLS = ("plutil", "launchctl", "crontab", "sun-adapter")
+OWN = ("launchd", "cron", "adapter")
+# the repository folder, the vault folder (the slug, as sunrise names it and as slice 3's rows read it, place 1: the
+# join's J1b item 5) and the memory note's stem
+NAMES = ("demo", "demo", "demo_notes")
 ALSO = NAMES[1:]
 CAPS = ("memory stores", "routines")
 DESCRIPTION = "a fixture project, retired"
@@ -43,7 +50,7 @@ def shipped_lane(kind):
 
 
 def shipped_providers():
-    return dict((name, read_json(ROWS, "providers", name + ".json")) for name in ("launchd", "cron", "adapter"))
+    return dict((name, read_json(ROWS, "providers", name + ".json")) for name in OWN)
 
 
 def renamed(decl):
@@ -55,10 +62,11 @@ def renamed(decl):
 
 
 def providers():
-    out = rowlib.providers()
+    """Every shipped declaration, this lane's three with their tools renamed (the module's docstring)."""
+    out = dict((name[:-5], read_json(ROWS, "providers", name)) for name in sorted(os.listdir(os.path.join(ROWS, "providers")))
+               if name.endswith(".json"))
     for name, decl in shipped_providers().items():
         out[name] = renamed(decl)
-    out["git"] = renamed(read_json(FIXTURES, "standin-git.json"))
     return out
 
 
@@ -93,17 +101,18 @@ PLIST = ('<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\
          '<key>ProgramArguments</key>\n<array><string>%s</string></array>\n</dict>\n</plist>\n')
 
 
-def plant(machine, shortcut="dm"):
-    """A project with every layer the lane retires, and the fakes' states."""
+def plant(machine, shortcut="dm", **world):
+    """A project with every layer the lane retires, and the fakes' states; slice 3's world by `provlib.sunset_world`, with
+    `world` its arguments (values, tables, custom)."""
     m = machine
     repo = m.path("dev", "demo")
-    m.put("dev/demo/README.md", "# demo\n")
-    m.put("vault/projects/demo-vault/_index.md", "---\ntitle: demo\nstatus: active\n---\n# demo\nsee [[projects/demo-vault/plan]]\n")
-    m.put("vault/projects/demo-vault/plan.md", "the plan, from [[projects/demo-vault/_index]]\n")
-    m.put("vault/notes/elsewhere.md", "links [[projects/demo-vault/_index]] and [[archive/old/_index]]\n")
+    m.world_made = provlib.sunset_world(m, **world)        # the repository (README.md `# demo`), the hosting project, the database
+    m.put("vault/projects/demo/_index.md", "---\ntitle: demo\nstatus: active\n---\n# demo\nsee [[projects/demo/plan]]\n")
+    m.put("vault/projects/demo/plan.md", "the plan, from [[projects/demo/_index]]\n")
+    m.put("vault/notes/elsewhere.md", "links [[projects/demo/_index]] and [[archive/old/_index]]\n")
     m.put("vault/notes/unrelated.md", "nothing here\n")
-    m.put("vault/_index.md", "# Index\n## Active\n- [[projects/demo-vault/_index|demo]]\n- [[projects/other/_index|other]]\n")
-    m.put("mem/home/project_demo_notes.md", "---\nname: demo-vault\ndescription: the demo\n---\nnotes\n")
+    m.put("vault/_index.md", "# Index\n## Active\n- [[projects/demo/_index|demo]]\n- [[projects/other/_index|other]]\n")
+    m.put("mem/home/project_demo_notes.md", "---\nname: demo\ndescription: the demo\n---\nnotes\n")
     m.put("mem/home/MEMORY.md", "- [Demo](project_demo_notes.md) the demo\n- [Other](project_other.md) other\n")
     store = os.path.relpath(store_of(m), m.home)
     m.put(os.path.join(store, "MEMORY.md"), "# memory\n")
@@ -111,14 +120,11 @@ def plant(machine, shortcut="dm"):
     m.put("agents/com.fixture.demo.plist", PLIST % ("com.fixture.demo", os.path.join(repo, "run.sh")))
     m.put("agents/com.fixture.other.plist", PLIST % ("com.fixture.other", "/elsewhere/run.sh"))
     m.put("shortcuts.txt", 'alias other="cd /elsewhere"\nalias %s="cd %s"\n' % (shortcut, repo))
-    m.set_fake("fakehost", things={"demo": {"id": "t1", "kind": "repo", "state": "active", "name": "demo"},
-                                   "demo-host": {"id": "t2", "kind": "project", "state": "active", "name": "demo-host"}})
     fake_state(m, "launchctl", loaded=["com.fixture.demo", "com.fixture.other"])
     fake_state(m, "crontab", table="0 1 * * * other\n5 * * * * %s/run.sh\n" % repo)
     fake_state(m, "sun-adapter", routines={
         "r-one": {"text": "nightly build in %s" % repo, "state": "active", "definition": "nightly build, every night\n"},
         "r-two": {"text": "nightly build elsewhere", "state": "active", "definition": "elsewhere\n"}})
-    fake_state(m, "git", clean=True, untracked=False, unpushed=0)
 
 
 def fake_state(machine, tool, **fields):
@@ -142,75 +148,36 @@ def calls(machine, tool):
     return machine.fake(tool, "calls.jsonl", []) or []
 
 
-# ---- slice 3's stand-in rows, by its names and fields (rows-prov 3.3, 3.4; rows-set section 7) -------------------------
-def _check(rid, phase, output, fields, needs="none", passes=None):
-    k = rowlib.check(rid, phase, output=output)
-    k["output"] = {"name": output, "fields": fields}
-    k["thing"]["passes"] = passes or [{"read": "path", "path": rowlib.DEV, "is": "dir"}]
-    k["needs"] = needs
-    k["form_lines"] = {"preview": "stand-in of slice 3's %s" % rid, "status": "stand-in of slice 3's %s" % rid}
-    return k
-
-
-def _provider_change(rid, back_id, name, before, after, output, back_output, needs, back_needs, back_phase):
-    forward = rowlib.refusing(rid, "retiring at the providers", name=L(name), before=before, after=after, construction="C6",
-                              output=output, needs=needs)
-    forward["thing"].update({"retires": True, "where": "provider"})
-    forward["keeps_required"] = []
-    forward["form_lines"] = {"preview": "stand-in of slice 3's %s" % rid, "status": "stand-in of slice 3's %s" % rid}
-    back = rowlib.refusing(back_id, back_phase, name=L(name), before=after, after=before, construction="C6", output=back_output,
-                           needs=back_needs)
-    back["way_back"] = {"none": "the row declares none: it is itself a reverse"}
-    back["form_lines"] = {"preview": "stand-in of slice 3's %s" % back_id, "status": "stand-in of slice 3's %s" % back_id}
-    forward["way_back"] = {"reverse": back}
-    forward["reverse_inputs"] = [{"read": "value", "value": L(name), "type": "values", "label": "the thing's name"}]
-    return forward
-
-
-def standin_rows():
-    sf = {"output": "sunset folder.path"}
-    made = lambda o, t="then not applicable": [{"output": o, "level": "made", "treatment": t}]      # noqa: E731
-    state = lambda o, t="then not needed": [{"output": o, "level": "state", "treatment": t}]       # noqa: E731
-    passed = lambda o, t="then not needed": [{"output": o, "level": "passed", "treatment": t}]     # noqa: E731
-    return [
-        _check("T01s", "keeping", "tag scan", {"commit": L("stand-in-commit")}),
-        _check("T01", "keeping", "sunset tag", {"ref": L("refs/tags/sunset-stand-in"), "commit": L("stand-in-commit")},
-               needs=[{"output": "tag scan", "level": "passed", "treatment": "then not applicable"}]),
-        _check("T03", "keeping", "dump", {"path": rowlib.path(sf, "demo-db.sql")}, needs=made("sunset folder"),
-               passes=[{"read": "path", "path": sf, "is": "dir"}]),
-        _check("T04-production", "keeping", "hosting env production", {"path": rowlib.path(sf, "hosting-env.production")},
-               needs=made("sunset folder"), passes=[{"read": "path", "path": sf, "is": "dir"}]),
-        # rows-set section 7: T20 needs `repository archived`, made; slice 3's own rows name `repository moved` (state), which
-        # a check of this lane provides and which ORD-1 meets only at `passed` (the report's seam finding)
-        _provider_change("T20", "V10", "demo", "active", "archived", "archived repository", "restored repository",
-                         made("repository archived", "then not needed") + passed("sunset tag"), state("repository back"),
-                         "putting back at the providers"),
-        _provider_change("T21", "V11", "demo-host", "active", "paused", "paused project", "live project",
-                         passed("repository moved"), state("restored repository"), "putting back at the providers"),
-    ]
-
-
-def install(machine, sunset_extra=(), restore_extra=(), standins=True, sunset_lane=None, restore_lane=None, decls=None):
-    """The rows root of the fixture: the lane's files as they ship, slice 3's stand-ins joined to them."""
+def install(machine, sunset_extra=(), restore_extra=(), sunset_lane=None, restore_lane=None, decls=None):
+    """The rows root of the fixture: the lane's files as they ship (slice 3's rows in them since the join)."""
     sunset = sunset_lane or shipped_lane("sunset")
-    sunset["rows"] = list(sunset["rows"]) + (standin_rows() if standins else []) + list(sunset_extra)
+    sunset["rows"] = list(sunset["rows"]) + list(sunset_extra)
     restore = restore_lane or shipped_lane("restore")
     restore["rows"] = list(restore["rows"]) + list(restore_extra)
     return rowlib.install(machine, sunset, restore, providers=decls or providers())
 
 
-def machine(case, label="m", shortcut="dm", standins=True, plant_it=True):
-    m = harness.Machine(case.tmp, label, label)
+def machine(case, label="m", shortcut="dm", plant_it=True, kind=None, **world):
+    m = (kind or harness.Machine)(case.tmp, label, label)
+    prepare(m, shortcut, plant_it, **world)
+    return m
+
+
+def prepare(m, shortcut="dm", plant_it=True, **world):
+    """The fixture machine of this lane: its programs and locations, slice 3's fakes (`provlib.wire`), the project, the
+    shipped lanes."""
     programs(m)
     locations(m)
     m.write_settings()
+    provlib.wire(m)
     if plant_it:
-        plant(m, shortcut)
-    install(m, standins=standins)
+        plant(m, shortcut, **world)
+    install(m)
     return m
 
 
 def inputs(m, **more):
+    """rows-set's inputs: his reason, and what `more` gives (flags, dropped layers)."""
     fields = {"description": DESCRIPTION}
     fields.update(more)
     return m.inputs("inputs-%s.json" % len(os.listdir(m.root)), **fields)

@@ -72,6 +72,12 @@
     "reason": "slice 1's (G19 to G22); launchctl's exit is not definite, so C6 with an after-check"
    },
    "item": "D20 shared schemas; provider primitives"
+  },
+  {
+   "answered_by": {
+    "reason": "V10 and V11 ride in sunset/lane.json as T20's and T21's way_back.reverse; restore offers them from the retiring run's journal (EV-5) in phase putting back at the providers"
+   },
+   "item": "EV-4: V10 and V11, the two ways back, each a full row"
   }
  ],
  "facts": [],
