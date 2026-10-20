@@ -227,7 +227,7 @@ withdrawn and RK6 came to cover less (A21, A22). He accepted RK7 and RK8 on 2026
 and RK9 the same day (A28); by his ruling of that day RK7 now stands for the whole class and RK9 is
 merged into it (A30); by his rulings of the same day RK8 reaches anything a run holds as safe
 (A32) and covers any run that shows the value (A33). The same day he accepted RK10 (A40), and
-RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68), and RK15 the same day (A89), and RK16 on 2026-10-15 (A103), and RK17 the same day (A107), and RK18 on 2026-10-17 (A147), and RK19 the same day (A153).**
+RK11 on 2026-10-14 (A48), and RK12 the same day (A55), and RK13 the same day (A63), and RK14 the same day (A68), and RK15 the same day (A89), and RK16 on 2026-10-15 (A103), and RK17 the same day (A107), and RK18 on 2026-10-17 (A147), and RK19 the same day (A153), and RK20 on 2026-10-19 (A156).**
 How likely each is was never measured.
 
 - **RK1, the tools' own files.** `gh`, the hosting tool and `pg_dump` are the owner's installed
@@ -412,6 +412,19 @@ How likely each is was never measured.
   then show in output. Long values stay fully guarded." A sunset saves every hosting env value it
   reads; a value under eight bytes, counted as SEC-4 counts, makes no entry of the register, so it
   is not withheld where it later appears. Not measured.
+- **RK20, a sunset backup not proven to be its own database's** (accepted by the owner, A156). His
+  pick: "Accept the gap, write it down (Recommended)"; the option's text was the control room's: no
+  code, one line in the risk list; sunset never pauses or deletes the database, so a bad backup
+  cannot lose data; the preview already says the identity was read before the copy. A real plain
+  `pg_dump` file (`-F p`, no `-C`) names no database, host or system identifier, and the database
+  module's dump declares no fields, its inventory giving the identity and a table count only. So
+  T03, sunset's backup row, cannot prove that the dump it keeps is that database's own. T03 records
+  the source identity as KEEP-1 words it (A147): read over the same connection immediately before
+  the copy. Where another changes which database the connection reaches between that read and the
+  copy, the dump of another database is kept and the sunset completes. "Cannot lose data" holds only
+  while the database stays: the kept dump is not proven to be this database's, so nothing (the
+  owner, a later sunset step, a cleanup) deletes or drops the database on the strength of a sunset
+  backup. That sentence is the control room's wording under his ruling, not his words. Not measured.
 - **RK7 as first accepted: MERGED into RK7 above** (accepted by the owner, A26; merged by his
   ruling of A30). The words as they stood, kept for the record: Where a value he typed into the
   tool turns out to be a live secret, the run that finds it, when a provider returns the same
