@@ -194,7 +194,7 @@ class Sequence(harness.Case):
             self.assertEqual(sstatuses.get(op), "done", op)
         self.assertEqual((sstatuses.get("T01s"), sstatuses.get("T12m")), ("passed", "passed"))
         sf = os.path.join(m.archive, "demo.sunset-" + DATE)
-        self.assertTrue(open(os.path.join(sf, "demo-db.sql")).read().endswith("-- PostgreSQL database dump complete\n--\n\n"))
+        self.assertTrue(open(os.path.join(sf, "demo-db.sql")).read().endswith("-- PostgreSQL database dump complete\n--\n\n\\unrestrict " + provlib.prov_fake.RESTRICT_KEY + "\n\n"))
         self.assertIn('FEATURE="on"', open(os.path.join(sf, "hosting-env.production")).read())
         self.assertFalse(os.path.exists(project))
         self.assertTrue(os.path.isdir(os.path.join(m.archive, "demo", ".git")))

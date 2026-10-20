@@ -1799,6 +1799,26 @@
            "text": {
             "maxLength": 200,
             "type": "string"
+           },
+           "then_line": {
+            "additionalProperties": false,
+            "properties": {
+             "alphabet": {
+              "enum": [
+               "letters and digits"
+              ]
+             },
+             "prefix": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+             }
+            },
+            "required": [
+             "prefix",
+             "alphabet"
+            ],
+            "type": "object"
            }
           },
           "required": [
@@ -4959,6 +4979,26 @@
            "text": {
             "maxLength": 200,
             "type": "string"
+           },
+           "then_line": {
+            "additionalProperties": false,
+            "properties": {
+             "alphabet": {
+              "enum": [
+               "letters and digits"
+              ]
+             },
+             "prefix": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+             }
+            },
+            "required": [
+             "prefix",
+             "alphabet"
+            ],
+            "type": "object"
            }
           },
           "required": [

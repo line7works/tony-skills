@@ -906,12 +906,26 @@ def _named(line, prefix):
     return None if quoted or not name else name
 
 
+ALPHABETS = {"letters and digits": frozenset(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")}
+
+
 def text_checks_hold(data, check):
-    """A keep's content checks that read the copy alone (KEEP-1, KEEP-3; G23-9): `ends-with` its declared text, and
-    `has-section`, each line of `prefix` paired with a line of `section` carrying the same name (each table the copy creates
-    has its data section in the copy). A check of another kind is not this function's and holds here."""
+    """A keep's content checks that read the copy alone (KEEP-1, KEEP-3; G23-9): `ends-with` its declared text, or, where
+    the check names a `then_line`, that text followed by one line of the line's fixed `prefix` and a non-empty key of its
+    named `alphabet`, then one or two newlines, as the end (J3b: pg_dump 17.6 and later write `\\unrestrict <key>` after
+    their last line); and `has-section`, each line of `prefix` paired with a line of `section` carrying the same name (each
+    table the copy creates has its data section in the copy). A check of another kind is not this function's and holds here."""
     if check.get("check") == "ends-with":
-        return data.endswith(str(check.get("text", "")).encode("utf-8"))
+        text = str(check.get("text", "")).encode("utf-8")
+        if data.endswith(text):
+            return True
+        then = check.get("then_line") if isinstance(check.get("then_line"), dict) else {}
+        alphabet, start = ALPHABETS.get(then.get("alphabet")), text + str(then.get("prefix", "")).encode("utf-8")
+        if alphabet is None or not then.get("prefix") or start not in data:
+            return False
+        key = data[data.rindex(start) + len(start):]
+        key = key[:-2] if key.endswith(b"\n\n") else key[:-1] if key.endswith(b"\n") else b""
+        return bool(key) and all(byte in alphabet for byte in key)
     if check.get("check") == "has-section":
         lines = data.decode("utf-8", "replace").splitlines()
         prefix, section = str(check.get("prefix", "")), str(check.get("section", ""))

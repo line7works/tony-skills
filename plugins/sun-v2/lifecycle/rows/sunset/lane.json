@@ -1878,7 +1878,11 @@
     "content_checks": [
      {
       "check": "ends-with",
-      "text": "\n--\n-- PostgreSQL database dump complete\n--\n\n"
+      "text": "\n--\n-- PostgreSQL database dump complete\n--\n\n",
+      "then_line": {
+       "alphabet": "letters and digits",
+       "prefix": "\\unrestrict "
+      }
      },
      {
       "check": "has-section",
