@@ -302,6 +302,15 @@
         "skills-v2",
         "ship"
       ]
+    },
+    {
+      "name": "sun-v2",
+      "source": "./plugins/sun-v2",
+      "description": "Sunrise and sunset rebuilt as one deterministic lifecycle tool and two skills: a look, a preview, the owner's go, then a journaled run that can be resumed or closed, across the repository, GitHub, hosting, the database, the vault, memory and the terminal shortcut. Sunset keeps a database backup and archives reversibly; restore reverses it. The -v2 suffix stays while v1 sun is installed and both are renamed at cutover.",
+      "tags": [
+        "skills-v2",
+        "project-lifecycle"
+      ]
     }
   ]
 }

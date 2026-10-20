@@ -11,8 +11,7 @@ installed, and both are renamed at cutover.
 
 Version 0.1.0, interface version 1 (`.claude-plugin/plugin.json`; `sun skill-identity`). Built in E16
 slices 1 to 5: the frame, sunrise's local half, the providers, sunset and restore, and the join of the three lanes
-with the seeded families. The two skills' `SKILL.md` files are still slice 1's skeletons, each marked "do not use
-this skill yet"; the tool and its rows are the built part.
+with the seeded families, and the two skills, which drive the tool and act only through it.
 
 Counts are measured by script from the control room's counted run of the tree `main` holds once the join's parts
 are merged: every module of `lifecycle/scripts/tests` run twice under `/usr/bin/python3` 3.9.6, pinned (`-I`, a
@@ -89,8 +88,8 @@ harness is missing; verify 0 no finding, 4 a finding, 2 usage.
 
 ```text
 .claude-plugin/plugin.json          name and version
-skills/sunrise-v2/SKILL.md          the sunrise skill (a skeleton, see Status)
-skills/sunset-v2/SKILL.md           the sunset and restore skill (a skeleton, see Status)
+skills/sunrise-v2/SKILL.md          the sunrise skill
+skills/sunset-v2/SKILL.md           the sunset and restore skill
 lifecycle/skills.json               the two skills and the kind each summons
 lifecycle/scripts/sun               the one start: /bin/sh runs /usr/bin/python3 -I -S on sun.py, a cleared environment
 lifecycle/scripts/sun.py            the first code (the withheld read), then sun_core/cli.py

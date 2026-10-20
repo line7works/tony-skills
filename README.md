@@ -2,7 +2,7 @@
 
 A Claude Code plugin marketplace: the skills Tony Coon builds and runs on his
 own machines, published so anyone can install them.
-Thirty-two plugins covering thirty-two skills — a full build loop (blueprint → build → signoff → recheck, with
+Thirty-three plugins covering thirty-four skills — a full build loop (blueprint → build → signoff → recheck, with
 /ship to run a whole lap), project lifecycle bootstrapping, image generation,
 adversarial reviews, and a handful of workshop utilities — plus a `tools/`
 shelf of non-plugin tools and specs.
@@ -60,6 +60,10 @@ features in verified slices. Each station is a skill, composed by name:
 - `sun` — `/sunrise` bootstraps a new project across every layer (repo, GitHub,
   Vercel, database, Notion, Obsidian, memory) and proves it live; `/sunset`
   archives one reversibly. One plugin, shared assets.
+- `sun-v2`: `sunrise-v2` and `sunset-v2`, the same lifecycle rebuilt as one
+  deterministic tool: a preview, the owner's go, then a journaled run that can be
+  resumed or closed; sunset keeps a database backup, and restore reverses it. The
+  `-v2` suffix stays until cutover.
 - `shutdown` — settle up before a terminal restart or account switch: git
   report, self-contained handoff file, memory pointer.
 
