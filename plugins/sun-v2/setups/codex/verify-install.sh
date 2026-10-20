@@ -1,0 +1,18 @@
+#!/bin/sh
+# Verify sun-v2's installed package in its isolated Codex setup (E16 slice 5, part J4).
+# Adapted from plugins/ship-v2/setups/codex/verify-install.sh; the checks live in ../verify-package.py,
+# shared with the Claude Code setup.
+#
+# Usage: verify-install.sh --home DIR   (or SUN_V2_CODEX_HOME=DIR)
+# Prints one JSON object; exit 0 no finding, 4 a finding, 2 usage.
+set -eu
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+PLUGIN_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd -P)
+CORE=$(basename -- "$PLUGIN_ROOT")
+VAR=$(printf '%s' "$CORE" | tr 'a-z-' 'A-Z_')_CODEX_HOME
+SETUP_HOME=$(eval "printf '%s' \"\${$VAR:-}\"")
+if [ "${1:-}" = "--home" ]; then SETUP_HOME="${2:-}"; shift 2 || true; fi
+[ $# -eq 0 ] || { echo "verify-install.sh: unknown argument: $1" >&2; exit 2; }
+[ -n "$SETUP_HOME" ] && [ -d "$SETUP_HOME" ] || { echo "verify-install.sh: name the installed home: --home DIR or $VAR" >&2; exit 2; }
+export PYTHONDONTWRITEBYTECODE=1
+exec /usr/bin/python3 "$SCRIPT_DIR/../verify-package.py" --cache "$SETUP_HOME/plugins/cache" --market "$CORE-setup"
