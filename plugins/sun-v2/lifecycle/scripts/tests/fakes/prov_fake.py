@@ -16,11 +16,15 @@ State, one JSON file per provider under `$HOME/.fakes/<provider>/state.json`, ev
   "project", "state": "active" | "paused", "name", "account", "repo"}}, "sets", "envs": {slug: [{"key", "value", "type",
   "target": [...], "custom": id or absent}]}, "custom": {slug: [{"id", "slug"}]}, "installed": bool, "resources": {name:
   {"id", "project", "connected"}}, "deployments": {slug: {"readyState"}}, "hidden": n, "next": n}.
-- `pg`: {"identity", "tables": {name: [row, ...]}, "unreadable": [name, ...]}.
+- `pg`: {"identity", "tables": {name: [row, ...]}, "unreadable": [name, ...], "ending", "restrict_key"}; `ending` is how
+  its pg_dump writes a plain dump: "unrestrict" (pg_dump 18.6's `\\restrict %s\n\n` after the header block and
+  `\\unrestrict %s\n\n` after the completion block), "unrestrict-1" (the same, the binary's other `\\unrestrict %s\n`),
+  "old" (neither line, the versions before 17.6); absent, `DUMP_ENDING`. `restrict_key` is the key (`RESTRICT_KEY` absent).
 
 `calls.jsonl` beside each state holds every call's arguments and the NAMES of its environment (never a value); a plan
 entry in `plan.json` (`{"tool", "command", "do": "fail" | "lose-answer" | "short" | "die", "exit", "stdout", "nth"}`) makes
-one call answer otherwise; a pg_dump entry's `drop` names a table whose data section the copy leaves out.
+one call answer otherwise; a pg_dump entry's `drop` names a table whose data section the copy leaves out, and its `tail`
+is text written after the dump's end.
 """
 import hashlib
 import json
@@ -407,6 +411,11 @@ def service():
     return out
 
 
+# How the fake's pg_dump writes a plain dump where the state names no `ending`: as the real tool does since 17.6 (part J3b).
+DUMP_ENDING = "unrestrict"
+RESTRICT_KEY = "FixtureRestrictKey1"       # letters and digits, pg_dump's alphabet; synthetic, its length a test's choice
+
+
 def postgres(tool, args):
     state = load("pg")
     section = service()
@@ -427,7 +436,10 @@ def postgres(tool, args):
         sys.stderr.write("pg_dump: error: permission denied for table\n")
         answer(None, 1)
     out = args[args.index("-f") + 1]
-    lines = ["--", "-- PostgreSQL database dump", "--", ""]
+    ending = state.get("ending") or DUMP_ENDING
+    key = state.get("restrict_key") or RESTRICT_KEY
+    restrict = ending in ("unrestrict", "unrestrict-1")
+    lines = ["--", "-- PostgreSQL database dump", "--", ""] + (["\\restrict " + key, ""] if restrict else [])
     for name in sorted(tables):
         lines += ["CREATE TABLE public.%s (" % name, "    v text", ");", ""]
     for name in sorted(tables):
@@ -435,7 +447,9 @@ def postgres(tool, args):
             continue                    # a plan's `drop`: this table's data section left out of the copy
         lines += ["COPY public.%s (v) FROM stdin;" % name] + list(tables[name]) + ["\\.", ""]
     lines += ["--", "-- PostgreSQL database dump complete", "--", "", ""]
-    text = "\n".join(lines)
+    if restrict:
+        lines[-1:] = ["\\unrestrict " + key] + (["", ""] if ending == "unrestrict" else [""])
+    text = "\n".join(lines) + todo.get("tail", "")
     if todo.get("do") == "short":
         text = text[: len(text) // 2]
     with open(out, "w") as fh:

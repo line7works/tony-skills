@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "fix
 import provlib  # noqa: E402
 import harness  # noqa: E402
 import test_lane_set_lib as lib  # noqa: E402
+import prov_fake  # noqa: E402
 from sun_core import effects, plan, protected  # noqa: E402
 
 SET_ROWS = ("T01s", "T01", "T03", "T04-development", "T04-preview", "T04-production", "T04c", "T20", "T21")
@@ -134,7 +135,7 @@ class EndToEnd(harness.Case):
         dump = os.path.join(folder(m), "demo-db.sql")
         self.assertEqual(stat.S_IMODE(os.stat(dump).st_mode), 0o600)
         text = read_file(dump)
-        self.assertTrue(text.endswith("-- PostgreSQL database dump complete\n--\n\n"))
+        self.assertTrue(text.endswith(BLOCK + "\\unrestrict " + prov_fake.RESTRICT_KEY + "\n\n"))     # pg_dump 17.6 on (J3b)
         done = completion(m, run, "T03")
         self.assertEqual(record(m, run, done["keep"]["inventory"]), ["CREATE TABLE public.alpha (", "CREATE TABLE public.beta ("])
         self.assertEqual(record(m, run, done["keep"]["source"]), "7000000000000000001")
@@ -513,6 +514,90 @@ class Stops(harness.Case):
         self.assertEqual(went.ending, "complete", went.text)
         self.assertEqual(m.statuses(looked.doc["run"]).get("T12m"), "passed")
 
+
+KEY64 = ("Fixture0123456789" * 4)[:64]     # letters and digits; 64 is the test's choice, pg_dump's length is not shown
+BLOCK = "\n--\n-- PostgreSQL database dump complete\n--\n\n"
+
+
+class DumpEnd(harness.Case):
+    """Part J3b: T03's completion check and the two endings a real plain pg_dump writes (pg_dump 18.6's strings): the
+    completion block as the end, or followed by one line `\\unrestrict <key>` and one or two newlines, the key of letters
+    and digits. A cut-off dump, a key of another alphabet and any other text after the block still fail the keep, as the
+    keep is built and again at the barrier (KEEP-1, KEEP-3; G23-9)."""
+
+    def sunset(self, label, ending, key=KEY64, **plan):
+        m = world(self, label, label)
+        if ending is not None:
+            provlib.put_state(m, "pg", ending=ending, restrict_key=key)
+        if plan:
+            provlib.plan(m, "pg", dict(command="pg_dump", nth=1, **plan))
+        looked, went = started(m, keep_vercel=True, keep_github=True)
+        return m, looked.doc["run"], went
+
+    def test_T03_KEEP1_KEEP3_J3b_a_dump_that_ends_with_the_unrestrict_line_completes_past_the_barrier_and_T03_is_done(self):
+        """Both of pg_dump 18.6's forms, and the fake's default (no ending named: `DUMP_ENDING`, the newer form)."""
+        self.assertEqual(prov_fake.DUMP_ENDING, "unrestrict")
+        for label, ending, newlines in (("two", "unrestrict", "\n\n"), ("one", "unrestrict-1", "\n"), ("default", None, "\n\n")):
+            with self.subTest(ending=ending):
+                m, run, went = self.sunset(label, ending)
+                self.assertEqual(went.ending, "complete", went.text)
+                statuses = m.statuses(run)
+                self.assertEqual(statuses.get("T03"), "done")
+                self.assertEqual(statuses.get("T12"), "done")      # a retirement after KEEP-3's barrier re-checked T03
+                text = read_file(os.path.join(folder(m), "demo-db.sql"))
+                key = KEY64 if ending else prov_fake.RESTRICT_KEY
+                self.assertTrue(text.endswith(BLOCK + "\\unrestrict " + key + newlines))
+                self.assertIn("\n\\restrict %s\n" % key, text)
+
+    def test_T03_KEEP3_J3b_a_dump_with_the_unrestrict_line_passes_the_barrier_on_a_resume_and_the_retirements_run(self):
+        """KEEP-3's re-check in a later invocation (`recheck_keep`, the same check): the run killed once T03 is done, the
+        resume re-checks the kept dump at the barrier and goes on to the end, for each of the two forms."""
+        for label, ending in (("rtwo", "unrestrict"), ("rone", "unrestrict-1")):
+            with self.subTest(ending=ending):
+                m = world(self, label, label)
+                provlib.put_state(m, "pg", ending=ending, restrict_key=KEY64)
+                looked = look(m, keep_vercel=True, keep_github=True)
+                run = looked.doc["run"]
+                went = lib.go(m, looked, kill=lambda e: e["op"] == "append" and e["stage"] == "post" and m.statuses(run).get("T03") == "done")
+                self.assertTrue(went.killed, went.text)
+                self.assertIsNone(m.statuses(run).get("T12"))
+                resumed = m.resume(lib.NAMES[0], also=lib.ALSO, caps=list(lib.CAPS))
+                self.assertEqual(resumed.ending, "complete", resumed.text)
+                self.assertEqual((m.statuses(run).get("T03"), m.statuses(run).get("T12")), ("done", "done"))
+
+    def test_T03_KEEP1_J3b_a_dump_with_the_old_ending_completes_and_T03_is_done(self):
+        m, run, went = self.sunset("old", "old")
+        self.assertEqual(went.ending, "complete", went.text)
+        self.assertEqual(m.statuses(run).get("T03"), "done")
+        self.assertTrue(read_file(os.path.join(folder(m), "demo-db.sql")).endswith(BLOCK))
+
+    def test_T03_KEEP1_KEEP3_J3b_a_cut_off_dump_a_foreign_key_or_text_after_the_key_line_stops_at_T03_unpublished(self):
+        for label, ending, key, plan in (("cut", "unrestrict", KEY64, {"do": "short"}), ("cut1", "unrestrict-1", KEY64, {"do": "short"}),
+                                         ("bad", "unrestrict", "Fixture-Key_1", {}), ("bad1", "unrestrict-1", "Fixture.Key", {}),
+                                         ("tail", "unrestrict", KEY64, {"tail": "SELECT 1;\n"}),
+                                         ("tail1", "unrestrict-1", KEY64, {"tail": "\\unrestrict %s\n" % KEY64})):
+            with self.subTest(case=label):
+                m, run, went = self.sunset(label, ending, key, **plan)
+                self.assertEqual(went.ending, "stopped", went.text)
+                self.assertEqual(stop_of(m, run), {"kind": "the keep is not whole", "op": "T03"})
+                self.assertFalse(os.path.exists(os.path.join(folder(m), "demo-db.sql")))
+
+    def test_T03_KEEP1_KEEP3_J3b_the_shipped_check_as_the_keep_is_built_and_at_the_barrier_reads_each_ending(self):
+        """`effects.text_checks_hold`, which both `keep_whole` and the barrier's `recheck_keep` call, over T03's shipped
+        content checks: every real ending holds, and nothing else does."""
+        checks = sunset_row("T03")["keep_scope"]["content_checks"]
+        body = "--\n-- PostgreSQL database dump\n--\n\nCREATE TABLE public.alpha (\n);\n\nCOPY public.alpha (v) FROM stdin;\n1\n\\.\n" + BLOCK
+        held = {"old": body, "two newlines": body + "\\unrestrict " + KEY64 + "\n\n", "one newline": body + "\\unrestrict k1\n"}
+        failed = {"cut off": body[:-20], "cut in the key line": body + "\\unrestrict " + KEY64,
+                  "an empty key": body + "\\unrestrict \n\n", "a key with a dash": body + "\\unrestrict Fixture-Key\n\n",
+                  "a key with a space": body + "\\unrestrict Fixture Key\n\n", "a non-ASCII key": body + "\\unrestrict Fixtur\u00e9\n\n",
+                  "three newlines": body + "\\unrestrict k1\n\n\n", "no space": body + "\\unrestrictk1\n\n",
+                  "text after the key line": body + "\\unrestrict k1\nSELECT 1;\n",
+                  "two key lines": body + "\\unrestrict k1\n\n\\unrestrict k1\n\n", "another line": body + "SELECT 1;\n"}
+        for name, text in sorted(held.items()) + sorted(failed.items()):
+            with self.subTest(case=name):
+                data = text.encode("utf-8")
+                self.assertEqual(all(effects.text_checks_hold(data, c) for c in checks), name in held)
 
 
 class FixRound(harness.Case):
