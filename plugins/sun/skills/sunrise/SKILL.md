@@ -82,6 +82,7 @@ task board (Phase 5) is archetype-independent and on by default; `--no-notion` s
 - **Wire the cross-links from birth.** The repo `AGENTS.md` (the instruction body every host reads; `CLAUDE.md` is its one-line `@AGENTS.md` stub), the vault `_index.md`, and the memory note all point at each other on day one, so the boot path works immediately.
 - **Resumable.** If a run dies partway and is re-invoked, detect what already exists (Phase 0 collision check) and continue rather than double-create.
 - **Operate on the vault via the local filesystem.** Canonical is `~/ObsidianVault` **on the Mac Studio** — not the laptop, whose copy is retired. Obsidian picks up external changes on its own. Never proceed without passing the vault gate in Phase 0.
+- **NOTE (Tony, 2026-10-21): follow the vault guide for the machine you are on.** The vault steps in this skill describe the Studio. On the laptop, follow the laptop guide in `~/.claude/CLAUDE.md` ("Vault access from this machine") instead: the vault gate prints `STOP: no vault` there by design, and that is not a reason to abort. Run the Phase 0 vault collision check and the Phase 6 writes over the REST API (`curl` GET/PUT against `https://mcp.line7.works/vault/...`, key in `~/.claude/obsidian-api-key`), and read the kit and spec notes the same way. Never `mkdir` anything under `~/ObsidianVault` on the laptop. First run this way: `saturday-supper`, 2026-10-21.
 
 ---
 
