@@ -808,6 +808,9 @@
                "maxLength": 200,
                "type": "string"
               },
+              "one": {
+               "const": true
+              },
               "pairs": {
                "additionalProperties": false,
                "properties": {
@@ -855,6 +858,26 @@
                 "hash",
                 "address"
                ]
+              },
+              "where": {
+               "items": {
+                "additionalProperties": false,
+                "properties": {
+                 "field": {
+                  "maxLength": 200,
+                  "type": "string"
+                 },
+                 "holds": {
+                  "const": true
+                 }
+                },
+                "required": [
+                 "field"
+                ],
+                "type": "object"
+               },
+               "minItems": 1,
+               "type": "array"
               }
              },
              "required": [
@@ -1781,6 +1804,13 @@
             "equals"
            ],
            "type": "object"
+          },
+          "cli_keys": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "array"
           },
           "command": {
            "maxLength": 200,
@@ -4016,6 +4046,9 @@
               "maxLength": 200,
               "type": "string"
              },
+             "one": {
+              "const": true
+             },
              "pairs": {
               "additionalProperties": false,
               "properties": {
@@ -4063,6 +4096,26 @@
                "hash",
                "address"
               ]
+             },
+             "where": {
+              "items": {
+               "additionalProperties": false,
+               "properties": {
+                "field": {
+                 "maxLength": 200,
+                 "type": "string"
+                },
+                "holds": {
+                 "const": true
+                }
+               },
+               "required": [
+                "field"
+               ],
+               "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
              }
             },
             "required": [
@@ -4354,6 +4407,14 @@
         "use"
        ],
        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+     },
+     "guards": {
+      "items": {
+       "maxLength": 200,
+       "type": "string"
       },
       "minItems": 1,
       "type": "array"

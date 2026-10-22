@@ -1546,7 +1546,7 @@ class AStartTheSystemRefuses(OpCase):
         looked = m.look()
         self.assertEqual(looked.ending, "preview", looked.text)
         run = looked.doc["run"]
-        hook, put_right = rowlib.refuse_start(m, cause, os.path.join(folder, "fakehost"), m.facts.run_dir(run), "fakehost")
+        hook, put_right = rowlib.refuse_start(m, cause, os.path.join(folder, "fakehost"), rowlib.child_folder(m), "fakehost")
         went = m.go(looked, kill=then(hook, kill) if hook is not None else kill)
         return m, run, went, put_right
 

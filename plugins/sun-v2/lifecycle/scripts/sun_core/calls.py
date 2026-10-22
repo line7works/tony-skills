@@ -297,7 +297,15 @@ def call(session, command, outputs, op=None, journal=None, extra_params=None, cw
             except hostcall.Refused as refused:
                 raise runner.Refused(refused.reason)
         else:
-            raw = runner.run(world, context, decl, argv, env, cwd or run_dir, program=program)
+            # J6d (RUN-4): a child whose row names no working folder runs in a fresh, empty, owner-only folder made for this
+            # call in the tool's own folder (`work/`), outside every run directory, so that nothing a child drops where it
+            # runs (the real `vercel integration add` writes skill files and a symlink there) reaches a run directory. The
+            # folder is kept, with whatever the child left in it: LOG-3 lets a run remove nothing outside its run directory
+            # but a lock's file, and nothing it did not make. No check reads `work/`
+            work = os.path.join(session.facts.tool_home, "work", world.new_id("w")) if cwd is None and session.facts.tool_home else None
+            if work is not None:
+                world.fs.makedirs(work)
+            raw = runner.run(world, context, decl, argv, env, work or cwd or run_dir, program=program)
     except runner.Refused as refused:
         if secret and not request and refused.at_start:
             # SEC-12 (batch 46, A110): "Where the file the runner found is gone as it starts it, so that no child is created,

@@ -495,6 +495,10 @@ def c1(engine, operation, answer):
                     engine.fs.remove(staged)
                 engine.fs.write_new(staged, encode_pairs(pairs))       # the frame writes the held values, in staging (SEC-7)
             if operation["kind"] == "keep":
+                cli = (scope.get("inventory_from") or {}).get("cli_keys") if isinstance(scope.get("inventory_from"), dict) else None
+                if isinstance(cli, list) and cli and engine.fs.isfile(staged):
+                    drop_cli_keys(engine, staged, cli, str(scope["inventory_from"].get("copy_keys", "=")),
+                                  list(keep_reads.get("before") or []) + list(keep_reads.get("apart") or []))
                 extra = keep_whole(engine, operation, staged, result, keep_reads)
             if construction.get("in_folder"):
                 no_repository(engine, staged)
@@ -728,6 +732,24 @@ def copy_keys(data, mark):
     return out
 
 
+def drop_cli_keys(engine, staged, names, mark, inventory=()):
+    """J6g (L-15; the owner's ruling): the lines of the keys a provider's own tool adds to its copy of a hosting environment,
+    which no project variable is (vercel's VERCEL_OIDC_TOKEN and its system and build entries, J6h), dropped from the staged
+    copy before the keep is checked, so that no kept copy holds one. Exactly the keys the row names in `cli_keys`, and only
+    where the environment's own inventory (the read just before the pull, `inventory`) does not hold that key: a name the
+    project defines itself is a project key and stays (J6h, the Board's binding). Every other line stays as it was, and any
+    other key the copy holds still fails the keep. The staged object is written again in staging, never elsewhere."""
+    names = set(names) - set(inventory)
+    data = engine.fs.read(staged)
+    lines = data.split(b"\n")
+    marker = mark.encode("utf-8")
+    kept = [l for l in lines if l.lstrip().startswith(b"#") or marker not in l
+            or l.split(marker, 1)[0].strip().decode("utf-8", "replace") not in names]
+    if len(kept) != len(lines):
+        engine.fs.remove(staged)
+        engine.fs.write_new(staged, b"\n".join(kept))
+
+
 def keep_whole(engine, operation, staged, result, reads_before=None):
     """KEEP-1: the copy is compared with the inventory taken in the same state; what the provider
     returned of it is held, and the size and the fingerprint are the tool's own measure. The inventory may come from the
@@ -914,7 +936,8 @@ def text_checks_hold(data, check):
     the check names a `then_line`, that text followed by one line of the line's fixed `prefix` and a non-empty key of its
     named `alphabet`, then one or two newlines, as the end (J3b: pg_dump 17.6 and later write `\\unrestrict <key>` after
     their last line); and `has-section`, each line of `prefix` paired with a line of `section` carrying the same name (each
-    table the copy creates has its data section in the copy). A check of another kind is not this function's and holds here."""
+    table the copy creates has its data section in the copy; a partitioned parent, which holds no rows, excepted: J6f). A
+    check of another kind is not this function's and holds here."""
     if check.get("check") == "ends-with":
         text = str(check.get("text", "")).encode("utf-8")
         if data.endswith(text):
@@ -931,7 +954,19 @@ def text_checks_hold(data, check):
         prefix, section = str(check.get("prefix", "")), str(check.get("section", ""))
         if not prefix or not section:
             return False                      # a pairing with a side missing proves nothing, and fails the keep
-        made = [_named(l, prefix) for l in lines if l.startswith(prefix)]
+        made = []
+        for index, line in enumerate(lines):
+            if not line.startswith(prefix):
+                continue
+            # J6f (L-13): a CREATE TABLE whose own statement ends, at its closing `;`, in a `PARTITION BY` clause is a
+            # partitioned parent: Postgres keeps no rows in it and pg_dump writes no data section for it (Supabase's
+            # `realtime.messages`). A statement that cannot be read whole to its `;` fails the keep (G23-F2)
+            end = next((j for j in range(index, len(lines)) if lines[j].rstrip().endswith(";")), None)
+            if end is None:
+                return False
+            if _named(line, prefix) is not None and lines[end].strip().startswith("PARTITION BY "):
+                continue
+            made.append(_named(line, prefix))
         filled = [_named(l, section) for l in lines if l.startswith(section)]
         if None in made or None in filled:
             return False                      # a name the pairing cannot read whole fails the keep (G23-F2)

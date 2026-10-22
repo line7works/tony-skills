@@ -706,14 +706,29 @@ def given_answer(look, name):
         return None
 
 
-def read_questions(session, look, lane, causes):
+SETTLED = ("done", "not proven", "already so")      # a guarded operation's final record that may have moved its thing
+
+
+def question_settled(q, state):
+    """J6i (L-17): in a re-plan, a lane question whose every guarded operation (`guards`) has a final record of this run
+    that may have moved what the question reads (done, not proven, already so) stands as it stood at the look that
+    approved those operations, and is not read again: its read would meet a path a done move left. Never at a first look,
+    and never for a question that names no guards."""
+    guards = q.get("guards") if isinstance(q.get("guards"), list) else []
+    return bool(guards) and state is not None and all(state.finals.get(op) in SETTLED for op in guards)
+
+
+def read_questions(session, look, lane, causes, state=None):
     """The lane's questions asked only where their declared read fails (G20-4): each read once by the look, with the
     question's own commands, which change nothing (RUN-5); a question he has answered, or whose layer he dropped, is not
-    read. A read that cannot be made is a failed read (RUN-7)."""
+    read; nor, in a re-plan, one this run's done moves settled (`question_settled`). A read that cannot be made is a failed
+    read (RUN-7)."""
     asked = []
     for q in lane.get("questions") or []:
         test = q.get("when_read_fails")
         if not test or given_answer(look, q.get("input")) or (q.get("layer") and q["layer"] in (look.inputs.get("drop_layers") or [])):
+            continue
+        if question_settled(q, state):
             continue
         commands = expand({"rows": [{"commands": q.get("commands") or []}]}, session.providers)[0]["commands"]
         if any(not isinstance(c.get("declaration"), dict) or c["declaration"].get("effects", 0) != 0 for c in commands):
@@ -1501,6 +1516,53 @@ def programs_found(session, rows_in, causes):
             causes.append(texts.PROGRAM_NOT_FOUND.format(program=tool, settings=session.facts.settings_path))
 
 
+def run_date(session):
+    """J6j (L-20; RUN-8): the run's date as its first look fixed it, from the run's own record: the `date` of the manifest
+    its opening go was given on (the `open` record's, proven by its hash). A manifest written before J6j holds no `date`:
+    then the day of that `open` record, the run's first record, which the first look's go wrote. Never the clock again. A
+    record that cannot be read is a failed read (RUN-7)."""
+    from . import manifest as manifestmod
+    gos = manifestmod.go_records(session.journal) if getattr(session, "journal", None) is not None else []
+    if not gos:
+        raise PlanningStop(["the read failed: the run's date"])
+    try:
+        doc, sha = manifestmod.load(session.world.fs, session.run_dir, gos[0]["manifest"])
+    except (OSError, ValueError, KeyError):
+        raise PlanningStop(["the read failed: the run's date"])
+    date = doc.get("date") if isinstance(doc, dict) and sha == gos[0].get("manifest_sha256") else None
+    if date is None and sha == gos[0].get("manifest_sha256"):
+        date = str(gos[0].get("at") or "")[:10]
+    if not isinstance(date, str) or values.VALIDATORS["a date"].fullmatch(date) is None:
+        raise PlanningStop(["the read failed: the run's date"])
+    return date
+
+
+def carry_vanished_members(expanded, state, carried, operations, not_applicable):
+    """J6i (L-18): in a re-plan, a member of a family row with a done-class final record (`SETTLED`) that the family's new
+    read no longer finds (its own change removed what the read looks for: a shortcut line, an agent file, an index line) is
+    carried into the new manifest's operations as the manifest in force holds it, its saved values unchanged and never read
+    again, at its place in the order: after the nearest operation before it in the manifest in force that the new plan
+    holds. A restore offers from the manifest in force, so a member that fell out could never be put back. The family
+    row's `none found` is dropped where a member of it is carried."""
+    families = set(row["id"] for row in expanded if isinstance(row.get("thing"), dict) and isinstance(row["thing"].get("family"), dict))
+    have = set(o["id"] for o in operations)
+    for index, op in enumerate(state.order):
+        family = next((f for f in families if op.startswith(f + "-")), None)
+        if op in have or family is None or carried.get(op) not in SETTLED:
+            continue
+        member = copy.deepcopy(state.ops[op])
+        member["planning_outcome"] = "in"
+        at = 0
+        for before in reversed(state.order[:index]):
+            found = next((k for k, o in enumerate(operations) if o["id"] == before), None)
+            if found is not None:
+                at = found + 1
+                break
+        operations.insert(at, member)
+        have.add(op)
+        not_applicable[:] = [n for n in not_applicable if not (n.get("row") == family and n.get("reason") == "none found")]
+
+
 def build(session, kind, look, number, state=None, journal_count=0):
     """Build manifest `number` for the run. `state` is the journal's, on a re-plan."""
     lane = session.lane
@@ -1537,7 +1599,9 @@ def build(session, kind, look, number, state=None, journal_count=0):
     causes = []
     look.project_memory = lambda folder: session.facts.project_memory(session.world.fs, folder)      # G21-10 (E16-12)
     look.tables = lane.get("tables") or {}       # the lane's own tables, keyed by a planning fact (G21-1)
-    look.date = session.world.now()[:10]       # the run's date, by the tool's own clock, read once here and frozen (RUN-8)
+    # the run's date, by the tool's own clock, read once by the run's first look and frozen (RUN-8); a re-plan reads it from
+    # the run's own record and never derives it again (J6j, L-20)
+    look.date = session.world.now()[:10] if state is None else run_date(session)
     earlier = earlier_runs(session)
     journals, other_held = read_other_runs(session, earlier)
     session.other_held = other_held
@@ -1571,7 +1635,7 @@ def build(session, kind, look, number, state=None, journal_count=0):
     look.local = lambda path, validator: local_value(session, path, validator)
     asked = []
     lane_facts(session, look, lane, causes, asked)
-    asked += read_questions(session, look, lane, causes)
+    asked += read_questions(session, look, lane, causes, state)
     if asked and not causes:
         raise Questions(asked)
     flat, members_of = [], {}
@@ -1650,7 +1714,9 @@ def build(session, kind, look, number, state=None, journal_count=0):
     if findings:
         raise BuildFailed(findings)
     if early is None:
-        programs_found(session, candidates, causes)
+        # J6 (E16-14, OP-8): a row without its capability on this harness is unavailable or not applicable, never a stop;
+        # its programs are not looked for
+        programs_found(session, [row for row in candidates if not lacks_capability(row)], causes)
     if causes:
         raise PlanningStop(causes)
     accounts = identity_reads(session, providers_used(candidates), causes) if early is None else early
@@ -1754,6 +1820,8 @@ def build(session, kind, look, number, state=None, journal_count=0):
                 if item.get("read") == "file" and not session.world.fs.isfile(values.resolve(item["path"], {})):
                     row["no_reverse"] = True
         operations.append(row)
+    if state is not None:
+        carry_vanished_members(expanded, state, carried, operations, not_applicable)
     tie_retirements(session, operations, not_applicable)
     impossible = {}
     if state is not None:
@@ -1781,7 +1849,7 @@ def build(session, kind, look, number, state=None, journal_count=0):
                 "locations": look.locations, "phases": list(lane.get("phases") or []), "operations": operations,
                 "already_so": already, "not_applicable": not_applicable, "held_things": held_things,
                 "settled_needs": settled, "secret_reads": secret_reads, "form_changes": lane.get("form_changes") or {},
-                "carried": carried}
+                "carried": carried, "date": look.date}
     manifest.update(lane_lines)
     if session.alias_names:
         # the name forms this look's alias reads showed are content read from the owner's files and not validated

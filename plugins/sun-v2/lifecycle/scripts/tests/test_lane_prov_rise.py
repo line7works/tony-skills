@@ -125,8 +125,9 @@ class EndToEnd(harness.Case):
                      "carried under v1's own risk for this step (RK18): a resource of that name made by another"):
             self.assertIn(line, preview)
         # RUN-5: the look made only reads at the fakes
-        self.assertEqual([c["command"] for c in provlib.calls(m, "gh")], ["whoami", "repo-read"])
-        self.assertEqual(sorted(set(c["command"] for c in provlib.calls(m, "vercel") if "command" in c)), ["cli-team", "db-installed", "db-list"])
+        # (J6c: SR08 reads by the repository's address, `repo-at`, and SR17 the team's resources, `db-all`)
+        self.assertEqual([c["command"] for c in provlib.calls(m, "gh")], ["whoami", "repo-at"])
+        self.assertEqual(sorted(set(c["command"] for c in provlib.calls(m, "vercel") if "command" in c)), ["cli-team", "db-all", "db-installed"])
         self.assertEqual([r["request"] for r in provlib.requests(m)], ["GET", "GET"])
         went = go(m, looked)
         self.assertEqual(went.ending, "complete", went.text)

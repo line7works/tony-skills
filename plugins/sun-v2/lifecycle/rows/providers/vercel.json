@@ -226,6 +226,121 @@
    "time_limit": 180,
    "tool": "vercel"
   },
+  "db-all": {
+   "definite": {
+    "refusals": [],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "exits": {
+    "0": "success",
+    "1": "other"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9._-",
+     "disposition": "equal",
+     "equals": {
+      "param": "name"
+     },
+     "max_length": 100,
+     "name": "name_is",
+     "place": [
+      "name"
+     ],
+     "required_in": [],
+     "type": "name"
+    },
+    {
+     "alphabet": "A-Za-z0-9 ._-",
+     "disposition": "equal",
+     "equals": {
+      "literal": "Supabase"
+     },
+     "max_length": 100,
+     "name": "product_is",
+     "place": [
+      "product"
+     ],
+     "required_in": [],
+     "type": "name"
+    },
+    {
+     "alphabet": "A-Za-z0-9_-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "named",
+     "one": true,
+     "place": [
+      "resources",
+      "*",
+      "id"
+     ],
+     "required_in": [],
+     "type": "id",
+     "where": [
+      {
+       "field": "name_is"
+      }
+     ]
+    },
+    {
+     "alphabet": "A-Za-z0-9_-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "made",
+     "one": true,
+     "place": [
+      "resources",
+      "*",
+      "id"
+     ],
+     "required_in": [],
+     "type": "id",
+     "where": [
+      {
+       "field": "name_is"
+      },
+      {
+       "field": "product_is"
+      }
+     ]
+    }
+   ],
+   "template": [
+    {
+     "literal": "integration"
+    },
+    {
+     "literal": "list"
+    },
+    {
+     "literal": "--all"
+    },
+    {
+     "literal": "--format"
+    },
+    {
+     "literal": "json"
+    },
+    {
+     "literal": "--non-interactive"
+    },
+    {
+     "literal": "--no-color"
+    },
+    {
+     "literal": "--scope"
+    },
+    {
+     "param": "team"
+    }
+   ],
+   "time_limit": 60,
+   "tool": "vercel"
+  },
   "db-connect": {
    "definite": {
     "refusals": [],
@@ -294,15 +409,37 @@
    },
    "fields": [
     {
-     "disposition": "fixed",
-     "name": "installed",
+     "alphabet": "a-z0-9-",
+     "disposition": "equal",
+     "equals": {
+      "literal": "supabase"
+     },
+     "max_length": 64,
+     "name": "slug_is",
      "place": [
-      "installed"
+      "slug"
      ],
-     "required_in": [
-      "success"
+     "required_in": [],
+     "type": "name"
+    },
+    {
+     "alphabet": "A-Za-z0-9_-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "installation",
+     "one": true,
+     "place": [
+      "installations",
+      "*",
+      "id"
      ],
-     "type": "flag"
+     "required_in": [],
+     "type": "id",
+     "where": [
+      {
+       "field": "slug_is"
+      }
+     ]
     }
    ],
    "template": [
@@ -311,12 +448,6 @@
     },
     {
      "literal": "installations"
-    },
-    {
-     "literal": "--integration"
-    },
-    {
-     "literal": "supabase"
     },
     {
      "literal": "--format"
@@ -354,26 +485,55 @@
    },
    "fields": [
     {
+     "alphabet": "A-Za-z0-9 ._-",
+     "disposition": "equal",
+     "equals": {
+      "literal": "Supabase"
+     },
+     "max_length": 100,
+     "name": "product_is",
+     "place": [
+      "product"
+     ],
+     "required_in": [],
+     "type": "name"
+    },
+    {
+     "alphabet": "A-Za-z0-9._-",
+     "disposition": "equal",
+     "equals": {
+      "param": "slug"
+     },
+     "max_length": 100,
+     "name": "slug_in",
+     "place": [
+      "projects"
+     ],
+     "required_in": [],
+     "type": "name"
+    },
+    {
      "alphabet": "A-Za-z0-9_-",
      "disposition": "held",
      "max_length": 64,
-     "name": "resource",
+     "name": "connected",
+     "one": true,
      "place": [
-      "resource",
+      "resources",
+      "*",
       "id"
      ],
      "required_in": [],
-     "type": "id"
-    },
-    {
-     "disposition": "fixed",
-     "name": "connected",
-     "place": [
-      "resource",
-      "connected"
-     ],
-     "required_in": [],
-     "type": "flag"
+     "type": "id",
+     "where": [
+      {
+       "field": "product_is"
+      },
+      {
+       "field": "slug_in",
+       "holds": true
+      }
+     ]
     }
    ],
    "template": [

@@ -1388,7 +1388,8 @@ class AStartTheSystemRefusesAtAnOperation(harness.Case):
     ran (the owner's ruling, A113)." Its refusals row: "a command of an operation whose start the system refuses before the
     program runs, the file still there, where the system's answer shows that the program never ran (the command row; the
     owner's ruling, A113)". The create of `rowlib.install_refused_send`, its program in a folder of the fixture's own; each
-    cause planted after the look by `rowlib.refuse_start` (the row's working folder is the run directory)."""
+    cause planted after the look by `rowlib.refuse_start` (the row names no working folder: since J6d the child's is the
+    folder the tool made for that call, `rowlib.child_folder`)."""
 
     REFUSED = "the runner refused the command: start refused"
 
@@ -1410,7 +1411,7 @@ class AStartTheSystemRefusesAtAnOperation(harness.Case):
                 looked = m.look()
                 self.assertEqual(looked.ending, "preview", looked.text)
                 run = looked.doc["run"]
-                hook, put_right = rowlib.refuse_start(m, cause, os.path.join(folder, "fakehost"), m.facts.run_dir(run), "fakehost")
+                hook, put_right = rowlib.refuse_start(m, cause, os.path.join(folder, "fakehost"), rowlib.child_folder(m), "fakehost")
                 went = m.go(looked, kill=hook)
                 self.assertEqual(went.ending, "stopped", went.text)
                 self.assertNotIn(texts.DEFECT, went.text, "an exception was reported")
@@ -1454,7 +1455,7 @@ class AStartTheSystemRefusesAtAnOperation(harness.Case):
         looked = m.look()
         self.assertEqual(looked.ending, "preview", looked.text)
         run = looked.doc["run"]
-        hook, put_right = rowlib.refuse_start(m, rowlib.ARG_LIST_TOO_LONG, os.path.join(folder, "fakehost"), m.facts.run_dir(run),
+        hook, put_right = rowlib.refuse_start(m, rowlib.ARG_LIST_TOO_LONG, os.path.join(folder, "fakehost"), rowlib.child_folder(m),
                                               "fakehost")
         went = m.go(looked, kill=hook)
         self.assertEqual(went.ending, "stopped", went.text)
@@ -1488,8 +1489,8 @@ class AStartTheSystemRefusesAtAChange(harness.Case):
     The change of `rowlib.install_change_checked_by_child`: a C5 whose probe reads are the fake host's own request (no child),
     whose effect call, `fakehost set`, is the go's first child, and whose after-check's read, `fakehost get`, is its second;
     the fake host's program in a folder of the fixture's own (`rowlib.program_folder`); each cause planted after the look, for
-    the first start (`rowlib.refuse_start`) or for the second (`rowlib.refuse_start_at`). The row's working folder is the run
-    directory."""
+    the first start (`rowlib.refuse_start`) or for the second (`rowlib.refuse_start_at`). The row names no working folder: since
+    J6d the child's is the folder the tool made for that call (`rowlib.child_folder`)."""
 
     REFUSED = "the runner refused the command: start refused"
 
@@ -1499,7 +1500,7 @@ class AStartTheSystemRefusesAtAChange(harness.Case):
         looked = m.look()
         self.assertEqual(looked.ending, "preview", looked.text)
         run = looked.doc["run"]
-        hook, put_right = rowlib.refuse_start_at(m, cause, os.path.join(folder, "fakehost"), m.facts.run_dir(run), "fakehost", nth)
+        hook, put_right = rowlib.refuse_start_at(m, cause, os.path.join(folder, "fakehost"), rowlib.child_folder(m), "fakehost", nth)
         return m, run, m.go(looked, kill=hook), put_right
 
     def of_h1(self, m, run):
