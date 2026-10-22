@@ -843,7 +843,14 @@ class SweepChildRace(harness.Case):
         sweep = killlib.Sweep(self, self.tmp, prepare)
         held.clear()
         # the go's cas: the `mid child fakegit` right after its operation's start record (point 190 on the reference rows)
-        point = [p for p in sweep.points if sweep.describe(p) == "mid child fakegit" and sweep.describe(p - 2) == "post journal start"][0]
+        # (J6d: the folder the tool makes for a child that names none is made between that record and the child: its mkdir
+        # boundaries are stepped over)
+        def before_child(p):
+            q = p - 2
+            while q >= 0 and sweep.describe(q).split(" ")[1] == "mkdir":
+                q -= 1
+            return sweep.describe(q)
+        point = [p for p in sweep.points if sweep.describe(p) == "mid child fakegit" and before_child(p) == "post journal start"][0]
         seen = {"reads": 0}
 
         def hook(machine, event):

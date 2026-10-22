@@ -160,7 +160,10 @@ def sunset_world(m, values=None, tables=None, custom=None):
     put_state(m, "gh", account=ACCOUNT, things={"demo": {"id": "R_fixturerepo1", "kind": "repo", "state": "active", "name": "demo"}})
     password = harness.canary("db-password")
     with open(os.path.join(repo, ".env.local"), "w") as fh:
-        fh.write('DATABASE_URL="postgres://fixture:%s@db.invalid:5432/demo"\n' % password)
+        # J6e, as the real `vercel env pull` writes it (L-12): the pooled address first, with `sslmode` and the pooler's
+        # `supa`, then the direct one; no DATABASE_URL
+        fh.write('POSTGRES_URL="postgres://fixture:%s@pooler.db.invalid:6543/demo?sslmode=require&supa=base-pooler.x"\n'
+                 'POSTGRES_URL_NON_POOLING="postgres://fixture:%s@db.invalid:5432/demo?sslmode=require"\n' % (password, password))
     os.chmod(os.path.join(repo, ".env.local"), 0o600)
     os.makedirs(os.path.join(repo, ".vercel"))                      # what slice 2's SR10 left (ignored)
     with open(os.path.join(repo, ".vercel", "project.json"), "w") as fh:

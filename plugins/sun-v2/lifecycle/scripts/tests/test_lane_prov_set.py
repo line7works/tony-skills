@@ -137,12 +137,16 @@ class EndToEnd(harness.Case):
         text = read_file(dump)
         self.assertTrue(text.endswith(BLOCK + "\\unrestrict " + prov_fake.RESTRICT_KEY + "\n\n"))     # pg_dump 17.6 on (J3b)
         done = completion(m, run, "T03")
-        self.assertEqual(record(m, run, done["keep"]["inventory"]), ["CREATE TABLE public.alpha (", "CREATE TABLE public.beta ("])
+        # (J6f: the fake dump holds Supabase's partitioned `realtime.messages`, as the real one does)
+        self.assertEqual(record(m, run, done["keep"]["inventory"]),
+                         ["CREATE TABLE public.alpha (", "CREATE TABLE public.beta (", "CREATE TABLE realtime.messages ("])
         self.assertEqual(record(m, run, done["keep"]["source"]), "7000000000000000001")
         pg = [c["command"] for c in provlib.calls(m, "pg")]
         # the look's read of the dump's scope (G25-3), then the source's identity just before the copy (A147), one dump
         self.assertEqual(pg, ["psql", "psql", "pg_dump"])
-        self.assertTrue(all(c["service_mode"] == "0o600" and c["service_keys"] == ["dbname", "host", "password", "port", "user"]
+        # (J6e: the direct address of the real env file, POSTGRES_URL_NON_POOLING, carries `sslmode`)
+        self.assertTrue(all(c["service_mode"] == "0o600"
+                            and c["service_keys"] == ["dbname", "host", "password", "port", "sslmode", "user"]
                             for c in provlib.calls(m, "pg")))
         self.assertNowhere(password, went)
         # T04: each environment saved owner-only; the Sensitive key listed apart, by key, never by value

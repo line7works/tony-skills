@@ -52,8 +52,9 @@ object, `{"input_version": 1, "description": ..., "type": ..., "answers": {"shor
   then `flags.local_proof` is, by the scaffold, `build next`, `build astro`, `build electron`, `npm`, `uv` or `html`.
 - `flags.public`: `true` only where he asks for a public GitHub repository (v1's `--public`); leave it out otherwise, and
   the repository is private.
-- The capabilities file names `canary` where the harness can have a fresh session quote a project's first instruction
-  line, and `memory stores` where it keeps memory notes.
+- The capabilities file names `memory stores` where the harness keeps memory notes. Name `canary` only where the program
+  `sun-adapter` stands on the tool's search list; no harness ships one yet, so otherwise leave it out, and the preview
+  says that step is unavailable on this harness.
 - `--dry-run` is the look alone: show its preview and stop.
 
 ## Procedure

@@ -7431,24 +7431,17 @@
     {
      "name": "look",
      "params": {
+      "account": {
+       "account": "github"
+      },
       "name": {
        "name": 1
-      },
-      "name_arg": {
-       "text": [
-        {
-         "literal": "name="
-        },
-        {
-         "name": 1
-        }
-       ]
       },
       "ref_arg": {
        "literal": "ref=refs/heads/main"
       }
      },
-     "use": "github.repo-read"
+     "use": "github.repo-at"
     },
     {
      "name": "make",
@@ -7624,24 +7617,17 @@
     {
      "name": "look",
      "params": {
+      "account": {
+       "account": "github"
+      },
       "name": {
        "name": 1
-      },
-      "name_arg": {
-       "text": [
-        {
-         "literal": "name="
-        },
-        {
-         "name": 1
-        }
-       ]
       },
       "ref_arg": {
        "literal": "ref=refs/heads/main"
       }
      },
-     "use": "github.repo-read"
+     "use": "github.repo-at"
     },
     {
      "name": "make",
@@ -7817,24 +7803,17 @@
     {
      "name": "look",
      "params": {
+      "account": {
+       "account": "github"
+      },
       "name": {
        "name": 1
-      },
-      "name_arg": {
-       "text": [
-        {
-         "literal": "name="
-        },
-        {
-         "name": 1
-        }
-       ]
       },
       "ref_arg": {
        "literal": "ref=refs/heads/main"
       }
      },
-     "use": "github.repo-read"
+     "use": "github.repo-at"
     },
     {
      "name": "make",
@@ -9472,7 +9451,7 @@
      "equals": {
       "output": "database.resource"
      },
-     "field": "resource",
+     "field": "made",
      "read": "command",
      "result": "success"
     }
@@ -9480,7 +9459,7 @@
    "after_test": [
     {
      "command": "look",
-     "field": "resource",
+     "field": "made",
      "present": true,
      "read": "command",
      "result": "success"
@@ -9490,7 +9469,7 @@
    "before_test": [
     {
      "command": "look",
-     "field": "resource",
+     "field": "named",
      "id": "free",
      "on": "target",
      "present": false,
@@ -9521,14 +9500,21 @@
     {
      "name": "look",
      "params": {
-      "slug": {
-       "name": 1
+      "name": {
+       "text": [
+        {
+         "name": 1
+        },
+        {
+         "literal": "-db"
+        }
+       ]
       },
       "team": {
        "account": "vercel"
       }
      },
-     "use": "vercel.db-list"
+     "use": "vercel.db-all"
     },
     {
      "name": "inst",
@@ -9609,15 +9595,15 @@
    "planning_test": [
     {
      "command": "inst",
-     "equals": "true",
-     "field": "installed",
+     "field": "installation",
+     "present": true,
      "read": "command",
      "result": "success",
      "stop_line": "Accept the Marketplace's terms for Supabase once: run `vercel integration accept-terms supabase`, then summon sunrise again."
     },
     {
      "command": "look",
-     "field": "resource",
+     "field": "named",
      "present": false,
      "read": "command",
      "result": "success"
@@ -9643,7 +9629,10 @@
    "after_check": [
     {
      "command": "look",
-     "equals": "true",
+     "compare_held": true,
+     "equals": {
+      "output": "database.resource"
+     },
      "field": "connected",
      "read": "command",
      "result": "success"
@@ -9652,7 +9641,10 @@
    "after_test": [
     {
      "command": "look",
-     "equals": "true",
+     "compare_held": true,
+     "equals": {
+      "output": "database.resource"
+     },
      "field": "connected",
      "read": "command",
      "result": "success"
@@ -9662,10 +9654,10 @@
    "before_test": [
     {
      "command": "look",
-     "equals": "false",
      "field": "connected",
      "id": "apart",
      "on": "target",
+     "present": false,
      "read": "command",
      "result": "success"
     }
@@ -9748,8 +9740,8 @@
    "planning_test": [
     {
      "command": "look",
-     "equals": "false",
      "field": "connected",
+     "present": false,
      "read": "command",
      "result": "success"
     }

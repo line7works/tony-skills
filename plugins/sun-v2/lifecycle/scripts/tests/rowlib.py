@@ -553,6 +553,23 @@ ARG_LIST_TOO_LONG = "an argument list too long"
 NO_FORMAT = b"\x00\x01\x02\x03 these bytes are no program of any format the system can run\n" * 8
 
 
+class child_folder(object):
+    """J6d: the working folder of a provider child whose row names none, for `refuse_start`'s `working`: the folder the tool
+    made for that call under `<tool folder>/work/`, the last one its record shows made before the child starts (the hooks
+    show it each event, `seen`). The folders of earlier calls are kept, so the newest is the call's."""
+
+    def __init__(self, machine):
+        self.root = os.path.join(machine.facts.tool_home, "work") + os.sep
+        self.last = None
+
+    def seen(self, event):
+        if event["op"] == "mkdir" and event["stage"] == "post" and str(event["subject"]).startswith(self.root):
+            self.last = str(event["subject"])
+
+    def __call__(self):
+        return self.last
+
+
 def refuse_start(machine, cause, program, working, tool):
     """Plant `cause` for the start of `tool`, whose file is `program` and whose working folder is `working`. Returns (hook,
     put_right): `hook` is None or an act over the record's events, which never kills; `put_right` puts the cause right.
@@ -563,7 +580,8 @@ def refuse_start(machine, cause, program, working, tool):
     - no format: the bytes replaced by `NO_FORMAT`, the file still runnable by its mode, no first line naming a program;
     - the working folder: moved away at the runner's own record that it is about to start that child (`pre child`), and put
       back at its record that the start ended (`post child`), so that it is gone as the system starts the child and the run
-      can go on writing its records after it;
+      can go on writing its records after it; `working` may be `child_folder(machine)`, the folder the tool made for that
+      call (J6d);
     - no process to be had, and an answer the runner cannot read: the fixture's system gives the answer (A115: "its pass
       has the fixture's system give that answer"): `machine.start`, the world's start of a process, raises the system's
       answer that no process can be had (EAGAIN, no file named), or an answer of no cause the runner reads (EIO), for a start
@@ -593,14 +611,18 @@ def refuse_start(machine, cause, program, working, tool):
             os.chmod(program, mode)
         return None, put_right
     if cause == START_CAUSES[3]:
-        away = working + ".away-" + machine.seed
+        moved = {}
 
         def hook(event):
+            if hasattr(working, "seen"):
+                working.seen(event)
             if event["op"] == "child" and str(event["subject"]) == tool:
-                if event["stage"] == "pre" and os.path.isdir(working):
-                    os.rename(working, away)
-                elif event["stage"] == "post" and os.path.isdir(away):
-                    os.rename(away, working)
+                where = working() if callable(working) else working          # J6d: `child_folder` names it at the start
+                if event["stage"] == "pre" and where and os.path.isdir(where):
+                    moved["from"], moved["to"] = where, where + ".away-" + machine.seed
+                    os.rename(moved["from"], moved["to"])
+                elif event["stage"] == "post" and moved and os.path.isdir(moved["to"]):
+                    os.rename(moved.pop("to"), moved.pop("from"))
             return False
         return hook, lambda: None
     if cause in (START_CAUSES[4], UNREADABLE_START, ARG_LIST_TOO_LONG):
@@ -644,16 +666,20 @@ def refuse_start_at(machine, cause, program, working, tool, nth):
                 act()
         return hook, put_right
     if cause == START_CAUSES[3]:
-        away = working + ".away-" + machine.seed
+        moved = {}
 
         def hook(event):
+            if hasattr(working, "seen"):
+                working.seen(event)
             if event["op"] == "child" and str(event["subject"]) == tool:
                 if event["stage"] == "pre":
                     seen["pre"] += 1
-                    if seen["pre"] == nth and os.path.isdir(working):
-                        os.rename(working, away)
-                elif event["stage"] == "post" and os.path.isdir(away):
-                    os.rename(away, working)
+                    where = working() if callable(working) else working      # J6d: `child_folder` names it at the start
+                    if seen["pre"] == nth and where and os.path.isdir(where):
+                        moved["from"], moved["to"] = where, where + ".away-" + machine.seed
+                        os.rename(moved["from"], moved["to"])
+                elif event["stage"] == "post" and moved and os.path.isdir(moved["to"]):
+                    os.rename(moved.pop("to"), moved.pop("from"))
             return False
         return hook, lambda: None
     _none, answer_off = refuse_start(machine, cause, program, working, tool)

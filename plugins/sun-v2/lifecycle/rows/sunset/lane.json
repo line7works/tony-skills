@@ -151,6 +151,22 @@
     "location": "vault_archive"
    },
    "read": "path"
+  },
+  {
+   "name": "present.memory_store",
+   "path": {
+    "project_memory": {
+     "path": [
+      {
+       "location": "developer_root"
+      },
+      {
+       "name": 0
+      }
+     ]
+    }
+   },
+   "read": "path"
   }
  ],
  "fixed_text": {
@@ -652,6 +668,9 @@
      "use": "git.unpushed_count"
     }
    ],
+   "guards": [
+    "T12"
+   ],
    "input": "flags.archive_as_is",
    "layer": "repository",
    "question": "The repository has uncommitted changes or unpushed commits. Commit and push them and summon again, or summon again with --as-is to archive it as it is.",
@@ -1080,7 +1099,12 @@
     }
    ],
    "commands": "none",
-   "condition": "none",
+   "condition": {
+    "equals": true,
+    "fact": "present.memory_store",
+    "on": "fact",
+    "reason": "the project has no memory store"
+   },
    "construction": {
     "copy_folder": {
      "project_memory": {
@@ -2210,6 +2234,37 @@
       "equals": "sensitive",
       "field": "types"
      },
+     "cli_keys": [
+      "NX_DAEMON",
+      "TURBO_CACHE",
+      "TURBO_DOWNLOAD_LOCAL_ENABLED",
+      "TURBO_REMOTE_ONLY",
+      "TURBO_RUN_SUMMARY",
+      "VERCEL",
+      "VERCEL_ENV",
+      "VERCEL_TARGET_ENV",
+      "VERCEL_URL",
+      "VERCEL_GIT_COMMIT_AUTHOR_LOGIN",
+      "VERCEL_GIT_COMMIT_AUTHOR_NAME",
+      "VERCEL_GIT_COMMIT_MESSAGE",
+      "VERCEL_GIT_COMMIT_REF",
+      "VERCEL_GIT_COMMIT_SHA",
+      "VERCEL_GIT_PREVIOUS_SHA",
+      "VERCEL_GIT_PROVIDER",
+      "VERCEL_GIT_PULL_REQUEST_ID",
+      "VERCEL_GIT_REPO_ID",
+      "VERCEL_GIT_REPO_OWNER",
+      "VERCEL_GIT_REPO_SLUG",
+      "VERCEL_OIDC_TOKEN",
+      "CI",
+      "VERCEL_BRANCH_URL",
+      "VERCEL_PROJECT_PRODUCTION_URL",
+      "VERCEL_REGION",
+      "VERCEL_DEPLOYMENT_ID",
+      "VERCEL_PROJECT_ID",
+      "VERCEL_SKEW_PROTECTION_ENABLED",
+      "VERCEL_AUTOMATION_BYPASS_SECRET"
+     ],
      "command": "keys",
      "copy_keys": "=",
      "field": "keys",
@@ -2505,6 +2560,37 @@
       "equals": "sensitive",
       "field": "types"
      },
+     "cli_keys": [
+      "NX_DAEMON",
+      "TURBO_CACHE",
+      "TURBO_DOWNLOAD_LOCAL_ENABLED",
+      "TURBO_REMOTE_ONLY",
+      "TURBO_RUN_SUMMARY",
+      "VERCEL",
+      "VERCEL_ENV",
+      "VERCEL_TARGET_ENV",
+      "VERCEL_URL",
+      "VERCEL_GIT_COMMIT_AUTHOR_LOGIN",
+      "VERCEL_GIT_COMMIT_AUTHOR_NAME",
+      "VERCEL_GIT_COMMIT_MESSAGE",
+      "VERCEL_GIT_COMMIT_REF",
+      "VERCEL_GIT_COMMIT_SHA",
+      "VERCEL_GIT_PREVIOUS_SHA",
+      "VERCEL_GIT_PROVIDER",
+      "VERCEL_GIT_PULL_REQUEST_ID",
+      "VERCEL_GIT_REPO_ID",
+      "VERCEL_GIT_REPO_OWNER",
+      "VERCEL_GIT_REPO_SLUG",
+      "VERCEL_OIDC_TOKEN",
+      "CI",
+      "VERCEL_BRANCH_URL",
+      "VERCEL_PROJECT_PRODUCTION_URL",
+      "VERCEL_REGION",
+      "VERCEL_DEPLOYMENT_ID",
+      "VERCEL_PROJECT_ID",
+      "VERCEL_SKEW_PROTECTION_ENABLED",
+      "VERCEL_AUTOMATION_BYPASS_SECRET"
+     ],
      "command": "keys",
      "copy_keys": "=",
      "field": "keys",
@@ -2800,6 +2886,37 @@
       "equals": "sensitive",
       "field": "types"
      },
+     "cli_keys": [
+      "NX_DAEMON",
+      "TURBO_CACHE",
+      "TURBO_DOWNLOAD_LOCAL_ENABLED",
+      "TURBO_REMOTE_ONLY",
+      "TURBO_RUN_SUMMARY",
+      "VERCEL",
+      "VERCEL_ENV",
+      "VERCEL_TARGET_ENV",
+      "VERCEL_URL",
+      "VERCEL_GIT_COMMIT_AUTHOR_LOGIN",
+      "VERCEL_GIT_COMMIT_AUTHOR_NAME",
+      "VERCEL_GIT_COMMIT_MESSAGE",
+      "VERCEL_GIT_COMMIT_REF",
+      "VERCEL_GIT_COMMIT_SHA",
+      "VERCEL_GIT_PREVIOUS_SHA",
+      "VERCEL_GIT_PROVIDER",
+      "VERCEL_GIT_PULL_REQUEST_ID",
+      "VERCEL_GIT_REPO_ID",
+      "VERCEL_GIT_REPO_OWNER",
+      "VERCEL_GIT_REPO_SLUG",
+      "VERCEL_OIDC_TOKEN",
+      "CI",
+      "VERCEL_BRANCH_URL",
+      "VERCEL_PROJECT_PRODUCTION_URL",
+      "VERCEL_REGION",
+      "VERCEL_DEPLOYMENT_ID",
+      "VERCEL_PROJECT_ID",
+      "VERCEL_SKEW_PROTECTION_ENABLED",
+      "VERCEL_AUTOMATION_BYPASS_SECRET"
+     ],
      "command": "keys",
      "copy_keys": "=",
      "field": "keys",
@@ -8933,6 +9050,7 @@
      "field": "paused",
      "id": "live",
      "on": "target",
+     "or_absent": true,
      "read": "command",
      "result": "success"
     },
@@ -9037,6 +9155,7 @@
      "command": "look",
      "equals": "false",
      "field": "paused",
+     "or_absent": true,
      "read": "command",
      "result": "success"
     }
@@ -9074,6 +9193,7 @@
        "command": "look",
        "equals": "false",
        "field": "paused",
+       "or_absent": true,
        "read": "command",
        "result": "success"
       },
@@ -9093,6 +9213,7 @@
        "command": "look",
        "equals": "false",
        "field": "paused",
+       "or_absent": true,
        "read": "command",
        "result": "success"
       }

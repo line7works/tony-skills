@@ -39,7 +39,9 @@ Write the inputs file and the capabilities file into a new folder made for them 
 the repository, the vault or the tool's own folder; a new inputs file for each look or re-plan. The inputs file is a JSON
 object, `{"input_version": 1, "description": ..., "answers": {}, "flags": {...}, "drop_layers": [...]}`, with
 `restore_lines` for a restore that reverses a not-proven line. The capabilities file is `{"capabilities": [...]}`, naming
-`memory stores` where the harness keeps memory notes and `routines` where it can list and disable its scheduled routines.
+`memory stores` where the harness keeps memory notes. Name `routines` only where the program `sun-adapter` stands on the
+tool's search list; no harness ships one yet, so otherwise leave it out, and the preview says that step is unavailable on
+this harness.
 
 ## What the lane's rows need of this skill
 

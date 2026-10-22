@@ -14,15 +14,19 @@ State, one JSON file per provider under `$HOME/.fakes/<provider>/state.json`, ev
   `~/.gitconfig` names in place of `https://github.com/` (so the real `git push` lands there and nowhere else).
 - `vercel` (shared by the CLI fake and `VercelAPI`, the frame's own requests): {"team", "things": {slug: {"id", "kind":
   "project", "state": "active" | "paused", "name", "account", "repo"}}, "sets", "envs": {slug: [{"key", "value", "type",
-  "target": [...], "custom": id or absent}]}, "custom": {slug: [{"id", "slug"}]}, "installed": bool, "resources": {name:
-  {"id", "project", "connected"}}, "deployments": {slug: {"readyState"}}, "hidden": n, "next": n}.
+  "target": [...], "custom": id or absent}]}, "custom": {slug: [{"id", "slug"}]}, "installed": bool, "installations":
+  [slug, ...] (the team's other installations, `resend` and `neon` where absent), "resources": {name: {"id", "project",
+  "connected", "product" ("Supabase" where absent), "name"}}, "deployments": {slug: {"readyState"}}, "hidden": n, "next": n}.
+  The CLI's integration reads answer in the shapes the live survey recorded (J6c): `installations` (with the
+  `--integration` filter's quirk), `list --all` and `list <slug>`.
 - `pg`: {"identity", "tables": {name: [row, ...]}, "unreadable": [name, ...], "ending", "restrict_key"}; `ending` is how
   its pg_dump writes a plain dump: "unrestrict" (pg_dump 18.6's `\\restrict %s\n\n` after the header block and
   `\\unrestrict %s\n\n` after the completion block), "unrestrict-1" (the same, the binary's other `\\unrestrict %s\n`),
   "old" (neither line, the versions before 17.6); absent, `DUMP_ENDING`. `restrict_key` is the key (`RESTRICT_KEY` absent).
 
 `calls.jsonl` beside each state holds every call's arguments and the NAMES of its environment (never a value); a plan
-entry in `plan.json` (`{"tool", "command", "do": "fail" | "lose-answer" | "short" | "die", "exit", "stdout", "nth"}`) makes
+entry in `plan.json` (`{"tool", "command", "do": "fail" | "lose-answer" | "short" | "die" | "other-id", "exit", "stdout",
+"nth"}`) makes
 one call answer otherwise; a pg_dump entry's `drop` names a table whose data section the copy leaves out, and its `tail`
 is text written after the dump's end.
 """
@@ -150,6 +154,8 @@ def gh(args):
     given = fields_of(args)
     if args[:2] == ["api", "graphql"] and "viewer{login}" in given.get("query", ""):
         command = "whoami"
+    elif args[:2] == ["api", "graphql"] and "resource(url:" in given.get("query", ""):
+        command = "repo-at"
     elif args[:2] == ["api", "graphql"]:
         command = "repo-read"
     elif args[:4] == ["api", "-X", "POST", "user/repos"]:
@@ -164,6 +170,16 @@ def gh(args):
     account = state["account"]
     if command == "whoami":
         answer({"data": {"viewer": {"login": account}}})
+    if command == "repo-at":
+        # the live survey (J6c, the control room's line (a)): "For an absent repository it exits 0 with data.resource null
+        # and no errors. For an existing one owned by the account, it exits 0 with id, isArchived, name and ref."
+        owner, _, name = given.get("url", "").partition("https://github.com/")[2].partition("/")
+        thing = state["things"].get(name) if owner == account else None
+        if thing is None:
+            answer({"data": {"resource": None}})
+        head = remote_ref(account, thing["name"], given.get("ref", ""))
+        answer({"data": {"resource": {"id": thing["id"], "isArchived": thing["state"] == "archived", "name": thing["name"],
+                                      "ref": {"target": {"oid": head}} if head else None}}})
     if command == "repo-read":
         thing = state["things"].get(given.get("name", ""))
         if thing is None:
@@ -212,11 +228,55 @@ def dotenv_line(key, value):
     return '%s="%s"\n' % (key, escaped)
 
 
+# One installation, in the keys live-survey-1.txt lines 80-82 record for each slug (values synthetic; a `dict` or `list` the
+# survey typed, empty). Line 81 (`supabase`) has no billingData, billingTotal, periodStart or periodEnd; line 82 (`neon`) has
+# no lastAuthorization, and its source is 'marketplace'.
+INSTALLATION_NAMES = {"resend": ("Resend", ["tag_messaging"]), "supabase": ("Supabase", ["tag_databases", "tag_authentication"]),
+                      "neon": ("Neon", ["tag_databases", "tag_authentication"])}
+
+
+def installation(slug, n):
+    item = {"createdAt": 1767225600000 + n, "completedAt": 1767225600000 + n, "id": made_id("icfg_", slug),
+            "integrationId": made_id("oac_", slug), "ownerId": "team_fixture1", "slug": slug, "teamId": "team_fixture1",
+            "updatedAt": 1767225600000 + n, "userId": "user_fixture1", "scopes": [], "source": "cli",
+            "installationType": "marketplace", "vendorBillingPlan": {}, "lastAuthorization": {}, "projects": [],
+            "projectSelection": "all", "capabilities": {}, "billingPlan": {}, "billingData": {}, "billingTotal": "0",
+            "periodStart": "2026-01-01", "periodEnd": "2026-02-01"}
+    if slug == "supabase":
+        for key in ("billingData", "billingTotal", "periodStart", "periodEnd"):
+            del item[key]
+    if slug == "neon":
+        del item["lastAuthorization"]
+        item["source"] = "marketplace"
+    name, tags = INSTALLATION_NAMES.get(slug, (slug, []))
+    item["integration"] = {"name": name, "icon": hashlib.sha1(slug.encode()).hexdigest(), "isLegacy": False,
+                           "flags": ["marketplace-deployment-actions"], "tagIds": tags}
+    return item
+
+
+def resource_item(key, found):
+    """One resource as `integration list` prints it: line 23's keys {"id", "name", "status", "product", "installationId",
+    "projects"} (line 85's `list --all` keys are the same set), `projects` each the project's name (lines 73 and 76-78),
+    status 'available' (line 75)."""
+    projects = list(found.get("projects") or ([found["project"]] if found.get("connected") and found.get("project") else []))
+    return {"id": found["id"], "name": found.get("name") or key, "status": "available",
+            "product": found.get("product", "Supabase"), "installationId": made_id("icfg_", "supabase"), "projects": projects}
+
+
+# J6h (L-16): the 20 entries the real `vercel env pull --environment preview` added beside the project's keys (by name; the
+# VERCEL_GIT_* values were empty; the other values here are synthetic)
+CLI_ADDED = [("NX_DAEMON", "false"), ("TURBO_CACHE", "remote:rw"), ("TURBO_DOWNLOAD_LOCAL_ENABLED", "true"),
+             ("TURBO_REMOTE_ONLY", "true"), ("TURBO_RUN_SUMMARY", "true"), ("VERCEL", "1"), ("VERCEL_ENV", ""),
+             ("VERCEL_TARGET_ENV", ""), ("VERCEL_URL", "demo-fixture.vercel.app")] + [
+    ("VERCEL_GIT_" + k, "") for k in ("COMMIT_AUTHOR_LOGIN", "COMMIT_AUTHOR_NAME", "COMMIT_MESSAGE", "COMMIT_REF", "COMMIT_SHA",
+                                     "PREVIOUS_SHA", "PROVIDER", "PULL_REQUEST_ID", "REPO_ID", "REPO_OWNER", "REPO_SLUG")]
+
+
 def vercel(args):
     state = load("vercel")
     words = [a for a in args if not a.startswith("--")]
     command = {("api",): "cli-team", ("env", "pull"): "env-pull", ("integration", "installations"): "db-installed",
-               ("integration", "add"): "db-add", ("integration", "list"): "db-list",
+               ("integration", "add"): "db-add", ("integration", "list"): "db-all" if "--all" in args else "db-list",
                ("integration", "resource"): "db-connect"}.get(tuple(words[:1]) if words[:1] == ["api"] else tuple(words[:2]), "other")
     note("vercel", {"command": command, "argv": args, "env_names": sorted(os.environ)})
     todo = planned("vercel", command)
@@ -243,7 +303,9 @@ def vercel(args):
             answer(None, 1)
         slug = slugs[0]
         lines = []
-        for item in (state.get("envs") or {}).get(slug, []):
+        # J6g (L-15), the real pull's shape: `# Created by Vercel CLI`, the project's keys in sorted order, then the
+        # short-lived VERCEL_OIDC_TOKEN the CLI adds itself (no project variable), then the final newline
+        for item in sorted((state.get("envs") or {}).get(slug, []), key=lambda i: i["key"]):
             if item.get("custom") or env not in item.get("target", []):
                 continue
             # a Sensitive value is never returned: the pull writes its key with an empty placeholder (D10)
@@ -252,28 +314,69 @@ def vercel(args):
             lines.append("%s=%s\n" % (item["key"], value) if todo.get("do") == "raw-break" else dotenv_line(item["key"], value))
         if todo.get("do") == "short":
             lines = lines[:1]
+        if not state.get("no_oidc"):             # a test's own: a pull that adds no token
+            lines.append(dotenv_line("VERCEL_OIDC_TOKEN", state.get("oidc_token") or "oidc." + made_id("", slug, str(env))))
+        # J6h (L-16), the real preview pull: the system and build entries the CLI adds, 20 of them, the VERCEL_GIT_* ones
+        # empty. Production's real shape is unseen; the fake gives it the same, its environment named. A development pull
+        # adds the token alone, as the live one did. A key the project defines itself is written once, its own value
+        own = set(line.split("=", 1)[0] for line in lines)
+        if env in ("preview", "production"):
+            for key, value in CLI_ADDED:
+                if key not in own:
+                    lines.append(dotenv_line(key, env if key in ("VERCEL_ENV", "VERCEL_TARGET_ENV") else value))
+        for key in state.get("cli_extra") or []:  # a test's own: a key the CLI adds that the row does not name
+            lines.append(dotenv_line(key, "x"))
+        lines.sort(key=lambda line: line.split("=", 1)[0])
         with open(out, "w") as fh:
-            fh.write("# Created by the fake vercel CLI\n" + "".join(lines))
+            fh.write("# Created by Vercel CLI\n" + "".join(lines))
         if todo.get("then_add"):
             (state.setdefault("envs", {}).setdefault(slug, [])).append(todo["then_add"])
             save("vercel", state)
         answer(None, 0)
     if command == "db-installed":
-        answer({"installed": bool(state.get("installed", True))})
+        # line 79: {"installations": [...]}, n 3 on the surveyed team; line 88: "'--integration supabase' returns [] on this
+        # team: the filter, not the install"
+        if option(args, "--integration") is not None:
+            answer({"installations": []})
+        slugs = list(state.get("installations") or ["resend", "neon"])
+        if state.get("installed", True):
+            slugs.insert(1, "supabase")
+        answer({"installations": [installation(slug, n) for n, slug in enumerate(slugs)]})
+    if command == "db-all":
+        # line 84: "list --all: top keys ['resources']"; every resource of the team, connected or not
+        answer({"resources": [resource_item(k, r) for k, r in sorted((state.get("resources") or {}).items())]})
     if command == "db-add":
         name = option(args, "--name")
         resources = state.setdefault("resources", {})
         key = name if name not in resources else name + "#2"
-        resources[key] = {"id": made_id("res_", name, str(len(resources))), "project": None, "connected": False}
+        resources[key] = {"id": made_id("res_", name, str(len(resources))), "project": None, "connected": False,
+                          "name": name, "product": "Supabase"}
         state.setdefault("things", {})[key] = {"kind": "database", "state": "made", "name": name}
+        if state.get("look_around"):
+            here = os.getcwd()
+            state["seen_cwd"] = {"path": here, "entries": sorted(os.listdir(here)), "mode": oct(os.stat(here).st_mode & 0o777)}
         save("vercel", state)
+        # J6d, found live: the real `vercel integration add supabase` writes agent skill files into the folder it runs in,
+        # `.agents/skills/supabase/`, `skills-lock.json` and a symlink `.claude/skills/supabase -> ../../.agents/skills/supabase`
+        os.makedirs(os.path.join(".agents", "skills", "supabase"), exist_ok=True)
+        with open(os.path.join(".agents", "skills", "supabase", "SKILL.md"), "w") as fh:
+            fh.write("# supabase\n")
+        with open("skills-lock.json", "w") as fh:
+            fh.write("{}\n")
+        os.makedirs(os.path.join(".claude", "skills"), exist_ok=True)
+        if not os.path.lexists(os.path.join(".claude", "skills", "supabase")):
+            os.symlink(os.path.join("..", "..", ".agents", "skills", "supabase"), os.path.join(".claude", "skills", "supabase"))
         if todo.get("do") == "lose-answer":
             answer(None, 1)
+        if todo.get("do") == "other-id":
+            # J6c: an answer naming an id that is not the one the team lists under that name (the after-check's case)
+            answer({"resource": {"id": made_id("res_", "another", name), "name": name}})
         answer({"resource": {"id": resources[key]["id"], "name": name}})
     if command == "db-list":
+        # lines 22-23 and 26-27: {"resources": [...]}, the resources connected to that project, of every product (lines 75-78)
         slug = words[2] if len(words) > 2 else ""
-        found = (state.get("resources") or {}).get(slug + "-db")
-        answer({"resource": {"id": found["id"], "connected": found["connected"]}} if found else {})
+        found = [resource_item(k, r) for k, r in sorted((state.get("resources") or {}).items())]
+        answer({"resources": [r for r in found if slug in r["projects"]]})
     if command == "db-connect":
         name, slug = words[3], words[4]
         found = (state.get("resources") or {}).get(name)
@@ -336,7 +439,13 @@ class VercelAPI(object):
             thing = projects.get(parts[2]) or ([t for t in projects.values() if t.get("id") == parts[2]] or [None])[0]
             if thing is None:
                 return 404, b"{}"
-            doc = {"id": thing["id"], "accountId": thing["account"], "name": thing["name"], "paused": thing["state"] == "paused"}
+            doc = {"id": thing["id"], "accountId": thing["account"], "name": thing["name"]}
+            # J6e (L-11): live-survey-1.txt line 35, "field paused paused optional MISSING" for an existing live project: the
+            # real answer prints `paused` only when paused (`paused_field` makes a live project print a value of a test's own)
+            if thing["state"] == "paused":
+                doc["paused"] = True
+            elif "paused_field" in thing:
+                doc["paused"] = thing["paused_field"]
             if thing.get("repo"):
                 doc["link"] = {"type": "github", "repo": thing["repo"]}
             return 200, json.dumps(doc).encode()
@@ -411,6 +520,36 @@ def service():
     return out
 
 
+# The connection keywords libpq takes in a service file, the ones a fixture's address can carry (libpq's own list is longer;
+# a parameter outside it, the pooler's `supa`, is the refusal the live run met)
+SERVICE_KEYS = ("host", "hostaddr", "port", "dbname", "user", "password", "sslmode", "sslrootcert", "connect_timeout",
+                "application_name", "options", "target_session_attrs", "channel_binding")
+
+
+def service_lines():
+    try:
+        with open(os.environ.get("PGSERVICEFILE", "")) as fh:
+            return fh.read().split("\n")
+    except OSError:
+        return []
+
+
+REALTIME_MESSAGES = [
+    "CREATE TABLE realtime.messages (",
+    "    topic text NOT NULL,",
+    "    extension text NOT NULL,",
+    "    payload jsonb,",
+    "    event text,",
+    "    private boolean DEFAULT false,",
+    "    updated_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,",
+    "    inserted_at timestamp without time zone DEFAULT timezone('utc'::text, clock_timestamp()) NOT NULL,",
+    "    id uuid DEFAULT gen_random_uuid() NOT NULL,",
+    "    binary_payload bytea,",
+    "    skip_broadcast boolean DEFAULT false NOT NULL",
+    ")",
+    "PARTITION BY RANGE (inserted_at);"]
+
+
 # How the fake's pg_dump writes a plain dump where the state names no `ending`: as the real tool does since 17.6 (part J3b).
 DUMP_ENDING = "unrestrict"
 RESTRICT_KEY = "FixtureRestrictKey1"       # letters and digits, pg_dump's alphabet; synthetic, its length a test's choice
@@ -425,6 +564,12 @@ def postgres(tool, args):
                 "service_keys": sorted(section) if section else None})
     todo = planned("pg", tool)
     as_planned(todo)
+    # J6e (L-12): the real psql refuses a service file line whose key libpq does not know (the pooler's `supa`): "syntax error
+    # in service file ..., line 8", exit 2
+    unknown = [n for n, line in enumerate(service_lines(), 1) if "=" in line and line.partition("=")[0] not in SERVICE_KEYS]
+    if unknown:
+        sys.stderr.write('syntax error in service file "%s", line %d\n' % (os.environ.get("PGSERVICEFILE", ""), unknown[0]))
+        answer(None, 2 if tool == "psql" else 1)
     if not section or section.get("password") != state.get("password"):
         sys.stderr.write("fe_sendauth: no password supplied\n")
         answer(None, 2 if tool == "psql" else 1)
@@ -442,6 +587,9 @@ def postgres(tool, args):
     lines = ["--", "-- PostgreSQL database dump", "--", ""] + (["\\restrict " + key, ""] if restrict else [])
     for name in sorted(tables):
         lines += ["CREATE TABLE public.%s (" % name, "    v text", ");", ""]
+    # J6f (L-13): the partitioned parent Supabase ships in every project, as pg_dump 18.6 wrote it from server 17.11; it has no
+    # partitions, holds no rows, and has no data section in the dump
+    lines += REALTIME_MESSAGES + [""]
     for name in sorted(tables):
         if name == todo.get("drop"):
             continue                    # a plan's `drop`: this table's data section left out of the copy

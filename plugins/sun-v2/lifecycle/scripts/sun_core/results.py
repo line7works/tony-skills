@@ -388,6 +388,52 @@ class Parser(object):
             return "refusal"
         return None
 
+    def _where(self, field, plain):
+        """J6c: a field whose place steps through one list (`"*"`) and carries a `where` filter with `one`. The filter's each
+        condition names a declared field of this declaration, its key: an `equal` field whose place is read inside a member
+        and whose value is settled from the row's literal or a parameter (`equals_value`, as `calls.call` settles it, a
+        saved answer reaching it as a parameter). A member matches where each key's value equals that value; with
+        `"holds": true`, where the key's value is a list one item of which equals it. Equality only, no pattern, no other
+        operator. Exactly one member matching: (its value at the rest of the place,). None matching, or no list at the
+        place: None (the field stands nowhere). More than one, or a filter the declaration does not let it apply: False, and
+        the result is `malformed`, as GOV-1 has it: the tool never picks one of several."""
+        place, where = list(place_of(field)), field.get("where")
+        if field.get("one") is not True or place.count("*") != 1 or not isinstance(where, list) or not where:
+            return False
+        cut = place.index("*")
+        found = _members(self.doc, place[:cut]) if isinstance(self.doc, (dict, list)) else None
+        if found is None or found[0] is None:
+            return None
+        if not isinstance(found[0], list):
+            return False
+        by_name = dict((f.get("name"), f) for f in plain)
+        conditions = []
+        for c in where:
+            key = by_name.get(c.get("field")) if isinstance(c, dict) else None
+            if (key is None or key is field or set(c) - {"field", "holds"} or c.get("holds", True) is not True
+                    or "*" in place_of(key) or key.get("disposition") != "equal"
+                    or not isinstance(key.get("equals"), dict) or not set(key["equals"]) <= {"literal", "param"}
+                    or not isinstance(key.get("equals_value"), (str, int, float, bool))):
+                return False
+            conditions.append((list(place_of(key)), key["equals_value"], c.get("holds") is True))
+
+        def meets(item, path, want, holds):
+            got = _members(item, path)
+            if got is None or len(got) != 1:
+                return False
+            if holds:
+                return isinstance(got[0], list) and any(x == want and type(x) is type(want) for x in got[0])
+            return got[0] == want and type(got[0]) is type(want)
+        matched = [item for item in found[0] if all(meets(item, p, w, h) for p, w, h in conditions)]
+        if not matched:
+            return None
+        if len(matched) > 1:
+            return False
+        value = _members(matched[0], place[cut + 1:])
+        if value is None or len(value) != 1 or value[0] is None:
+            return None
+        return (value[0],)
+
     def finish(self):
         """Every other field. Call after `secrets()` and after custody was taken of each kept one."""
         if not self._secrets_read:
@@ -397,9 +443,23 @@ class Parser(object):
         if self.bad:
             return Result("malformed")
         fields = {}
-        for field in self._fields(False):
+        plain = self._fields(False)
+        keys = set(c.get("field") for f in plain for c in (f.get("where") if isinstance(f.get("where"), list) else [])
+                   if isinstance(c, dict))
+        for field in plain:
             name = field["name"]
-            if "*" in place_of(field):
+            if name in keys:
+                continue                    # a `where` filter's key is read only through its filter (J6c)
+            if "where" in field:
+                picked = self._where(field, plain)
+                if picked is False:
+                    return Result("malformed")
+                if picked is None:
+                    if self.kind in (field.get("required_in") or []):
+                        return Result("malformed")
+                    continue
+                at = (None, None, None, picked[0])
+            elif "*" in place_of(field):
                 # a held field holding a list: one value per member of a list in the answer, each by its type's validator,
                 # and held whole (G19-25; the control room's item 8): no ground proves a list
                 found = _members(self.doc, list(place_of(field)))
@@ -425,11 +485,12 @@ class Parser(object):
                     return Result("malformed")
                 fields[name] = Kept("held", held=found)
                 continue
-            at = self._place(field)
-            if at is None or at[0] == "null":
-                if self.kind in (field.get("required_in") or []):
-                    return Result("malformed")
-                continue
+            else:
+                at = self._place(field)
+                if at is None or at[0] == "null":
+                    if self.kind in (field.get("required_in") or []):
+                        return Result("malformed")
+                    continue
             value = at[3]
             if not _valid(field, value):
                 return Result("malformed")

@@ -87,20 +87,26 @@ def service_file(address, service):
 
 
 def read_connection(world, path, key_names):
-    """The connection address a file on this machine holds under one of `key_names`, in-process.
-    None where the file is not there or holds none."""
+    """The connection address a file on this machine holds under one of `key_names`, in-process: the first of `key_names`,
+    in the row's order, that the file holds, under its first line of that key (J6e: the real `vercel env pull` writes the
+    pooled POSTGRES_URL before POSTGRES_URL_NON_POOLING, and the row names the direct one first). None where the file is not
+    there or holds none."""
     try:
         text = world.fs.read_text(path)
     except OSError:
         return None
+    held = {}
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        if key.strip() in key_names:
+        if key.strip() in key_names and key.strip() not in held:
             value = value.strip()
             if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
                 value = value[1:-1]
-            return value or None
+            held[key.strip()] = value
+    for key in key_names:
+        if key in held:
+            return held[key] or None
     return None

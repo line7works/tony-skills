@@ -221,6 +221,136 @@
     "-v"
    ]
   },
+  "repo-at": {
+   "definite": {
+    "refusals": [
+     "auth"
+    ],
+    "success": [
+     "success"
+    ]
+   },
+   "effects": 0,
+   "env": {
+    "GH_NO_UPDATE_NOTIFIER": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "GH_PROMPT_DISABLED": {
+     "class": "fixed",
+     "value": "1"
+    },
+    "NO_COLOR": {
+     "class": "fixed",
+     "value": "1"
+    }
+   },
+   "exits": {
+    "0": "success",
+    "1": "other",
+    "4": "auth"
+   },
+   "fields": [
+    {
+     "alphabet": "A-Za-z0-9_=-",
+     "disposition": "held",
+     "max_length": 64,
+     "name": "id",
+     "place": [
+      "data",
+      "resource",
+      "id"
+     ],
+     "required_in": [],
+     "type": "id"
+    },
+    {
+     "disposition": "fixed",
+     "name": "archived",
+     "place": [
+      "data",
+      "resource",
+      "isArchived"
+     ],
+     "required_in": [],
+     "type": "flag"
+    },
+    {
+     "alphabet": "A-Za-z0-9._-",
+     "disposition": "equal",
+     "equals": {
+      "param": "name"
+     },
+     "max_length": 100,
+     "name": "name",
+     "place": [
+      "data",
+      "resource",
+      "name"
+     ],
+     "required_in": [],
+     "type": "name"
+    },
+    {
+     "disposition": "equal",
+     "equals": {
+      "param": "commit"
+     },
+     "form": "^[0-9a-f]{40}$",
+     "name": "head",
+     "place": [
+      "data",
+      "resource",
+      "ref",
+      "target",
+      "oid"
+     ],
+     "required_in": [],
+     "type": "hash"
+    }
+   ],
+   "template": [
+    {
+     "literal": "api"
+    },
+    {
+     "literal": "graphql"
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "literal": "query=query($url:URI!,$ref:String!){resource(url:$url){... on Repository{id isArchived name ref(qualifiedName:$ref){target{oid}}}}}"
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "text": [
+      {
+       "literal": "url=https://github.com/"
+      },
+      {
+       "param": "account"
+      },
+      {
+       "literal": "/"
+      },
+      {
+       "param": "name"
+      }
+     ]
+    },
+    {
+     "literal": "-f"
+    },
+    {
+     "param": "ref_arg"
+    }
+   ],
+   "time_limit": 30,
+   "tool": "gh"
+  },
   "repo-read": {
    "definite": {
     "refusals": [

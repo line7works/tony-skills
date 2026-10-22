@@ -199,8 +199,10 @@ class Reader(object):
                     return (kept is not None) == bool(c["present"])      # an optional field that stood nowhere (G19-9)
                 if kept is None:
                     # G24-1 (OP-5): an equality on a field that stands nowhere is false (a tag read before it exists is not
-                    # the scanned commit), so a probe that asks the after-test first reads the before-test next
-                    return False if "equals" in c else UNREADABLE
+                    # the scanned commit), so a probe that asks the after-test first reads the before-test next. J6f: where the
+                    # row says that its absence is a state of its own (`or_absent`, as the file reads have it), it is that
+                    # state: vercel prints no `paused` on a live project, and an explicit `false` is live too (Q4)
+                    return bool(c.get("or_absent")) if "equals" in c else UNREADABLE
                 if "equals" in c:
                     want = c["equals"]
                     want = self.value(want) if isinstance(want, dict) else want
