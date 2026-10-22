@@ -13,6 +13,7 @@ breaks a rule: the findings name the row), `PlanningStop` (RUN-7's causes, each 
 `Questions` (an answer the look needs is lacking).
 """
 import copy
+import fnmatch
 import json
 import os
 import re
@@ -776,6 +777,8 @@ def found_items(fs, spec):
             matched = fit.fullmatch(name)
             if matched is None or fs.islink(path) or not fs.isfile(path):
                 continue
+            if any(fnmatch.fnmatchcase(name, str(g)) for g in spec.get("skip") or []):
+                continue        # J7 (L-24): a name the read declares it skips, the tool's own lifecycle records
             text = fs.read_text(path) if spec.get("holding") or spec.get("date") else ""
             if spec.get("holding") and str(spec["holding"]) not in text:
                 continue
@@ -990,7 +993,7 @@ def issuer_findings(candidates, issuers):
     return out
 
 
-def expand_family(session, look, row):
+def expand_family(session, look, row, state=None):
     """A family row (G19-7): one ordinary operation per thing its found read gives, each with its own id (`<id>-<n>`), its
     `{"each": f}` marks the thing's fields, and each `{each.f}` in its texts (its output's name, its needs, its form lines)
     the field where it is safe and the member's number where it is held. Nothing downstream changes."""
@@ -1027,6 +1030,14 @@ def expand_family(session, look, row):
             # G21-12 (RUN-6): a thing inside a folder a move of this plan moves is placed by that move's output
             moved = str(values.resolve(values.freeze(within["folder"], look), {}))
             literal = marks["path"].get("literal")
+            if state is not None and isinstance(literal, str) and not literal.startswith(moved.rstrip(os.sep) + os.sep):
+                # J7 (L-19; RUN-6, EV-5): in a re-plan after that move is done, a thing found inside the folder where the move
+                # put it (its output's path, as the journal binds it) is the same thing the first look placed inside the
+                # folder: placed through the move's output by its path inside the folder, so that its reverse finds it
+                name, _sep, field = str(within.get("output") or "").partition(".")
+                there = (state.outputs.get(name) or {}).get(field)
+                if isinstance(there, str) and there and literal.startswith(there.rstrip(os.sep) + os.sep):
+                    moved = there
             if isinstance(literal, str) and literal.startswith(moved.rstrip(os.sep) + os.sep):
                 marks["place"] = {"path": [{"output": within["output"]}, {"literal": os.path.relpath(literal, moved)}]}
                 marks["rel"] = {"literal": os.path.relpath(literal, moved)}       # its path inside that folder (G23-15)
@@ -1668,7 +1679,7 @@ def build(session, kind, look, number, state=None, journal_count=0):
             continue
         if family is not None:
             try:
-                members = expand_family(session, look, row)
+                members = expand_family(session, look, row, state)
             except (OSError, UnicodeDecodeError, ValueError, KeyError, IndexError, runner.Refused, calls.NotCallable):
                 causes.append("the read failed: the things row %s is made for" % row["id"])
                 continue

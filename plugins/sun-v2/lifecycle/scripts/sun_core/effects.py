@@ -498,7 +498,8 @@ def c1(engine, operation, answer):
                 cli = (scope.get("inventory_from") or {}).get("cli_keys") if isinstance(scope.get("inventory_from"), dict) else None
                 if isinstance(cli, list) and cli and engine.fs.isfile(staged):
                     drop_cli_keys(engine, staged, cli, str(scope["inventory_from"].get("copy_keys", "=")),
-                                  list(keep_reads.get("before") or []) + list(keep_reads.get("apart") or []))
+                                  list(keep_reads.get("before") or []) + list(keep_reads.get("apart") or []),
+                                  scope["inventory_from"].get("cli_secrets") or [], op)
                 extra = keep_whole(engine, operation, staged, result, keep_reads)
             if construction.get("in_folder"):
                 no_repository(engine, staged)
@@ -732,7 +733,36 @@ def copy_keys(data, mark):
     return out
 
 
-def drop_cli_keys(engine, staged, names, mark, inventory=()):
+def held_cli_secrets(engine, op, lines, secrets, mark):
+    """J7 (D8; SEC-12): the values of the dropped lines whose key the row names among the CLI's secrets (`cli_secrets`),
+    entered in the withheld register as they are read, before anything is written, so that every later output of this
+    invocation withholds them; the line's text as the copy holds it (quoted, escaped) is a component of the entry. Where one
+    already stands in the run's own records (a description that equals it, say), the disproof is recorded, durable, naming
+    where it rests and holding no value, and the run stops on it: every later invocation reads that record back into its
+    register (SEC-12's startup read), and no earlier record is rewritten. Returns the stop to raise, or None."""
+    from . import disproof
+    marker = mark.encode("utf-8")
+    owed = None
+    for line in lines:
+        key, _sep, raw = line.partition(marker)
+        if key.strip().decode("utf-8", "replace") not in secrets:
+            continue
+        raw = raw.strip().decode("utf-8", "replace")
+        pairs = decode_pairs((key.strip().decode("utf-8", "replace") + "=" + raw + "\n").encode("utf-8"))
+        value = pairs[0][1] if pairs else raw
+        entry = engine.session.register.add(value, [raw] if raw != value else [], None, "channel")
+        if entry is None:
+            continue
+        spans = disproof.search(engine.fs, engine.run_dir, entry)
+        if spans and not engine.session.register.hit(value).ref and owed is None:
+            owed = spans
+    if owed is not None:
+        engine.log("disproof", **disproof.owed_for_channel(owed, "cli-added secret"))
+        return Stop("a safe ground disproved", op)
+    return None
+
+
+def drop_cli_keys(engine, staged, names, mark, inventory=(), secrets=(), op=None):
     """J6g (L-15; the owner's ruling): the lines of the keys a provider's own tool adds to its copy of a hosting environment,
     which no project variable is (vercel's VERCEL_OIDC_TOKEN and its system and build entries, J6h), dropped from the staged
     copy before the keep is checked, so that no kept copy holds one. Exactly the keys the row names in `cli_keys`, and only
@@ -745,9 +775,12 @@ def drop_cli_keys(engine, staged, names, mark, inventory=()):
     marker = mark.encode("utf-8")
     kept = [l for l in lines if l.lstrip().startswith(b"#") or marker not in l
             or l.split(marker, 1)[0].strip().decode("utf-8", "replace") not in names]
+    stop = held_cli_secrets(engine, op, [l for l in lines if l not in kept], set(secrets), mark) if secrets else None
     if len(kept) != len(lines):
         engine.fs.remove(staged)
         engine.fs.write_new(staged, b"\n".join(kept))
+    if stop is not None:
+        raise stop
 
 
 def keep_whole(engine, operation, staged, result, reads_before=None):
@@ -1095,6 +1128,28 @@ def resolve_outstanding(engine, operation):
 
 
 # ---- C3: swap ------------------------------------------------------------------------------------------------
+# J7 (L-24; the owner's "Links only"): the link forms a vault note uses, and no other text. A wiki link `[[target]]`, its
+# alias `[[target|alias]]` and heading `[[target#heading]]` parts, and an embed `![[target]]`; a Markdown link
+# `[text](path)` and an image `![alt](path)`. Only a target or path that begins with the old folder is repointed.
+WIKI_LINK = re.compile(r"(\[\[)([^\]\|#\n]*)")
+MD_LINK = re.compile(r"(\]\()([^)\s]*)")
+
+
+def replace_links(text, old, new):
+    """`text` with each link whose target begins with `old` made to begin with `new`, plain text left as it was; and how
+    many links were repointed."""
+    count = [0]
+
+    def swap(found):
+        target = found.group(2)
+        if old and target.startswith(old):
+            count[0] += 1
+            return found.group(1) + new + target[len(old):]
+        return found.group(0)
+    out = MD_LINK.sub(swap, WIKI_LINK.sub(swap, text))
+    return out, count[0]
+
+
 def edited(data, edit, value_of, read_other=None):
     """The new bytes of a file after one declared edit; None where the edit does not apply. `data` is None where the file is
     absent (OP-2, A147: a change whose before-state is its absence is published as C1 publishes); `read_other` reads another
@@ -1140,6 +1195,10 @@ def edited(data, edit, value_of, read_other=None):
         if not old or text.count(old) < 1:
             return None
         return text.replace(old, new).encode("utf-8")
+    if kind == "replace-links":
+        old, new = str(value_of(edit["old"])), str(value_of(edit["new"]))
+        out, count = replace_links(text, old, new)
+        return out.encode("utf-8") if old and count else None
     if kind == "move-line":
         # the one line holding a text, a replacement made in it where the edit names one, moved just under a heading line
         # (the heading added at the end where it is missing), or, for its reverse, back between its recorded neighbours
@@ -1261,7 +1320,8 @@ def placement_unmet(value, operation, path, op):
     place = {"replace": "where its recorded after-image occurs exactly once", "insert-between": "between its recorded neighbours, "
              "next to each other exactly once" + (", the head before them as recorded" if edit.get("ordered") else ""),
              "append-line": "at the end", "move-line": "between its recorded neighbours, next to each other exactly once",
-             "replace-all": "where its recorded text occurs"}.get(edit.get("kind"), "its declared placement")
+             "replace-all": "where its recorded text occurs",
+             "replace-links": "in the links where its recorded text begins a target"}.get(edit.get("kind"), "its declared placement")
     return "the declared placement cannot be met: the file %s; the place: %s; the records: %s" % (path, place, ", ".join(records) or "none")
 
 

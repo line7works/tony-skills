@@ -2265,6 +2265,10 @@
       "VERCEL_SKEW_PROTECTION_ENABLED",
       "VERCEL_AUTOMATION_BYPASS_SECRET"
      ],
+     "cli_secrets": [
+      "VERCEL_OIDC_TOKEN",
+      "VERCEL_AUTOMATION_BYPASS_SECRET"
+     ],
      "command": "keys",
      "copy_keys": "=",
      "field": "keys",
@@ -2591,6 +2595,10 @@
       "VERCEL_SKEW_PROTECTION_ENABLED",
       "VERCEL_AUTOMATION_BYPASS_SECRET"
      ],
+     "cli_secrets": [
+      "VERCEL_OIDC_TOKEN",
+      "VERCEL_AUTOMATION_BYPASS_SECRET"
+     ],
      "command": "keys",
      "copy_keys": "=",
      "field": "keys",
@@ -2915,6 +2923,10 @@
       "VERCEL_DEPLOYMENT_ID",
       "VERCEL_PROJECT_ID",
       "VERCEL_SKEW_PROTECTION_ENABLED",
+      "VERCEL_AUTOMATION_BYPASS_SECRET"
+     ],
+     "cli_secrets": [
+      "VERCEL_OIDC_TOKEN",
       "VERCEL_AUTOMATION_BYPASS_SECRET"
      ],
      "command": "keys",
@@ -6805,20 +6817,61 @@
      "text": {
       "text": [
        {
+        "literal": "[["
+       },
+       {
         "text": [
          {
-          "location": "vault_projects_rel"
+          "text": [
+           {
+            "location": "vault_projects_rel"
+           },
+           {
+            "literal": "/"
+           },
+           {
+            "name": 1
+           }
+          ]
          },
          {
           "literal": "/"
-         },
-         {
-          "name": 1
          }
         ]
+       }
+      ]
+     }
+    },
+    {
+     "path": {
+      "each": "place"
+     },
+     "present": false,
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "literal": "]("
        },
        {
-        "literal": "/"
+        "text": [
+         {
+          "text": [
+           {
+            "location": "vault_projects_rel"
+           },
+           {
+            "literal": "/"
+           },
+           {
+            "name": 1
+           }
+          ]
+         },
+         {
+          "literal": "/"
+         }
+        ]
        }
       ]
      }
@@ -6834,20 +6887,61 @@
      "text": {
       "text": [
        {
+        "literal": "[["
+       },
+       {
         "text": [
          {
-          "location": "vault_projects_rel"
+          "text": [
+           {
+            "location": "vault_projects_rel"
+           },
+           {
+            "literal": "/"
+           },
+           {
+            "name": 1
+           }
+          ]
          },
          {
           "literal": "/"
-         },
-         {
-          "name": 1
          }
         ]
+       }
+      ]
+     }
+    },
+    {
+     "path": {
+      "each": "place"
+     },
+     "present": false,
+     "read": "text",
+     "text": {
+      "text": [
+       {
+        "literal": "]("
        },
        {
-        "literal": "/"
+        "text": [
+         {
+          "text": [
+           {
+            "location": "vault_projects_rel"
+           },
+           {
+            "literal": "/"
+           },
+           {
+            "name": 1
+           }
+          ]
+         },
+         {
+          "literal": "/"
+         }
+        ]
        }
       ]
      }
@@ -6888,7 +6982,7 @@
    "condition": "none",
    "construction": {
     "edit": {
-     "kind": "replace-all",
+     "kind": "replace-links",
      "new": {
       "text": [
        {
@@ -7047,6 +7141,10 @@
       ]
      },
      "read": "files",
+     "skip": [
+      "_sunset-*.md",
+      "_restore-*.md"
+     ],
      "tree": true,
      "validators": {
       "path": "a path a shell line may hold"
