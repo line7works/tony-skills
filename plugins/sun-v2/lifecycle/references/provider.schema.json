@@ -1290,7 +1290,8 @@
               "kit",
               "replace-all",
               "move-line",
-              "folder"
+              "folder",
+              "replace-links"
              ]
             },
             "lift_from": {
@@ -1473,7 +1474,8 @@
             "kit",
             "replace-all",
             "move-line",
-            "folder"
+            "folder",
+            "replace-links"
            ]
           },
           "lift_from": {
@@ -1806,6 +1808,13 @@
            "type": "object"
           },
           "cli_keys": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "cli_secrets": {
            "items": {
             "maxLength": 200,
             "type": "string"
@@ -2664,6 +2673,13 @@
             "lines",
             "command"
            ]
+          },
+          "skip": {
+           "items": {
+            "maxLength": 200,
+            "type": "string"
+           },
+           "type": "array"
           },
           "suffix": {
            "type": "boolean"

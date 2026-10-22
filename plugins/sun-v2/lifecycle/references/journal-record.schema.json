@@ -2011,7 +2011,8 @@
     "channel": {
      "enum": [
       "hosting-token",
-      "connection"
+      "connection",
+      "cli-added secret"
      ]
     },
     "execution": {
