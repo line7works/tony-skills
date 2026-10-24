@@ -739,10 +739,11 @@ def held_cli_secrets(engine, op, lines, secrets, mark):
     invocation withholds them; the line's text as the copy holds it (quoted, escaped) is a component of the entry. Where one
     already stands in the run's own records (a description that equals it, say), the disproof is recorded, durable, naming
     where it rests and holding no value, and the run stops on it: every later invocation reads that record back into its
-    register (SEC-12's startup read), and no earlier record is rewritten. Returns the stop to raise, or None."""
+    register (SEC-12's startup read), and no earlier record is rewritten. Each such secret gets its own record, all of them
+    written before the one stop (E17, D8's closing rule). Returns the stop to raise, or None."""
     from . import disproof
     marker = mark.encode("utf-8")
-    owed = None
+    owed, entries = [], []
     for line in lines:
         key, _sep, raw = line.partition(marker)
         if key.strip().decode("utf-8", "replace") not in secrets:
@@ -754,10 +755,16 @@ def held_cli_secrets(engine, op, lines, secrets, mark):
         if entry is None:
             continue
         spans = disproof.search(engine.fs, engine.run_dir, entry)
-        if spans and not engine.session.register.hit(value).ref and owed is None:
-            owed = spans
-    if owed is not None:
-        engine.log("disproof", **disproof.owed_for_channel(owed, "cli-added secret"))
+        # withheld by an earlier record only where a record rests on this secret's own form: the register's first entry a
+        # value holds may be an earlier secret it contains, which withholds that secret and not this one (E17 signoff)
+        own = set(n.decode("utf-8") for n in disproof._needles(entry))
+        withheld = any(e.ref and e.value in own for e in engine.session.register.entries)
+        if spans and not withheld and entry not in entries:
+            entries.append(entry)
+            owed.append(spans)
+    for spans in owed:
+        engine.log("disproof", **disproof.owed_for_channel(spans, "cli-added secret"))
+    if owed:
         return Stop("a safe ground disproved", op)
     return None
 
