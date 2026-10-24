@@ -105,12 +105,13 @@ class Screen(object):
         if not isinstance(text, str) or not self.entries:
             return text
         for _ in range(64):
-            entry = self.hit(text)
-            if entry is None:
+            # the longest form of any entry first: an entry whose value holds an earlier entry's whole is replaced whole,
+            # never the earlier one inside it with the rest left showing (E17 signoff)
+            found = [(f, entry) for entry in self.entries for f in entry.forms if f in text]
+            if not found:
                 return text
-            words = self.words(entry)
-            longest = sorted((f for f in entry.forms if f in text), key=len, reverse=True)[0]
-            text = text.replace(longest, words)
+            longest, entry = max(found, key=lambda item: len(item[0]))
+            text = text.replace(longest, self.words(entry))
         return "" if self.holds(text) else text
 
     def line(self, text):
