@@ -82,7 +82,7 @@ When the input marks the reviewing session as the building session, `request` wr
 
 ## Step 3.5 — Execute
 
-The Method line must be earned. Run what is runnable: the project's test command, then the thing itself against the spec's acceptance criteria. Record what ran and what it showed. If nothing is runnable, say so in one line; that is the **only** path to "static analysis only".
+The Method line must be earned. Run what is runnable: the project's test command, then the thing itself against the spec's acceptance criteria. Run the project's full test command once per review, here; this is the only full run in the review: the reviewers do not run it. Their mandate tells each one to run the narrowest command that proves or refutes its finding, and to name, not run, a full-suite command a finding would need. Record what ran and what it showed. If nothing is runnable, say so in one line; that is the **only** path to "static analysis only".
 
 Keep bulk output out of context: redirect to a file and read back the summary lines. A lens whose check must mutate the checkout cannot do it as a reader — cut a worktree at the reviewed head, carry the uncommitted half in, run it there, and remove the worktree before the verdict.
 

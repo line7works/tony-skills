@@ -69,7 +69,7 @@ The phases, in order, each one CLI command:
 |---|---|---|
 | `check-input` | schema, path rules, the component's reachability | the run directory, `input.json`, `state.json` |
 | `scope` | the source set, the identity, the packet; levels the log as a dry run | `packet/` |
-| `request` | the `readers` request and the reviewer's mandate | `request.json`, `readers/mandate.md` |
+| `request` | the `readers` request and the reviewer's mandate, which leaves the session's one full test run to the session (section 5) | `request.json`, `readers/mandate.md` |
 | `record-answer` | the evidence rules, raised against note, the severity mapping | `answer.json` |
 | `record` | the recording transaction | `receipt.json`, then the project's records |
 
@@ -126,6 +126,12 @@ read intent into what is on disk.
 
 - The request the reviewer receives carries the packet and the mandate and nothing from the
   builder's conversation: no reasoning, no justification, no account of what was built and why.
+- The reviewing session runs the project's full test command once per review, and that is the
+  only full run in the review (E17 fix round 1, canary finding C-12). The mandate tells each
+  reviewer not to run the full suite or any long-running sweep itself, to run the narrowest
+  command that proves or refutes its finding (one test module, one test, or a probe in its own
+  scratch directory) and list each one under its executed checks, and to name, not run, a
+  full-suite command a finding would need.
 - When the input marks the reviewing session as the building session, no reviewer is summoned —
   no mandate and no request file are written — and the answer is REFUSED
   (`refusal_reason: independence`). No verdict is recorded.
