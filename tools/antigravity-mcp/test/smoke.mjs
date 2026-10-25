@@ -31,7 +31,7 @@ const res = await client.callTool({
   name: "ask_gemini",
   arguments: {
     prompt: "Reply with exactly: MCP BRIDGE OK",
-    model: "gemini-3.6-flash-low",
+    model: "gemini-3.8-flash-low",
     timeout_ms: 180_000,
   },
 });
