@@ -118,5 +118,113 @@ class DocstringNamesTheSeparators(unittest.TestCase):
             self.assertIn(word, text)
 
 
+COLON = "## Slice A:"
+COLON_DASHED = "## Slice A: - x"
+NAMED_HEADINGS = EVERY_HEADING + (COLON, COLON_DASHED)
+
+
+class NamesMatchOnWhatEachSideMatches(unittest.TestCase):
+    """The name each side matches a slice on, not the raw group: the records component names the
+    slice `group(1).strip()` (legacy.py, parse_document), and the ledger finds the card by the
+    name it compares in `slice_heading_index`. Requirement 2 wins for a colon heading (owner,
+    2026-10-25), so `## Slice A:` is slice `A:` on both sides."""
+
+    def test_the_ledger_finds_the_card_by_the_records_component_name(self):
+        for heading in NAMED_HEADINGS:
+            with self.subTest(heading=heading):
+                text = plan(heading)
+                theirs = legacy.parse_document(text)["slices"][0]
+                self.assertEqual(ledger.slice_heading_index(text, theirs["name"]),
+                                 theirs["heading_line"])
+                card, index = ledger.card_of(text, theirs["name"])
+                self.assertEqual(card, theirs["status"])
+                self.assertEqual(index, theirs["status_line"])
+
+    def test_colon_heading_names_slice_a_colon(self):
+        for heading in (COLON, COLON_DASHED):
+            with self.subTest(heading=heading):
+                text = plan(heading)
+                self.assertEqual(legacy.parse_document(text)["slices"][0]["name"], "A:")
+                self.assertEqual(ledger.card_of(text, "A:")[0], "not started")
+                self.assertEqual(ledger.card_of(text, "A"), (None, None))
+                self.assertEqual(ledger.set_card(text, "A:", "built"), plan(heading, card="built"))
+                with self.assertRaises(ledger.DocumentShape):
+                    ledger.set_card(text, "A", "built")
+
+
+def fenced_plan(opener, body, closer, card="built"):
+    """A plan whose fenced example, above the real slice A heading, holds a slice heading and a
+    `Status:` line of its own."""
+    return ("# A plan\n\nAn example:\n\n%s\n%s\n%s\n\n## Slice A %s alpha\n\nStatus: %s\n\n"
+            "## Slice B %s beta\n\nStatus: built\n" % (opener, body, closer, EM, card, EM))
+
+
+EXAMPLE = "## Slice A - example\n\nStatus: not started"
+FENCES = (
+    ("backtick fence", "```text", EXAMPLE, "```"),
+    ("tilde fence", "~~~", EXAMPLE, "~~~"),
+    ("backtick fence holding a tilde marker", "```", "~~~\n" + EXAMPLE, "```"),
+    ("tilde fence holding a backtick marker", "~~~~", "```\n" + EXAMPLE, "~~~~"),
+)
+
+
+class FencedHeadingsAreNotRead(unittest.TestCase):
+    """Lines inside a fenced code block are quoted text, as the records component reads them
+    (legacy.py, FENCE_RE and parse_document): a fence closes only on a marker of the same
+    character."""
+
+    def test_card_of_skips_the_fenced_example(self):
+        for label, opener, body, closer in FENCES:
+            with self.subTest(fence=label):
+                text = fenced_plan(opener, body, closer)
+                lines = text.split("\n")
+                card, index = ledger.card_of(text, "A")
+                self.assertEqual(card, "built")
+                self.assertEqual(lines[index - 2], "## Slice A %s alpha" % EM)
+                theirs = legacy.parse_document(text)["slices"]
+                self.assertEqual([s["name"] for s in theirs], ["A", "B"])
+                self.assertEqual(theirs[0]["status_line"], index)
+                self.assertEqual(ledger.slice_heading_index(text, "A"), theirs[0]["heading_line"])
+
+    def test_set_card_leaves_the_fenced_example_alone(self):
+        for label, opener, body, closer in FENCES:
+            with self.subTest(fence=label):
+                text = fenced_plan(opener, body, closer)
+                out = ledger.set_card(text, "A", "rejected")
+                self.assertEqual(out, fenced_plan(opener, body, closer, card="rejected"))
+                self.assertIn("Status: not started", out)
+
+    def test_a_fenced_heading_or_status_after_the_slice_heading_is_quoted_text(self):
+        text = ("# A plan\n\n## Slice A %s alpha\n\n```\n## Notes - x\nStatus: not started\n```\n\n"
+                "Status: built\n\n## Slice B %s beta\n\nStatus: built\n" % (EM, EM))
+        card, index = ledger.card_of(text, "A")
+        self.assertEqual(card, "built")
+        self.assertEqual(legacy.parse_document(text)["slices"][0]["status_line"], index)
+        out = ledger.set_card(text, "A", "rejected")
+        self.assertIn("```\n## Notes - x\nStatus: not started\n```\n\nStatus: rejected\n", out)
+
+    def test_a_fenced_record_heading_does_not_move_the_ledger_home(self):
+        for label, opener, closer in (("backtick fence", "```", "```"), ("tilde fence", "~~~", "~~~"),
+                                      ("unclosed by the other marker", "```", "~~~\n```")):
+            with self.subTest(fence=label):
+                text = ("# A plan\n\n## Slice A %s alpha\n\nStatus: built\n\n## Punch list\n\n"
+                        "### 2026-10-25 %s review: Slice A\n- the real record\n\n## Notes\n\n"
+                        "%s\n### 2026-10-25 - review: A\n- an example line\n%s\n" % (EM, EM, opener, closer))
+                insert, created = ledger.ledger_home(text)
+                self.assertIsNone(created)
+                self.assertEqual(text.split("\n")[insert - 1], "- the real record")
+
+    def test_a_fenced_section_heading_does_not_split_the_home(self):
+        text = ("# A plan\n\n## Punch list\n\n### 2026-10-25 %s review: Slice A\n- the real record\n\n"
+                "```\n## Example - x\n```\n\n## Notes\n\nprose\n" % EM)
+        lines = text.split("\n")
+        insert, created = ledger.ledger_home(text)
+        self.assertIsNone(created)
+        self.assertEqual(insert, lines.index("## Notes") - 1)
+        self.assertEqual(lines[insert - 1], "```")
+        sections = [title for title, _, _ in ledger.section_bounds(text.split("\n"))]
+        self.assertEqual(sections, ["Punch list", "Notes"])
+
+
 if __name__ == "__main__":
     unittest.main()
