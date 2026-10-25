@@ -131,7 +131,16 @@ read intent into what is on disk.
   reviewer not to run the full suite or any long-running sweep itself, to run the narrowest
   command that proves or refutes its finding (one test module, one test, or a probe in its own
   scratch directory) and list each one under its executed checks, and to name, not run, a
-  full-suite command a finding would need.
+  full-suite command a finding would need. The session records its run in the answer's
+  `session_checks` (name, command, exit code, output), apart from the reviewer's
+  `checks_executed`: never merged into them and never counted toward the clean-review rule
+  (section 1). A session check whose exit code is not 0 refuses the answer at `record-answer`
+  (`refusal_reason` and `stop_reason_code` `session_check_failed`, `answer_refused` true) before
+  anything is recorded, whatever the reviewers raised, a BLOCKER included: nothing is written to
+  the project, the card stays where it was, and the result and the chat block still list the
+  raised findings and name the failing command and its exit code. Passing session checks are
+  listed apart from the reviewer's, in the verdict doc ("Checks the reviewing session executed")
+  and in the chat block's Method line.
 - When the input marks the reviewing session as the building session, no reviewer is summoned —
   no mandate and no request file are written — and the answer is REFUSED
   (`refusal_reason: independence`). No verdict is recorded.
@@ -241,8 +250,8 @@ verdict that quotes withheld text is refused (`refusal_reason: independence`).
 
 **Provenance, over the whole answer** (Astra's F4). The packet's knowledge of which paths are the
 builder's conversation reaches the answer check. Every string of the answer — the prose, the
-verdict, every finding and kept note, and every `checks_executed` entry's name, command and
-output — is refused as `independence` when it: cites a builder-conversation path (its workspace
+verdict, every finding and kept note, and every `checks_executed` and `session_checks` entry's
+name, command and output — is refused as `independence` when it: cites a builder-conversation path (its workspace
 path, or its file name when no delivered file shares that name, case-insensitively, `:line` or
 not); cites a withheld ledger section (`<doc>#<section>`); quotes a span (in `"…"`, `'…'`, `` `…` ``
 or `“…”`, 12 or more characters) that appears in the withheld material and nowhere in the
@@ -484,6 +493,7 @@ redone, the append is never made twice, and a committed receipt reports the same
 | A finding is missing one of its four required parts | `stopped` | `answer_invalid` |
 | A clean review lists no executed check, counted after findings outside the set became notes | `stopped` | `answer_invalid` |
 | The proposed completion fails the result's semantic checks | `stopped` | `answer_invalid` |
+| A check the reviewing session ran (`session_checks`) exited other than 0, whatever the reviewers raised | `stopped` (`refusal_reason: session_check_failed`) | `session_check_failed` |
 | A record line fits no Appendix A shape | `missing_input` | `legacy_ambiguous` |
 | The model floor is not met, not established, or its typed facts disagree with the observed id (at `request` or `record`) | `stopped` | `floor_refused` |
 | The answer's reviewer model is below the floor, missing, or (any reader but the portable `claude-cli` row, and that row only when the session's recorded model is one of the Codex ids) not the session's recorded model | `stopped` (`refusal_reason: floor`) | `floor_refused` |

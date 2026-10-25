@@ -29,12 +29,20 @@ it) or a withheld section, or quotes text whose only source is the withheld mate
 span of 12 or more characters found in the withheld text and nowhere in the delivered packet).
 The older rule, a withheld line of 24 or more characters repeated verbatim, stays beside these; it
 never stood in for citation provenance.
+
+**The reviewing session's own checks** (E17 fix round 1, slice A's MAJOR). The session runs the
+project's full test command once per review (Step 3.5) and records it in the answer's
+`session_checks`, apart from the reviewer's `checks_executed`: it is never merged into them, and the
+clean-review rule above counts the reviewer's checks only. Session checks are held to the same
+provenance rules as the reviewer's. One whose exit code is not 0 stops the run
+(`session_check_failed`, `failing_session_checks` and `session_check_refusal` below), whatever the
+reviewers raised: a red suite outranks the verdict, and the way on is a fix and a fresh signoff.
 """
 import os
 import re
 
 from . import verdict as vdmod
-from .constants import EVIDENCE_KINDS
+from .constants import EVIDENCE_KINDS, SESSION_CHECK_FAILED
 
 LOCATION = re.compile(r"^(?P<file>[^\s:][^:]*?):(?P<line>\d+)(?:-(?P<line_end>\d+))?"
                       r"(?:\s*\((?P<tag>[^)]*)\))?$")
@@ -495,12 +503,42 @@ def checks_listed(a):
             and str(row.get("output") or "").strip()]
 
 
+def session_checks_of(a):
+    """The reviewing session's own checks as the answer carries them, or None when the answer has
+    no `session_checks` field (an answer written before the field existed reads as before)."""
+    rows = a.get("session_checks") if isinstance(a, dict) else None
+    if not isinstance(rows, list):
+        return None
+    return [dict(row) for row in rows if isinstance(row, dict)]
+
+
+def failing_session_checks(a):
+    """The session checks whose exit code is not 0. A check with no exit code is not 0 either: a
+    run that cannot say it passed never counts as passing."""
+    return [row for row in (session_checks_of(a) or []) if row.get("exit_code") != 0]
+
+
+def session_check_refusal(adjudication, failed):
+    """The answer-refusal a failing session check makes of an otherwise recordable adjudication.
+
+    Nothing is recorded and no verdict is computed, but what the reviewers raised and kept as notes
+    stays in it, so the stopped result and the chat block still show the fix what was found."""
+    problems = [{"why": "the reviewing session's check %r (`%s`) ran with exit %s; a failing session "
+                        "check stops the run whatever the reviewers raised, and nothing is recorded: "
+                        "fix it, then sign off afresh."
+                        % (row.get("name"), row.get("command") or "no command",
+                           row.get("exit_code"))} for row in failed]
+    return dict(adjudication, ok=False, refusal_reason=SESSION_CHECK_FAILED, problems=problems,
+                verdict=None, verdict_matches_mapping=None)
+
+
 def _refusal(reason, problems, a, listed):
     return {"ok": False, "refusal_reason": reason, "problems": problems,
             "raised": [], "notes": [], "verdict": None,
             "verdict_stated": a.get("verdict"), "verdict_matches_mapping": None,
             "checks_executed": [dict(row) for row in (a.get("checks_executed") or [])
                                 if isinstance(row, dict)],
+            "session_checks": session_checks_of(a),
             "clean_review_checks_listed": bool(listed),
             "session_id": a.get("session_id"), "citations": []}
 
@@ -533,8 +571,10 @@ def adjudicate(a, source_paths, sessions, withheld_lines=(), provenance=None):
     for line in citations({"notes": a.get("notes"), "verdict": a.get("verdict")}, withheld_lines):
         cited.append({"line": line,
                       "why": "the verdict quotes the builder's own account of its work"})
-    # Astra's F4: the WHOLE answer, `checks_executed` and `notes_kept` included.
-    rest = {"checks_executed": a.get("checks_executed"), "notes_kept": a.get("notes_kept")}
+    # Astra's F4: the WHOLE answer, `checks_executed` and `notes_kept` included, and the
+    # reviewing session's own `session_checks` exactly as the reviewer's checks.
+    rest = {"checks_executed": a.get("checks_executed"), "notes_kept": a.get("notes_kept"),
+            "session_checks": a.get("session_checks")}
     for line in citations({"notes": " · ".join(strings_of(rest))}, withheld_lines):
         cited.append({"line": line,
                       "why": "the answer's checks or kept notes repeat the builder's own account "
@@ -600,6 +640,7 @@ def adjudicate(a, source_paths, sessions, withheld_lines=(), provenance=None):
         "verdict_matches_mapping": (_normalize(stated) == _normalize(computed)),
         "checks_executed": [dict(row) for row in (a.get("checks_executed") or [])
                             if isinstance(row, dict)],
+        "session_checks": session_checks_of(a),
         "clean_review_checks_listed": bool(listed),
         "session_id": session_id,
         "citations": [],

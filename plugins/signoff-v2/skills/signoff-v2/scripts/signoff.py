@@ -616,6 +616,7 @@ def cmd_record_answer(args):
                                      for row in errors],
                         "raised": [], "notes": [], "verdict": None, "verdict_stated": None,
                         "verdict_matches_mapping": None, "checks_executed": [],
+                        "session_checks": None,
                         "clean_review_checks_listed": False, "citations": [],
                         "session_id": reviewer["session_id"]}
     else:
@@ -637,6 +638,13 @@ def cmd_record_answer(args):
                                 problems=[{"why": str(refused)}])
             floor_block = floormod.reported(None, refused=str(refused), resolved=resolved,
                                             answer=raw)
+    # E17 fix round 1, slice A's MAJOR: the reviewing session's own full run (Step 3.5) reaches
+    # the record. A session check whose exit code is not 0 refuses the answer here, before
+    # anything is recorded, whatever the reviewers raised: a red suite outranks the verdict.
+    if adjudication["ok"]:
+        failed = ansmod.failing_session_checks(raw)
+        if failed:
+            adjudication = ansmod.session_check_refusal(adjudication, failed)
     state["adjudication"] = adjudication
     state["reviewer"] = reviewer
     state["phase"] = "record" if adjudication["ok"] else "done"
@@ -655,7 +663,9 @@ def cmd_record_answer(args):
                source_identity=state.get("source_identity"), packet=built,
                review_sheet=sheet_block(state),
                reviewer=reviewer, problems=adjudication["problems"],
+               findings=adjudication["raised"], notes=adjudication["notes"],
                checks_executed=adjudication["checks_executed"],
+               session_checks=adjudication.get("session_checks"),
                clean_review_checks_listed=adjudication["clean_review_checks_listed"],
                verdict_stated=adjudication["verdict_stated"])
         return
@@ -720,16 +730,22 @@ def cmd_record(args):
     if not adjudication:
         raise Usage("run `record-answer` before `record`: there is nothing to record")
     if not adjudication["ok"]:
+        reason = ("the answer was refused (%s); nothing is recorded"
+                  % adjudication["refusal_reason"])
+        if adjudication["refusal_reason"] == ansmod.SESSION_CHECK_FAILED \
+                and adjudication["problems"]:
+            reason = "%s: %s" % (reason, adjudication["problems"][0]["why"])
         finish(run, resolved, "stopped", args,
-               stop_reason="the answer was refused (%s); nothing is recorded"
-                           % adjudication["refusal_reason"],
+               stop_reason=reason,
                stop_reason_code=adjudication["refusal_reason"],
                refusal_reason=adjudication["refusal_reason"], answer_refused=True,
                writes_none=True, source_set=state.get("source_set"),
                source_identity=state.get("source_identity"), packet=state.get("packet"),
                review_sheet=sheet_block(state),
                reviewer=state.get("reviewer"), problems=adjudication["problems"],
+               findings=adjudication["raised"], notes=adjudication["notes"],
                checks_executed=adjudication["checks_executed"],
+               session_checks=adjudication.get("session_checks"),
                clean_review_checks_listed=adjudication["clean_review_checks_listed"])
         return
 
@@ -765,6 +781,7 @@ def cmd_record(args):
                   review_sheet=sheet_block(state),
                   findings=adjudication["raised"], notes=adjudication["notes"],
                   checks_executed=adjudication["checks_executed"],
+                  session_checks=adjudication.get("session_checks"),
                   clean_review_checks_listed=adjudication["clean_review_checks_listed"],
                   verdict_stated=adjudication["verdict_stated"],
                   verdict_matches_mapping=adjudication["verdict_matches_mapping"])
@@ -1120,6 +1137,15 @@ def do_record(run, resolved, state, adjudication, client, args):
                             % (row.get("name"), row.get("command") or "no command",
                                row.get("exit_code"), head))
     if not adjudication["checks_executed"]:
+        method_lines.append("- none were reported")
+    # E17 fix round 1: the reviewing session's own checks, listed apart, never as the reviewer's.
+    method_lines.extend(["", "Checks the reviewing session executed:"])
+    for row in adjudication.get("session_checks") or []:
+        head = (row.get("output") or "").strip().split("\n")[0]
+        method_lines.append("- %s (`%s`, exit %s) → %s"
+                            % (row.get("name"), row.get("command") or "no command",
+                               row.get("exit_code"), head))
+    if not adjudication.get("session_checks"):
         method_lines.append("- none were reported")
 
     if not receipt.steps():
