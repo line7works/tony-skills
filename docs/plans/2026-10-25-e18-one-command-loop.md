@@ -16,7 +16,7 @@ Constraints:
 
 ## Slice A — signoff-v2 reads any slice-heading dash
 
-Status: not started
+Status: built
 
 Requirements:
 
@@ -173,3 +173,26 @@ Not in this slice:
 ## After the slices
 
 On the owner's "PR" and "merge": reinstall every bumped plugin, verify each installed copy against main file for file, then the first live `/ship-v2` run on a small slice in a window opened after the reinstall. That run is the round's real proof: one command, build to recheck, with the signoff visit in its own session.
+
+## Build assumptions
+
+2026-10-25, Slice A (build-v2 run build-e18-A-20261025-1):
+
+- `RECORD_HEADING` takes the records component's pattern whole, its label group `(.*?)` included, so a record heading with nothing after `review:` or `recheck:` now reads as one, as the component reads it (today `(.+?)` refused it). `ledger_home` uses only whether a line matches.
+- The two patterns are written in `ledger.py` with the dashes as escapes, not imported: the core reaches the records component only as a subprocess, and `signoff_core/record_grammar.py`, which holds the same two patterns, is left to its own job.
+- `test_e18_heading_dashes` imports `records_core.legacy` by path (`testlib.RECORDS_ROOT`) to read the component's own patterns; the core does not import it.
+- `slice_heading_index` keeps its `.rstrip(":")`, so `## Slice A:` still names `A`.
+- Before photo at e11c788: core suite 429 tests OK (skipped=2). After at aaa080e: 437 OK (skipped=2), the 8 added being the new module.
+
+## Deviations
+
+2026-10-25, Slice A (run build-e18-A-20261025-1): none.
+
+## Discovered
+
+2026-10-25, Slice A (run build-e18-A-20261025-1):
+
+- `ledger.py:110`, the `slice_heading_index` docstring, still shows the heading with an em dash only; requirement 5 names the module docstring's card line, so that line was left as it is.
+- Under the new pattern six `## Slice` headings in tracked Markdown read a name where they read none before: four in `docs/evidence/agent-file-flip/fresh-session-rerun.md`, one in `docs/evidence/readers/slice-b-openrouter-runs.md`, one in `docs/reviews/2026-09-06-inspect-readers-gpt-2.md`. None is in a plan, and signoff-v2 reads only the build doc.
+- The build ran in a subagent, which shares its parent's `CLAUDE_CODE_SESSION_ID`, so the input's `invocation.session_id` and the answer's `session_id` name the driving session. signoff-v2 run from that same session would read it as the building session.
+- One full signoff-v2 core suite run takes about 14 minutes (843 s before, 822 s after).
