@@ -62,6 +62,7 @@ and an unknown append outcome is settled against the head the receipt names.
 import argparse
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -79,6 +80,24 @@ SKILL = os.path.dirname(HERE)
 PLUGIN = os.path.dirname(os.path.dirname(SKILL))
 REQUIRED_REFERENCES = ["references/signoff-contract.md", "references/input.schema.json",
                        "references/result.schema.json", "references/answer.schema.json"]
+
+# What each lens looks for (E17 fix round 1, canary finding C-7): one line per lens name. A lens's
+# own mandate carries its line here in its lens section, so each reviewer reviews one lens.
+LENS_TABLE = {
+    "spec": ("does the built thing match the doc? Silently skipped requirements, quietly "
+             "narrowed scope, stubs presented as finished. Walk the slice's acceptance criteria "
+             "one by one and check files changed outside its Footprint."),
+    "correctness": ("bugs, unhandled edge cases, error paths that swallow failures, state that "
+                    "can desync."),
+    "seams": ("integration with what already shipped. Regressions in prior slices, broken "
+              "assumptions at the boundary, migrations that do not run twice."),
+    "security": "authz, injection, secrets, trust boundaries.",
+    "tests": "do the tests assert real behavior, or do they pass vacuously?",
+    "accessibility": "screen-reader and keyboard paths, contrast, focus order, labels.",
+    "data-safety": "migrations, backups, destructive writes, data at rest.",
+}
+# A lens whose name matches this gets its own mandate file, `readers/mandate-<lens>.md`.
+LENS_FILE_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 
 EXAMPLES = """examples:
   uv run signoff.py check-input /tmp/signoff-d-20260921-7f3c/input.json
@@ -408,6 +427,18 @@ def cmd_request(args):
     canon.atomic_write(mandate_path, mandate_text(resolved, built,
                                                   state.get("review_sheet")))
     run.note_write(mandate_path, "run_artifact")
+    # One mandate per lens (C-7), beside the shared one. LIGHT's one fused lens keeps
+    # `readers/mandate.md`, which already names it, so its map is empty.
+    lens_mandates = {}
+    if review.get("depth") != "LIGHT":
+        for lens in review.get("lenses") or []:
+            if not LENS_FILE_NAME.match(lens):
+                continue
+            path = os.path.join(readers_dir, "mandate-%s.md" % lens)
+            canon.atomic_write(path, mandate_text(resolved, built, state.get("review_sheet"),
+                                                  lens=lens))
+            run.note_write(path, "run_artifact")
+            lens_mandates[lens] = path
     request = {
         "protocol_version": 1,
         "run_id": resolved["invocation"]["run_id"],
@@ -418,6 +449,7 @@ def cmd_request(args):
         "workspace": resolved["workspace"],
         "documents": [built["material_path"]],
         "mandate": mandate_path,
+        "lens_mandates": lens_mandates,
         "floor": "opus",
         "session_model": (resolved["invocation"].get("model") or {}).get("id"),
     }
@@ -427,6 +459,7 @@ def cmd_request(args):
     state.update({"phase": "record-answer", "request": request_path, "mandate": mandate_path})
     run.save_state(state)
     emit({"next": "record-answer", "request": request_path, "mandate": mandate_path,
+          "lens_mandates": lens_mandates,
           "delivers": [built["material_path"]],
           "withheld": [row["what"] for row in built["withheld"]],
           "note": "the request carries the packet and the mandate and nothing from the "
@@ -499,7 +532,20 @@ def final_source_moved(workspace, state, receipt):
                or "the identity differs"))
 
 
-def mandate_text(resolved, built, got_sheet=None):
+def lens_section(review, lens=None):
+    """The mandate's lens section: the review's whole lens set for `readers/mandate.md`, or, for
+    one lens's own mandate, that lens's table line and one sentence naming its siblings."""
+    lenses = review.get("lenses") or []
+    if lens is None:
+        return "## Lenses\n\n%s" % ("\n".join("- %s" % name for name in lenses) or "- spec")
+    others = ", ".join("`%s`" % name for name in lenses if name != lens)
+    return ("## Lens\n\n- `%s`: %s\n\n"
+            "The review's other lenses (%s) are covered by sibling reviewers.\n"
+            "You still report anything you find outside your lens; you do not go looking there."
+            % (lens, LENS_TABLE[lens], others))
+
+
+def mandate_text(resolved, built, got_sheet=None, lens=None):
     target = resolved["target"]
     review = resolved["review"]
     got_sheet = got_sheet or {"is_sheet": False, "bar": [], "repo_checks": []}
@@ -508,7 +554,7 @@ def mandate_text(resolved, built, got_sheet=None):
         "You did not write this code and you are not being asked to like it. Find reasons to\n"
         "REJECT it. A review that returns no findings must state what it tried to break and\n"
         "failed to break; otherwise \"looks good\" is indistinguishable from \"didn't look\".\n\n"
-        "## Lenses\n\n%s\n\n"
+        "%s\n\n"
         "## What you are reviewing\n\n"
         "The review packet at `%s` holds the slice's source set: every file committed since the\n"
         "base `%s`, changed in the working tree, or untracked and not ignored. It is %d file(s).\n"
@@ -541,8 +587,7 @@ def mandate_text(resolved, built, got_sheet=None):
         "model, no MCP tool and no outbound service: a finding is checked against the workspace.\n"
         "Redirect bulk output to a file and read back the summary lines.\n"
         "%s"
-        % (target["build_doc"], target["slice"],
-           "\n".join("- %s" % lens for lens in (review.get("lenses") or [])) or "- spec",
+        % (target["build_doc"], target["slice"], lens_section(review, lens),
            built["material_path"], built["base_ref"], built["counts"]["files"],
            "\n".join("- `%s` — %s" % (row["what"], row["reason"]) for row in built["withheld"])
            or "- nothing was withheld from this packet",

@@ -84,11 +84,19 @@ is the run's own, finds readers beside this plugin (route 3a, then 3b), runs rea
 at floor `opus` for the portable rows of provider anthropic that are eligible, available and offer a
 workspace profile, and writes one request per lens to `D/readers/calls/<call id>.json` for the row it
 names (`claude-opus-cli` today, profile `repo`: the row offers no `repo-with-tools`), printing
-`status: ready` with the dispatch argv; exit 0. It launches nothing: the one child is `suggest`,
-which dispatches nothing (`tests/test_full_fix_f6.py` and `tests/test_a3_readers_route.py` put
-recording `codex` and `claude` stand-ins on PATH and find them never called). The executor hands
-the request to readers. `lane-unavailable` (exit 3, the missing capability named, nothing written)
-when readers is not found or no row is eligible at the floor; SKILL.md Step 3 makes that a STOP.
+`status: ready` with the dispatch argv; exit 0. Each lens's reviewer receives its own lens's
+mandate: a `--lens` request's `mandate` is that lens's `D/readers/mandate-<lens>.md` from the
+request's `lens_mandates` map (the mandate check accepts `D/readers/mandate.md` or one of this run's
+own lens mandates, and nothing else), no request carries the map, a lens the map does not hold is
+exit 2 with nothing written (a LIGHT run's map is empty, so its one reviewer is called with no
+`--lens` and keeps `D/readers/mandate.md`), and `--lens <lens>-r<N>` (N of 2 or more) is the one
+re-send of `<lens>`; a request with no map (an older run) binds every request to
+`D/readers/mandate.md` (`tests/test_e17_lens_mandates.py`). It launches nothing: the one child is
+`suggest`, which dispatches nothing (`tests/test_full_fix_f6.py` and
+`tests/test_a3_readers_route.py` put recording `codex` and `claude` stand-ins on PATH and find them
+never called). The executor hands the request to readers. `lane-unavailable` (exit 3, the missing
+capability named, nothing written) when readers is not found or no row is eligible at the floor;
+SKILL.md Step 3 makes that a STOP.
 
 `reviewer.py --sidecar FILE --run-dir D` maps readers' sidecar the same way as the Claude Code
 helper (`answer_identity`: `<transport>:<call_id>` as the answer's `session_id`, and the sidecar's

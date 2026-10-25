@@ -93,7 +93,13 @@ The transport is the readers component: row `claude-session`, profile `repo-with
 prints one readers request block per lens from the request the core's `request` phase wrote
 (`D/request.json`), with `session_model` read from this session's transcript (the record wins over
 the file and a difference is reported), call id `<run_id>-review-<lens>`, raw path
-`D/readers/calls/<call id>/raw.md`, and `model`, `effort`, `output_budget`, `isolation` never
+`D/readers/calls/<call id>/raw.md`, and each lens's reviewer receives its own lens's mandate: a
+`--lens` block's `mandate` is that lens's `D/readers/mandate-<lens>.md` from the request's
+`lens_mandates` map, no block carries the map, a lens the map does not hold is exit 2 (a LIGHT run's
+map is empty, so its one reviewer is called with no `--lens` and keeps `D/readers/mandate.md`), and
+`--lens <lens>-r<N>` (N of 2 or more) is the one re-send of `<lens>`, bound to its mandate; a
+request with no map (an older run) binds every block to `D/readers/mandate.md`
+(`tests/test_e17_lens_mandates.py`). `model`, `effort`, `output_budget` and `isolation` are never
 written. The request must be the run's own (its mandate under `D/readers/`, its documents under
 `D`); otherwise exit 2 and nothing is printed. A run whose core wrote no request (the independence
 case) is exit 3 naming it. `reviewer.py --sidecar FILE --run-dir D` maps readers' sidecar: `ok`

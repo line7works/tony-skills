@@ -35,15 +35,24 @@ KNOWN_STATUSES = {"ok", "empty", "incomplete", "transport-failed", "timed-out", 
                   "version-mismatch", "lane-unavailable", "invalid-request", "unauthorized",
                   "oversize"}
 LENS_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+# Step 3's one re-send of a lens: `<lens>-r<N>`, N of 2 or more, bound to `<lens>`'s mandate.
+RESEND_RE = re.compile(r"^(?P<lens>[a-z][a-z0-9-]*)-r(?:[2-9]|[1-9][0-9]+)$")
+# The core's map from each lens to its own mandate (E17 fix round 1, C-7); dropped from every block.
+LENS_MANDATES = "lens_mandates"
 
 EPILOG = """\
 Request mode: --run-dir D [--lens NAME]... prints {"requests": [...]} with one block per lens
 (default one lens, "review"): call_id <run_id>-review-<lens>, raw_path
 D/readers/calls/<call_id>/raw.md, every other field as the core's request.json wrote it except
 session_model, which is read from this session's transcript (the record wins over the file and a
-difference is reported in _sources). The request must be the run's own: its mandate and every
-document under D, its run_dir D/readers/calls. A run whose core wrote no request (the reviewing
-session is the building session, so nothing is summoned) is exit 3 naming independence.
+difference is reported in _sources). Each --lens block's mandate is that lens's own mandate from
+the request's lens_mandates map (D/readers/mandate-<lens>.md), and no block carries the map; a
+--lens the map does not hold is exit 2 (a LIGHT run's map is empty, so any --lens is refused);
+--lens <lens>-r<N> (N of 2 or more) is the one re-send of <lens>, bound to its mandate. With no
+--lens the one block keeps D/readers/mandate.md; a request with no map (an older run) binds every
+block to it. The request must be the run's own: its mandates and every document under D, its
+run_dir D/readers/calls. A run whose core wrote no request (the reviewing session is the building
+session, so nothing is summoned) is exit 3 naming independence.
 
 Record mode: --sidecar FILE --run-dir D maps readers' sidecar: status (oversize reported as
 invalid-request), raw, model (effective_model), kind (transport); an `ok` whose raw report is
@@ -85,6 +94,20 @@ def under(path, root):
     return real == base or real.startswith(base + os.sep)
 
 
+def bound_mandate(lens, lens_mandates):
+    """The mandate a `--lens` call is bound to: the lens's own, or for a re-send `<lens>-r<N>`,
+    `<lens>`'s. A lens the map does not hold is refused."""
+    if lens in lens_mandates:
+        return lens_mandates[lens]
+    resend = RESEND_RE.match(lens)
+    if resend and resend.group("lens") in lens_mandates:
+        return lens_mandates[resend.group("lens")]
+    raise _common.HelperError(
+        "--lens %r is not a lens of this review: the request's lens mandates are for %s"
+        % (lens, ", ".join(sorted(lens_mandates)) or "no lens (a LIGHT run's one reviewer is "
+                                                     "called with no --lens)"), 2)
+
+
 def request_mode(args, run_dir):
     for lens in args.lens:
         if not LENS_RE.match(lens):
@@ -100,6 +123,14 @@ def request_mode(args, run_dir):
     problems = []
     if not under(core_request.get("mandate") or "/", readers):
         problems.append("the mandate %r is not this run's own" % core_request.get("mandate"))
+    lens_mandates = core_request.get(LENS_MANDATES)
+    if lens_mandates is not None:
+        if not isinstance(lens_mandates, dict):
+            problems.append("the request's %s is not a map" % LENS_MANDATES)
+        else:
+            for lens, mandate in sorted(lens_mandates.items()):
+                if not isinstance(mandate, str) or not under(mandate, readers):
+                    problems.append("the %s mandate %r is not this run's own" % (lens, mandate))
     for document in core_request.get("documents") or []:
         if not under(document, run_dir):
             problems.append("the document %r is outside the run" % document)
@@ -108,6 +139,10 @@ def request_mode(args, run_dir):
         problems.append("the request's run_dir is not %s" % os.path.join(readers, "calls"))
     if problems:
         raise _common.HelperError("the request is not bound to this run: " + "; ".join(problems), 2)
+    mandates = {}
+    if lens_mandates is not None:
+        for lens in args.lens:
+            mandates[lens] = bound_mandate(lens, lens_mandates)
 
     cfg = _common.config_dir(args.config_dir)
     tpath, _sid, discovery, _binding = _common.find_transcript(
@@ -121,7 +156,10 @@ def request_mode(args, run_dir):
     requests = []
     for lens in args.lens or ["review"]:
         call_id = "%s-%s" % (core_request["call_id"], lens) if args.lens else core_request["call_id"]
-        block = {key: value for key, value in core_request.items() if key not in NEVER_WRITTEN}
+        block = {key: value for key, value in core_request.items()
+                 if key not in NEVER_WRITTEN and key != LENS_MANDATES}
+        if lens in mandates:
+            block["mandate"] = mandates[lens]
         block.update({"call_id": call_id, "session_model": session_model,
                       "raw_path": os.path.join(readers, "calls", call_id, "raw.md"),
                       "row": ROW, "profile": PROFILE, "floor": FLOOR})
