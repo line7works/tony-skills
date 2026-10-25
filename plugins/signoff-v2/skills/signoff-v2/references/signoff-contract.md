@@ -69,7 +69,7 @@ The phases, in order, each one CLI command:
 |---|---|---|
 | `check-input` | schema, path rules, the component's reachability | the run directory, `input.json`, `state.json` |
 | `scope` | the source set, the identity, the packet; levels the log as a dry run | `packet/` |
-| `request` | the `readers` request and the reviewer's mandate, which leaves the session's one full test run to the session (section 5) | `request.json`, `readers/mandate.md` |
+| `request` | the `readers` request and the reviewer's mandate, which leaves the session's one full test run to the session (section 5), and one mandate per lens (section 5) | `request.json`, `readers/mandate.md`, `readers/mandate-<lens>.md` |
 | `record-answer` | the evidence rules, raised against note, the severity mapping | `answer.json` |
 | `record` | the recording transaction | `receipt.json`, then the project's records |
 
@@ -126,6 +126,18 @@ read intent into what is on disk.
 
 - The request the reviewer receives carries the packet and the mandate and nothing from the
   builder's conversation: no reasoning, no justification, no account of what was built and why.
+- Each lens's reviewer receives its own lens's mandate (E17 fix round 1, canary finding C-7).
+  `request` writes `readers/mandate-<lens>.md` for every lens of a LEAN or DEEP review whose name
+  matches `^[a-z][a-z0-9-]*$`, beside `readers/mandate.md`. Its lens section carries only that
+  lens's line from the core's one lens table and one sentence naming the review's other lenses as
+  covered by sibling reviewers; the reviewer still reports what it finds outside its lens and
+  does not go looking there. Every other section is the same as `readers/mandate.md`'s.
+  `request.json` carries `lens_mandates`, a map from each lens to its mandate. LIGHT's one fused
+  lens writes no per-lens file and an empty map: its reviewer is called with no `--lens` and keeps
+  `readers/mandate.md`. An adapter's request mode binds each `--lens` call to its lens's mandate,
+  drops the map from every request, refuses a lens the map does not hold, reads
+  `<lens>-r<N>` (N of 2 or more) as Step 3's one re-send of `<lens>`, and on a `request.json`
+  with no map (a run written before this change) binds every call to `readers/mandate.md`.
 - The reviewing session runs the project's full test command once per review, and that is the
   only full run in the review (E17 fix round 1, canary finding C-12). The mandate tells each
   reviewer not to run the full suite or any long-running sweep itself, to run the narrowest
@@ -334,7 +346,8 @@ The card carries the same three words into the slice's `Status:` line.
 The complete list. Anything else is a boundary violation the result must report.
 
 1. The run's own artifacts under the run directory: `input.json`, `state.json`, `packet/`,
-   `readers/mandate.md`, `request.json`, `answer.json`, `receipt.json`, `receipt.log`,
+   `readers/mandate.md`, `readers/mandate-<lens>.md` (one per lens, section 5), `request.json`,
+   `answer.json`, `receipt.json`, `receipt.log`,
    `result.json`, `chat.md`.
 2. The document's log under `docs/records/`, through the component's CLI and never directly.
 3. One review block at the ledger home's tail in the build doc (Appendix A), never editing an
@@ -632,7 +645,7 @@ component's `append`).
 | `input.json` | `check-input` |
 | `state.json` | every phase |
 | `packet/` | `scope` |
-| `readers/` | `request` (`readers/mandate.md`; the Codex reviewer's `readers/calls/`) |
+| `readers/` | `request` (`readers/mandate.md` and one `readers/mandate-<lens>.md` per lens; the Codex reviewer's `readers/calls/`) |
 | `request.json` | `request` |
 | `answer.json` | `record-answer` |
 | `receipt.json` | `record` |
