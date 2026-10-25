@@ -8,7 +8,10 @@ is the placement Appendix A fixes and the component does not do:
   section when none exist yet (created then); when records sit in more than one place, the place
   whose tail comes last in the file, so a record this run appends is the last record in file
   order and never dead under the open filter. One home per doc. Appends land at the home's tail.
-- **The card.** One `Status:` line per slice, under the slice's `## Slice <X> —` heading.
+- **The card.** One `Status:` line per slice, under the slice's `## Slice <X>` heading, whose
+  separator, when it has one, is one or more em dashes, en dashes or hyphens (so `--` too):
+  the records component's own slice and record heading patterns, so the slice this station
+  names is the slice the component names.
 - **The verdict doc.** `docs/reviews/<YYYY-MM-DD>-signoff-<feature>-<slice>.md`, where `<feature>`
   is the build doc's topic (`docs/plans/<YYYY-MM-DD>-<topic>.md`, else the filename minus
   `-build-plan.md`) and `<slice>` is the slice's letter or name lower-cased with spaces as
@@ -24,9 +27,9 @@ import re
 
 from . import canon
 
-RECORD_HEADING = re.compile(r"^###\s+(\d{4}-\d{2}-\d{2})\s+—\s+(review|recheck):\s*(.+?)\s*$")
+RECORD_HEADING = re.compile(r"^###\s+(\d{4}-\d{2}-\d{2})\s+[\u2014\u2013-]+\s+(review|recheck):\s*(.*?)\s*$")
 SECTION = re.compile(r"^##\s+(.*?)\s*$")
-SLICE_HEADING = re.compile(r"^##\s+Slice\s+(\S+?)\s*(?:—.*)?$")
+SLICE_HEADING = re.compile(r"^##\s+Slice\s+(.+?)(?:\s+[\u2014\u2013-]+\s*(.*?))?\s*$")
 STATUS = re.compile(r"^Status:\s*(.*?)\s*$")
 PUNCH_LIST = "Punch list"
 PLAN_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}-(?P<topic>.+)$")
