@@ -20,7 +20,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const DEFAULT_MODEL = "gemini-3.1-pro-high";
+const DEFAULT_MODEL = "gemini-3.8-flash-medium";
 const DEFAULT_MODE = "plan";
 const DEFAULT_TIMEOUT_MS = 600_000;
 
@@ -188,8 +188,8 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          `Model id, e.g. gemini-3.1-pro-high (default), gemini-3.1-pro-low, ` +
-            `gemini-3.6-flash-medium. Run list_models for the current roster.`,
+          `Model id, e.g. gemini-3.8-flash-medium (default), gemini-3.8-flash-high, ` +
+            `gemini-3.8-flash-low. Run list_models for the current roster.`,
         ),
       mode: z
         .enum(["plan", "accept-edits"])

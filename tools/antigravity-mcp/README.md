@@ -36,7 +36,7 @@ Verify with `claude mcp list`. Set `AGY_BIN` if `agy` is not at `~/.local/bin/ag
 | Arg | Default | Notes |
 | --- | --- | --- |
 | `prompt` | required | The question. |
-| `model` | `gemini-3.1-pro-high` | See `list_models`. |
+| `model` | `gemini-3.8-flash-medium` | See `list_models`. |
 | `mode` | `plan` | `plan` or `accept-edits`. Not a write guard, see below. |
 | `effort` | model default | `low` / `medium` / `high`. |
 | `cwd` | server cwd | Becomes the agent's workspace. |
