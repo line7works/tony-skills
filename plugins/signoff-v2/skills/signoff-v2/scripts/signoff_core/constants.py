@@ -34,3 +34,7 @@ EVIDENCE_KINDS = ("executed", "read", "reasoned")
 # The build doc's own sections that are the builder's working record, never spec and never
 # evidence (v1 signoff Step 2; brief, "Independence", S3-04).
 BUILDER_SECTIONS = ("Build assumptions", "Deviations", "Discovered", "Handoffs")
+
+# E17 fix round 1, slice A's MAJOR: a reviewing-session check whose exit code is not 0 refuses the
+# answer at `record-answer` under this reason (and stop code), before anything is recorded.
+SESSION_CHECK_FAILED = "session_check_failed"

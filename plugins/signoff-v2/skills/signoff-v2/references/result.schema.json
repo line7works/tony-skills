@@ -67,9 +67,10 @@
         "answer_invalid",
         "packet_incomplete",
         "floor",
+        "session_check_failed",
         null
       ],
-      "description": "why the run refused to record what it was given. `floor`: the reviewer's model is below the Opus-class floor, not established, or disagrees with the session's recorded model (Astra's F5)"
+      "description": "why the run refused to record what it was given. `floor`: the reviewer's model is below the Opus-class floor, not established, or disagrees with the session's recorded model (Astra's F5). `session_check_failed`: a check the reviewing session ran (the answer's `session_checks`) exited other than 0, so nothing is recorded whatever the reviewers raised (E17 fix round 1)"
     },
     "answer_refused": {
       "type": "boolean",
@@ -504,6 +505,41 @@
           },
           "output": {
             "type": "string"
+          }
+        }
+      }
+    },
+    "session_checks": {
+      "type": "array",
+      "description": "the checks the reviewing session itself ran (the answer's `session_checks`), listed apart from the reviewer's `checks_executed` and never counted toward the clean-review rule. Present only when the answer carried the field",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "output": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }

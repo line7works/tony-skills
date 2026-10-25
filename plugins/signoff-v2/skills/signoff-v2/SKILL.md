@@ -82,7 +82,7 @@ When the input marks the reviewing session as the building session, `request` wr
 
 ## Step 3.5 — Execute
 
-The Method line must be earned. Run what is runnable: the project's test command, then the thing itself against the spec's acceptance criteria. Record what ran and what it showed. If nothing is runnable, say so in one line; that is the **only** path to "static analysis only".
+The Method line must be earned. Run what is runnable: the project's test command, then the thing itself against the spec's acceptance criteria. Run the project's full test command once per review, here; this is the only full run in the review: the reviewers do not run it. Their mandate tells each one to run the narrowest command that proves or refutes its finding, and to name, not run, a full-suite command a finding would need. Record what ran and what it showed: each check run here goes in the answer's `session_checks` (name, command, exit code, output), apart from the reviewers' `checks_executed` and never merged into them. A session check whose exit code is not 0 (a missing or null exit code counts as failing) stops the run at `record-answer` (`session_check_failed`) before anything is recorded, whatever the reviewers raised, a BLOCKER included: a red suite outranks the verdict, and the way on is a fix, then a fresh signoff. If nothing is runnable, say so in one line; that is the **only** path to "static analysis only".
 
 Keep bulk output out of context: redirect to a file and read back the summary lines. A lens whose check must mutate the checkout cannot do it as a reader — cut a worktree at the reviewed head, carry the uncommitted half in, run it there, and remove the worktree before the verdict.
 
@@ -92,11 +92,11 @@ Keep bulk output out of context: redirect to a file and read back the summary li
 uv run --python /usr/bin/python3 --with jsonschema==4.25.1 scripts/signoff.py record-answer --run-dir <run dir> --answer <answer.json>
 ```
 
-The answer is `references/answer.schema.json` (`references/examples/answer-with-findings-and-model.json` is one), built from the reviewers' reports merged on `file:line` plus claim, with the adapter's `answer_identity` as its `session_id` and `model`. The script applies the rules; you do not:
+The answer is `references/answer.schema.json` (`references/examples/answer-with-findings-and-model.json` is one), built from the reviewers' reports merged on `file:line` plus claim, with the adapter's `answer_identity` as its `session_id` and `model`, and with Step 3.5's full run in `session_checks`. A failing session check stops the run here (`session_check_failed`): nothing is recorded and the card stays where it was, though the result and the chat block still list what the reviewers raised. Passing ones are listed apart from the reviewer's in the verdict doc and the Method line. The script applies the rules; you do not:
 
 1. **Evidence or it does not count.** A finding missing a location, a claim, a scenario or an evidence kind refuses the WHOLE answer (`answer_invalid`): nothing is raised, no verdict is recorded, and the answer is not repaired into shape. Fix the reviewer's report or re-send the lens; never edit a finding into validity yourself.
 2. **A location outside the source set is a note**, not a finding.
-3. **A clean review lists its checks.** No RAISED finding and no executed check with output is refused — a review whose findings all sit outside the source set counts as clean here.
+3. **A clean review lists its checks.** No RAISED finding and no executed check with output is refused — a review whose findings all sit outside the source set counts as clean here. The checks counted are the reviewer's; `session_checks` never count.
 4. **Verify before reporting.** Read the source yourself on every BLOCKER and MAJOR before it reaches the answer, and drop what you refute. Reviewers are fallible and a false blocker costs real time.
 5. **Unbuilt-by-design is not a defect.** `Out of scope:` and `Not in this slice:` lines are user-sanctioned. A `## Deviations` entry labeled `per user` counts as sanctioned; one labeled `builder call`, or unlabeled, that leaves an acceptance criterion unmet caps the verdict at conditions and goes to the user as a question. An unmet requirement with no record at all is a BLOCKER **and** a question to the user.
 

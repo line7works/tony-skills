@@ -75,6 +75,9 @@ def assemble(resolved, plugin_version, status, **parts):
         result["floor"] = dict(parts["floor"])                   # F5: who established the floor
     if parts.get("document_steps") is not None:
         result["document_steps"] = [dict(row) for row in parts["document_steps"]]   # F8
+    if parts.get("session_checks") is not None:
+        # E17 fix round 1: the reviewing session's own checks, never merged into the reviewer's.
+        result["session_checks"] = [dict(row) for row in parts["session_checks"]]
     return result
 
 
@@ -98,8 +101,10 @@ def chat_block(result):
                  % (run.get("depth"), (" + " + ", ".join(run.get("lenses") or [])) if run.get("lenses") else "",
                     reviewer.get("route") or "none", reviewer.get("session_id") or "none",
                     "yes" if reviewer.get("independent") else "NO"))
-    lines.append("Method: %d check(s) executed by the reviewer  ·  Withheld from the packet: %d"
-                 % (len(result.get("checks_executed") or []), len(packet.get("withheld") or [])))
+    lines.append("Method: %d check(s) executed by the reviewer  ·  %d check(s) executed by the "
+                 "reviewing session  ·  Withheld from the packet: %d"
+                 % (len(result.get("checks_executed") or []),
+                    len(result.get("session_checks") or []), len(packet.get("withheld") or [])))
     lines.append("Verdict doc: %s" % (result.get("verdict_doc") or "none — nothing recorded"))
     got_sheet = result.get("review_sheet")
     if got_sheet:
@@ -133,6 +138,13 @@ def chat_block(result):
         lines.append("- %s (%s) → %s" % (row.get("name"), row.get("command") or "no command", head))
     if not (result.get("checks_executed") or []):
         lines.append("- nothing was executed; this review lists no check it ran")
+    if result.get("session_checks"):
+        lines.append("Checks the reviewing session executed:")
+        for row in result["session_checks"]:
+            head = (row.get("output") or "").strip().split("\n")[0]
+            lines.append("- %s (%s, exit %s) → %s" % (row.get("name"),
+                                                     row.get("command") or "no command",
+                                                     row.get("exit_code"), head))
     for row in (result.get("problems") or []):
         lines.append("Refused: %s" % row.get("why", row))
     return "\n".join(lines) + "\n"

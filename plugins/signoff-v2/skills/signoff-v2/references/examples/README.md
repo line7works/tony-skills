@@ -55,5 +55,5 @@ segment, an evidence kind outside the three, a verdict outside the three, a term
 outside the two, a packet file in no list, a verdict recorded on a stop, a report-only run
 that recorded one, a document step in a state outside the three, an unplaceable record line
 reported without its bytes, a floor block whose `met` is not a boolean, a refusal reason outside
-the four, a packet entry whose `link_target` is not its link text, and a `records.not_landed` entry whose
+the five, a packet entry whose `link_target` is not its link text, and a `records.not_landed` entry whose
 `checked` is outside `absent` and `unreadable` (punch-F2).

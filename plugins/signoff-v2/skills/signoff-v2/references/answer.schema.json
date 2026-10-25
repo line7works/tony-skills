@@ -31,6 +31,21 @@
         }
       }
     },
+    "session_checks": {
+      "type": "array",
+      "description": "the checks the reviewing session itself ran in Step 3.5 (the project's full test command, once per review), with their output: never merged into `checks_executed`, never counted toward the clean-review rule, and held to the same provenance rules. One whose exit code is not 0 stops the run (`session_check_failed`) before anything is recorded. An answer without this field reads as before",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "command": {"type": ["string", "null"]},
+          "exit_code": {"type": ["integer", "null"]},
+          "output": {"type": ["string", "null"]}
+        }
+      }
+    },
     "findings": {
       "type": "array",
       "description": "what the reviewer would raise. Each entry is checked against the evidence rules by the adjudication, not by this schema",
