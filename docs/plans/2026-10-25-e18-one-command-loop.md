@@ -182,6 +182,7 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
 - The two patterns are written in `ledger.py` with the dashes as escapes, not imported: the core reaches the records component only as a subprocess, and `signoff_core/record_grammar.py`, which holds the same two patterns, is left to its own job.
 - `test_e18_heading_dashes` imports `records_core.legacy` by path (`testlib.RECORDS_ROOT`) to read the component's own patterns; the core does not import it.
 - `slice_heading_index` keeps its `.rstrip(":")`, so `## Slice A:` still names `A`.
+- 2026-10-25, ruling after signoff-v2 run signoff-a-20261025-deb2: "Requirement 2 wins for a colon heading (owner, 2026-10-25)". The line above is superseded: `slice_heading_index` names the slice `group(1).strip()`, as the records component does, so `## Slice A:` names `A:` and a bare `## Slice A` still names `A`.
 - Before photo at e11c788: core suite 429 tests OK (skipped=2). After at aaa080e: 437 OK (skipped=2), the 8 added being the new module.
 
 ## Deviations
