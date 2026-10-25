@@ -134,7 +134,8 @@ read intent into what is on disk.
   full-suite command a finding would need. The session records its run in the answer's
   `session_checks` (name, command, exit code, output), apart from the reviewer's
   `checks_executed`: never merged into them and never counted toward the clean-review rule
-  (section 1). A session check whose exit code is not 0 refuses the answer at `record-answer`
+  (section 1). A session check whose exit code is not 0 (a missing or null exit code counts as
+  failing) refuses the answer at `record-answer`
   (`refusal_reason` and `stop_reason_code` `session_check_failed`, `answer_refused` true) before
   anything is recorded, whatever the reviewers raised, a BLOCKER included: nothing is written to
   the project, the card stays where it was, and the result and the chat block still list the
