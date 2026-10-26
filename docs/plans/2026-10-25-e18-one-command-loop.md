@@ -41,7 +41,7 @@ Not in this slice:
 
 ## Slice B — the shared plan reader takes any slice-heading dash
 
-Status: not started
+Status: signed off
 
 Requirements:
 
@@ -185,9 +185,25 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
 - 2026-10-25, ruling after signoff-v2 run signoff-a-20261025-deb2: "Requirement 2 wins for a colon heading (owner, 2026-10-25)". The line above is superseded: `slice_heading_index` names the slice `group(1).strip()`, as the records component does, so `## Slice A:` names `A:` and a bare `## Slice A` still names `A`.
 - Before photo at e11c788: core suite 429 tests OK (skipped=2). After at aaa080e: 437 OK (skipped=2), the 8 added being the new module.
 
+2026-10-25, Slice B (build-v2 run build-e18-B-20261025-1):
+
+- The dash is one constant, `SLICE_DASH` in `station_core/templates.py`, the records component's character class (em dash, en dash, hyphen, one or more), written with escapes; `readings.FORM` takes it from `templates`, so the two readings cannot drift apart. `D` and every message that shows the form are unchanged.
+- A mixed run such as an en dash then an em dash, spaced, reads as a slice heading, as the records component reads it; no requirement names that shape.
+- U+2010 to U+2012 and U+2015 are not slice-heading dashes: the requirement names em dashes, en dashes and hyphens only, and the character list stops U+2010 first anyway.
+- The rule text of refusal (b) in `readings.py` and its contract line were rewrapped only across the lines that changed, leaving one short line (`Also (A20,`) in the docstring rather than reflowing the rest of the frozen paragraph.
+- The ship-v2 module's copy-equality tests skip in the installed shape, where the sibling cores are not beside the plugin, as `test_back_equal.py` does.
+- The 11 existing cases that pinned the old reading (requirement 8), each changed only to the new reading:
+  - `test_near_misses.py`, `SLICE_FORM_SHAPES` "an en dash" and "a hyphen" (spaced): 7 cases (TheReadings 2, TheGate 4, TheScope 1). Old: each stops every reader and the gate `doc-unreadable` at its heading. New: both move to `SPACED_DASH_SHAPES` (card `signed off`) and read as slice B in every reader (`test_a_spaced_en_dash_or_hyphen_reads_as_slice_b_in_every_reader`) and pass the gate to `ask` (`test_a_spaced_en_dash_or_hyphen_passes_the_gate`). The scope case that took `SLICE_FORM_SHAPES[0]` (the en dash) now takes the list's first entry, the colon shape, still a stop; its comment no longer names the en dash.
+  - `test_numbered_slices.py`, `test_the_rule_by_level_and_shape`, level 3 `2. Slice B - beta` and `2. Slice B` (en dash) `beta`: 2 cases. Old: not refused at level 3. New: refused; the level 3 expectation is now any spaced em dash, en dash or hyphen.
+  - `test_slice_behind.py:104`, level 3 `Slice B - x`: 1 case. Old: not refused. New: refused (asserted beside the em dash form).
+  - `test_packet.py`, `ROUND_9_STOPS` "slice B's heading with an en dash (C1A8-2)": 1 case. Old: the snapshot stops at the heading. New: `test_slice_bs_heading_with_a_spaced_en_dash_builds_the_snapshot`, the snapshot builds and its spec carries the heading.
+- Before photo at fa939e1, one suite at a time: vertical-v2 654 OK (skipped=2), ship-v2 443 OK (skipped=1), handoff-v2 416 OK (skipped=2), architect-v2 513 OK (skipped=3), blueprint-v2 462 OK (skipped=2), inspect-v2 515 OK, precon-v2 519 OK (skipped=3). After at 939e9e2: 664, 446, 416, 513, 462, 515 and 519, all OK with the same skips; the 10 added in vertical-v2 and 3 in ship-v2 are the new modules and the new-reading cases.
+
 ## Deviations
 
 2026-10-25, Slice A (run build-e18-A-20261025-1): none.
+
+2026-10-25, Slice B (build-v2 run build-e18-B-20261025-1): none.
 
 ## Discovered
 
@@ -197,6 +213,14 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
 - Under the new pattern six `## Slice` headings in tracked Markdown read a name where they read none before: four in `docs/evidence/agent-file-flip/fresh-session-rerun.md`, one in `docs/evidence/readers/slice-b-openrouter-runs.md`, one in `docs/reviews/2026-09-06-inspect-readers-gpt-2.md`. None is in a plan, and signoff-v2 reads only the build doc.
 - The build ran in a subagent, which shares its parent's `CLAUDE_CODE_SESSION_ID`, so the input's `invocation.session_id` and the answer's `session_id` name the driving session. signoff-v2 run from that same session would read it as the building session.
 - One full signoff-v2 core suite run takes about 14 minutes (843 s before, 822 s after).
+
+2026-10-25, Slice B (build-v2 run build-e18-B-20261025-1):
+
+- `readings.py:306`, the `slice-form` refusal message, still names the form as `Slice <name>` with an em dash only (it formats `D`), so a refused level 3 hyphen heading is told the em dash form; the slice keeps every message's em dash form, so it was left as it is.
+- `test_near_misses.py`'s "a Setext heading with an en dash" still stops, now because the two readings differ (the line rules take no Setext heading, and the second reading takes it as slice B), no longer because of its dash.
+- `## Slice A- x` (a dash with no space before it) stays refused by the plan reader while signoff-v2's ledger now reads it as slice `A-`: the split carried from Slice A, not changed here.
+- One full ship-v2 suite run takes about 29 minutes (1773 s before, 1751 s after); vertical-v2 about 19 minutes.
+- The build ran in a subagent sharing its parent's `CLAUDE_CODE_SESSION_ID`, as in Slice A: the input's `invocation.session_id` and the answer's `session_id` name the driving session.
 
 ## Punch list
 
@@ -212,3 +236,13 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
 ### 2026-10-25 — recheck: Slice A
 - MAJOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:113 · (Requirement 2 is unmet for a colon heading: slice_heading_index matches group(1).rstrip(':') while the records component names the slice group(1).strip() with no colon strip (legacy.py:219), so `## Slice A:` is slice A to signoff-v2 and slice A: to the records component. Requirement 3 (a heading with no separator reads as today) pulls the other way, so the spec conflicts with itself for this shape.) · fixed · executed probe.py: for '## Slice A:' and '## Slice A: - x' legacy names 'A:' and ledger.card_of(t,'A:')=('built',4) while card_of(t,'A')=(None,None); set_card('A:') moves the card legacy reads; now at plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:142
 - MAJOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:111 · (The widened SLICE_HEADING and RECORD_HEADING patterns now match hyphen and en dash headings inside fenced code blocks, which the records component skips (FENCE_RE, legacy.py:194-205). slice_heading_index, card_of, set_card and ledger_home have no fence awareness, so a fenced example heading placed before the real one now wins. The base ledger read only the em dash and ignored such a fenced example.) · fixed · executed probe.py: fenced '## Slice A - example' plus 'Status: not started' above the real em dash slice: card_of returns ('built',10) matching legacy status_line 10 and set_card leaves the fence untouched; now at plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:51
+
+### 2026-10-26 — review: Slice B
+- MINOR · plugins/vertical-v2/skills/vertical-v2/scripts/vertical_core/readings.py:85 · (Refusal (b)'s A20 rule text still says the slice form is read with `FORM`, the form's own dash. Since E18 `FORM` takes templates.SLICE_DASH (one or more em dashes, en dashes or hyphens). Requirement 6's C1A8-2 sentence was updated; this neighbouring A20 sentence was not. Same text in the ship-v2 and handoff-v2 copies.) · A maintainer reads 'the form's own dash' as the em dash and expects `### Slice B - x` or `### 1.1 Slice B - x` to pass at level 3; the spec and seams reviewers' probes print slice_form(3, 'Slice B - x') and slice_form(3, '1.1 Slice B - x') -> True, so the code refuses what the rule text says it leaves alone. · B
+- MINOR · plugins/vertical-v2/skills/vertical-v2/references/vertical-contract.md:562 · (The contract's refusal (b) A20 sentence still says `(the form's own dash)`; only the C1A8-2 sentence at :552 was updated.) · A reader of the contract draws the same wrong conclusion as from readings.py:85: a level 3 hyphen or en dash slice form is not refused, when the code refuses it. · B
+- MINOR · plugins/vertical-v2/skills/vertical-v2/scripts/vertical_core/readings.py:307 · (The slice-form refusal message in _refusal names only the em dash (`Slice <name> — ` and `## Slice <name> — <short name>`), though a hyphen, en dash or double hyphen slice heading is now on the form. The plan's Not in this slice exempts gate.py:158 and templates.py:328, not this message in readings.py, which is in the Footprint. Same in all three copies.) · A doc holding `### Slice B - x` inside slice B stops doc-unreadable at that line with a message pointing the author at the em dash form only (correctness probe3.py and seams inline probe output). · B
+- MINOR · plugins/vertical-v2/skills/vertical-v2/scripts/vertical_core/readings.py:126 · (Widening FORM refuses more level 3 headings than requirement 4 names (`### Slice B - x`): numbered and labelled hyphen, en dash and double hyphen forms (`### 1.1 Slice B - x`, `### 2. Slice B -- x`, `### Next: Slice B - x`) and prose headings such as `### Slice sizing - why it matters` are now refused. The Board's 0-of-696 count is stated for the plain shape.) · A plan with a level 3 note `### 7.2 Slice 2 - the rig` or `### Slice sizing - why it matters` now stops doc-unreadable where it ran before. Probes by spec, seams and correctness over the repo's 475-476 tracked .md files found 0 such headings, so risk is low. · B
+- MINOR · plugins/vertical-v2/skills/vertical-v2/scripts/station_core/templates.py:176 · (BUILD['slice'] now reads a level 2 prose heading on a hyphen as a slice (`## Slice ordering - rationale` is slice `ordering`), and its `(.+)` lets the short name start with a space, so the one space after the dash the requirement states is not enforced (`## Slice B -  the spinner` reads short ' the spinner'). Same in all seven copies.) · A plan carrying `## Slice ordering - rationale` moves from doc-unreadable to gate-malformed (a slice with no Status:), and the same heading in any other Markdown file makes packet.other_plans (packet.py:164) withhold that file as another plan. The extra-space case reads the same slice name as the records component, so nothing desyncs. No such heading found in this repo. · B
+- MINOR · plugins/vertical-v2/skills/vertical-v2/scripts/tests/test_packet.py:40 · (The module docstring still lists a level 1 or 2 heading off the form `(an en dash, a zero-width space)` as a stopping shape, while this slice removed the en dash case from ROUND_9_STOPS and inverted it into test_slice_bs_heading_with_a_spaced_en_dash_builds_the_snapshot.) · A reader of the guard's docstring believes a spaced en dash slice heading still stops the snapshot; a test in the same file asserts it builds. · B
+- MINOR · plugins/vertical-v2/skills/vertical-v2/scripts/tests/test_near_misses.py:359 · (Removing the en dash and hyphen entries from SLICE_FORM_SHAPES silently re-pointed TheScope.test_scope_stops_on_a_label_shape_only_in_the_commit's SLICE_FORM_SHAPES[0] from the en dash shape to the colon shape, and the comment at :362-363 ('slice B as `built`') no longer describes it: records reads the colon shape as slice 'B: the spinner'.) · The scope-path test now exercises a different shape than before with a comment that misdescribes it; it still passes, so the drift is invisible. · B
+- MINOR · plugins/ship-v2/skills/ship-v2/scripts/tests/test_e18_slice_dashes.py:27 · (ship-v2's new module exercises select on hyphen headings only (with_dash, used at :55 and :58); an en dash or double hyphen plan through ship's select is never tested.) · A later ship-only regression that breaks the en dash or `--` read passes this module. · B

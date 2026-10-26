@@ -45,6 +45,7 @@ from . import validate
 
 NAMES = ("scope-doc", "architecture-doc", "build-doc", "inspect-lines")
 D = "\u2014"     # the dash the v1 forms use as their separator; carried, never typed
+SLICE_DASH = "[%s\u2013-]+" % D   # E18: a slice heading's dash as read: one or more em dashes, en dashes or hyphens
 M = "·"          # the middle dot of the v1 line forms
 FENCE_OPEN = "```form\n"
 FENCE_CLOSE = "```\n"
@@ -172,7 +173,7 @@ BUILD = {
     "title": re.compile(r"^# .+ %s build plan \(.+\)$" % D),
     "title_form": "# <Feature> %s build plan (<date>)" % D,
     "header": [(("Intent:",), True), (("Constraints:",), True), (("Out of scope:",), True)],
-    "slice": re.compile(r"^## Slice (\S+) %s (.+)$" % D),
+    "slice": re.compile(r"^## Slice (\S+) %s (.+)$" % SLICE_DASH),
     "slice_labels": [(("Goal:",), True), (("Requirements:",), True), (("Acceptance criteria:",), True),
                      (("Footprint:",), True), (("Not in this slice:",), True), (("Depends on:",), True),
                      (("Status:",), True)],

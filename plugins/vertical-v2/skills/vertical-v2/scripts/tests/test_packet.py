@@ -443,8 +443,6 @@ class TheClassGuard(unittest.TestCase):
          "See [the plan](/plan \"a"),
         ("two rendered Base: lines in the header, after a multi-line code span (C1A8-1)",
          HEADER_AT, HEADER_AT + "\nNote `a\nb` here.\n**Base:** 1234567\nBase: abcdef1\n", "Note `a"),
-        ("slice B's heading with an en dash (C1A8-2)", "## Slice B %s the spinner" % D, "## Slice B – the spinner",
-         "## Slice B – the spinner"),
         ("slice B's heading with a zero-width space inside Slice (C1A8-2)", "## Slice B %s the spinner" % D,
          "## Sl​ice B %s the spinner" % D, "## Sl​ice B %s the spinner" % D),
         ("a ### Status: built heading above slice B's plain label (C1A8-3)", "Depends on: A\nStatus: signed off",
@@ -520,6 +518,14 @@ class TheClassGuard(unittest.TestCase):
             with self.assertRaises(specmod.SpecUnreadable) as caught:
                 packet.Snapshot(self.ws, head, DOC)
             self.assertEqual(caught.exception.line, text.split("\n").index(first) + 1, what)
+
+    def test_slice_bs_heading_with_a_spaced_en_dash_builds_the_snapshot(self):
+        """E18: the shape C1A8-2 refused before the slice-heading dash widened now reads as slice B."""
+        heading = "## Slice B \u2013 the spinner"
+        text = class_doc().replace("## Slice B %s the spinner" % D, heading, 1)
+        self.assertNotEqual(text, class_doc())
+        snap = packet.Snapshot(self.ws, self.recommit_doc(text), DOC)
+        self.assertIn(heading, snap.spec)
 
     def test_every_round_9_withheld_near_miss_reaches_no_packet_and_is_named(self):
         """A14 (C1A8-3): a level 1 or 2 section whose name starts with a withheld name's stem is withheld by both

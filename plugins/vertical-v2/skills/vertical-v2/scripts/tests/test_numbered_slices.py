@@ -87,7 +87,9 @@ class TheReaders(unittest.TestCase):
                 with self.subTest(name=name, level=level):
                     self.assertTrue(readings.slice_form(level, name), (name, level))
             with self.subTest(name=name, level=3):
-                self.assertEqual(readings.slice_form(3, name), D in name and " %s " % D in name, name)
+                # E18: the slice form takes a spaced em dash, en dash or hyphen at level 3 too
+                self.assertEqual(readings.slice_form(3, name),
+                                 any(" %s " % dash in name for dash in (D, "\u2013", "-")), name)
             self.assertFalse(readings.slice_form(4, name), name)
         for name in ("Notes on slice A %s what we learned" % D, "2. Slice B notes", "2. Slices overview",
                      "2. Slice B (beta)", "Next: then: Slice B", "2. Sliced bread", "Notes: slice B is late"):
