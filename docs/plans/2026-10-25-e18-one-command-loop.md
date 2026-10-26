@@ -124,7 +124,7 @@ Not in this slice:
 
 ## Slice D — version bumps so an update delivers the round
 
-Status: not started
+Status: built
 
 Requirements:
 
@@ -220,6 +220,16 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
   - `test_window.py`, three direct signoff-v2 closes (a hand edit before its own write, its own writes with the verdict doc, a grant while the visit is open): plant.
 - Before photo at 6543274, one suite at a time: ship-v2 446 OK (skipped=1), claude-code adapter 45 OK, codex adapter 24 OK. After at 13555b1: 462 OK (skipped=1), 60 OK, 24 OK; the 16 and 15 added are the two new modules.
 
+2026-10-26, Slice D (build-v2 run build-e18-D-20261026-1):
+
+- "The same way for all eight" is read as: every result example's `plugin_version` equals its plugin's new manifest version. architect-v2, blueprint-v2, inspect-v2 and precon-v2 had their examples at 0.1.0 under a 0.1.1 manifest, so theirs moved from 0.1.0 to 0.1.2; the other four moved from 0.1.0 to 0.1.1. 234 example files, one `plugin_version` each; signoff-v2's `component_version` (the records component's) is not the plugin's and was left.
+- A README states the current version where a line reads `Version X`, `plugin version X`, `version X` or `the plugin, at X`: 12 lines across the eight, each moved. The `Tests: N` counts on the same lines are not a version and were left.
+- No station code changed: every station reads its version from its own manifest (`station_core/validate.py` `plugin_version`, signoff-v2's `signoff.py` `plugin_version`), so `skill-identity` and every result's `plugin_version` follow the manifest.
+- `sibling.py:93` needed no edit: it compares an installed folder's name with that folder's manifest at run time. The one test that wrote the version was precon-v2's.
+- The one existing test changed: precon-v2 `test_exit_test.py`, `RosterRoutes.install`, the 3b layout folder `precon-v2/0.1.1` is now `precon-v2/<the real manifest's version>`. No other existing test or helper changed.
+- `test_e18_versions` names each plugin's new version as a literal (the check is that the bump landed) and skips a sibling's rows in the installed shape.
+- Before photo at 887a0d1: signoff-v2 444 OK (skipped=2), adapters 64 and 67 OK; ship-v2 462 OK (skipped=1), adapters 60 and 24 OK; vertical-v2 664 OK (skipped=2), adapters 18 and 19 OK; handoff-v2 416 OK (skipped=2), adapters 27 and 23 OK; architect-v2 513 OK (skipped=3), adapters 19 and 20 OK; blueprint-v2 462 OK (skipped=2), adapters 19 and 20 OK; inspect-v2 515 OK, adapters 19 and 20 OK; precon-v2 519 OK (skipped=3), adapters 18 and 19 OK. `test_e18_versions` red before the change (32 failures, 4 tests by 8 plugins). After at 0c8c24a: the same counts, all OK with the same skips, except ship-v2 466, the 4 added being the new module.
+
 ## Deviations
 
 2026-10-25, Slice A (run build-e18-A-20261025-1): none.
@@ -230,6 +240,10 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
 
 - `report` takes `--reading FILE` at `visiting` for a launched visit: no requirement names it. Without it the new `visit --result` refusals (exit 5) would leave the run with no terminal status, since `report` at `visiting` refuses a result `visit --result` would take (R1S2-5) and cannot read the reading itself (the E15 lane contract A31 (2)). A reviewing session that is another ends the run `visit-unfinished` with or without it. · builder call
 - On a report-only run the brief carries one more field and section, `Report only`: requirement 3's list names none, and without it the child would run a writing signoff that `visit --result` refuses on a report-only run. A normal run's brief holds exactly the named fields. · builder call
+
+2026-10-26, Slice D (build-v2 run build-e18-D-20261026-1):
+
+- Suites ran up to four side by side, each a different plugin's suite with its output in its own file, against the plan's constraint that suites run one at a time (C-25), which is left as written. The before photo ran one at a time through the architect-v2 core suite; the rest of it and every check after the change ran in four lanes. No suite failed side by side, so no solo rerun was needed. The owner's ruling, relayed by the control room on 2026-10-26: "lets increase the one at a time". · per user
 
 ## Discovered
 
@@ -255,6 +269,14 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
 - `test_terminal_class.py` does not enumerate the new refusals (requirement 13 limits edits to existing tests); their way to a terminal status is held in `test_e18_fresh_signoff.py`.
 - The LIGHT and LEAN refusal case passed before the change too: the closed schema refused `signoff_depth` as an unknown key.
 - The build ran in a subagent sharing its parent's `CLAUDE_CODE_SESSION_ID`, as in Slices A and B. One full ship-v2 suite run took about 30 minutes (1781 s before, 1813 s after). No live `claude -p` child and no live `/ship-v2` run (C-29).
+
+2026-10-26, Slice D (build-v2 run build-e18-D-20261026-1):
+
+- ship-v2's README counts table is measured on E15 fix round 2's tree (core 443, claude-code adapter 45) against 466 and 60 now; it says when it was measured, and "No other change" left it. architect-v2 to precon-v2's `Tests:` counts still equal their core suites.
+- The adapter profiles and `setups/` records that name an installed 0.1.0 are measurements of their day, left as historical records.
+- build-v2, recheck-v2, readers and records had no files changed in slices A to C, so they keep their versions (build-v2 reports 0.1.1).
+- The build ran in a subagent sharing its parent's `CLAUDE_CODE_SESSION_ID`, as in slices A to C.
+- Side by side, the long suites ran slower each (ship-v2 1935 s against 1833 s alone, vertical-v2 1327 s against 1107 s, signoff-v2 1017 s against 825 s), and the 25 checks after the change took about 32 minutes of wall clock against about 85 minutes one at a time.
 
 ## Punch list
 
