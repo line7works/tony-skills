@@ -403,6 +403,59 @@ def doc_write(ws, before, doc=DOC, kind="status_line"):
     return {"kind": kind, "path": doc, "appended": False, "sha256_before": before, "sha256_after": after}
 
 
+LAUNCH = ("adapters", "claude-code", "launch.py")
+
+
+def launch_of(run_dir):
+    """The open visit's launch, as `visit --station signoff-v2` records it on Claude Code, or None (E18 slice C)."""
+    visit = testlib.load_json(os.path.join(run_dir, "ship.json")).get("visit") or {}
+    return visit.get("launch"), visit
+
+
+def child_record(home, ws, session, prompt):
+    """A fixture child transcript under a fixture Claude Code home (the seam the claude-code adapter tests use): the
+    launched session's first prompt and one assistant turn, in `<home>/projects/<folder>/<session>.jsonl`."""
+    folder = os.path.join(home, "projects", "-fixture-%s" % session[:8])
+    os.makedirs(folder, exist_ok=True)
+    rows = [{"type": "user", "sessionId": session, "cwd": ws, "isSidechain": False,
+             "message": {"role": "user", "content": prompt}},
+            {"type": "assistant", "sessionId": session, "cwd": ws, "isSidechain": False,
+             "message": {"role": "assistant", "model": "claude-opus-5",
+                         "content": [{"type": "text", "text": "NEUTRAL reply."}]}}]
+    path = os.path.join(folder, "%s.jsonl" % session)
+    with open(path, "w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row) + "\n")
+    return path
+
+
+def plant_child(script, tmp, run_dir, reviewing=None, prompt=None, reading=None):
+    """What a real child leaves for a launched signoff-v2 visit, and the reading the ship session hands over (E18
+    slice C): the visit's `input.json` with `invocation.sessions.reviewing` (the recorded session id, or `reviewing`),
+    a fixture child transcript under a fixture home whose first prompt is the launch's (or `prompt`), and the launch
+    helper's own check reading made from it (`launch.py --check`, the copy beside `script`), written to `reading` (a
+    path under `tmp` by default). Returns the arguments `visit --result` takes, `["--reading", path]`, or [] when the
+    open visit has no launch (a Codex run, build-v2, recheck-v2)."""
+    launch, visit = launch_of(run_dir)
+    if not launch:
+        return []
+    testlib.write_json(os.path.join(visit["run_dir"], "input.json"),
+                       {"invocation": {"sessions": {"reviewing": reviewing or launch["session_id"]}}})
+    home = os.path.join(tmp, "claude-home")
+    ws = testlib.load_json(os.path.join(run_dir, "input.json"))["workspace"]
+    child_record(home, ws, launch["session_id"], launch["prompt"] if prompt is None else prompt)
+    helper = os.path.join(os.path.dirname(os.path.dirname(script)), *LAUNCH)
+    proc = subprocess.run([sys.executable, helper, "--run-dir", run_dir, "--check"], cwd=tmp,
+                          env=testlib.base_env({"CLAUDE_CONFIG_DIR": home}), stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        raise RuntimeError("launch.py --check exited %d: %s" % (proc.returncode, proc.stderr.decode()[-600:]))
+    path = reading or os.path.join(tmp, "reading-%s.json" % launch["session_id"])
+    with open(path, "wb") as fh:
+        fh.write(proc.stdout)
+    return ["--reading", path]
+
+
 def visit(test, drive, run_dir, station, which, ws, before_result=None, evidence=True, after_result=None):
     """One visit: `visit --station`, then `before_result` (what the station itself writes while it runs, and what a
     test plants while the visit is open), the station's result written as the station would, then `after_result`
