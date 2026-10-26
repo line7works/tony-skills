@@ -161,7 +161,8 @@ class ReportOnly(unittest.TestCase):
         clean = slib.station_result("signoff-v2", "report-only", named, self.ws)
         clean.update(findings=[], verdict_stated="signed off")
         slib.put_result(named, clean)
-        code, out, err = drive(["visit", "--run-dir", run_dir, "--result"])
+        code, out, err = drive(["visit", "--run-dir", run_dir, "--result"] + slib.plant_child(drive.script, self.tmp,
+                                                                                               run_dir))
         self.assertEqual(code, 0, (out, err))
         code, out, err = slib.report(drive, run_dir)
         self.assertEqual(code, 10, (out, err))

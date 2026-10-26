@@ -126,6 +126,27 @@
             }
           },
           "description": "present only when the owner ordered more laps in words (CR-22): the only way a third lap happens"
+        },
+        "signoff_depth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "depth",
+            "words"
+          ],
+          "properties": {
+            "depth": {
+              "const": "DEEP",
+              "description": "the one depth ship-v2's input carries (the owner's ruling, 2026-10-25): LIGHT never reaches the signoff session through ship-v2, because an inspection that scales down needs the owner's own typed word"
+            },
+            "words": {
+              "type": "string",
+              "minLength": 1,
+              "description": "his words ordering a DEEP signoff, verbatim; at least one character that is not white space",
+              "pattern": "\\S"
+            }
+          },
+          "description": "present only when the owner ordered a DEEP signoff (E18 slice C): the brief of the launched signoff session passes it to the child as his order, his words verbatim; absent, the brief names no depth and signoff-v2's own rules choose"
         }
       }
     }

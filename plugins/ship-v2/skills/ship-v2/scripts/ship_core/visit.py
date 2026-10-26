@@ -30,6 +30,15 @@ build that is not COMPLETE; the run's end on a signoff-v2 or recheck-v2 stop or 
 ALL CLEAR, a lap or the extra lap exhausted. `judge` is the same reading without a write, for `report` at
 `visiting` (slice 2 re-check 1's R1S2-5).
 
+THE FRESH SESSION (E18 slice C; contract sections 3.4 and 11; `fresh.py`). On the Claude Code harness the signoff-v2
+visit runs in a fresh session, never in the session that built: `visit --station signoff-v2` keeps everything above
+and also records a fresh session id in the visit's state, stages the child session's brief under this run's directory
+(it lands in the command's one save) and prints a `launch_step` naming the adapter helper that prints the launch.
+`visit --result` for that visit takes the helper's check reading (`--reading FILE`, exit 2 without it) and keeps every
+check above; it also refuses (exit 5, nothing written, the run still `visiting`) when the reading does not hold, or
+when the reviewing session the visit's own `input.json` records is not the recorded id. On Codex nothing changes: no
+`launch_step`, and `--reading` is a usage slip there, as it is for build-v2 and recheck-v2.
+
 Each trace line is staged (`common.stage_trace`) and lands in the one save that ends the command (`common.save`, THE
 SAVE), with the state, the stage and any run file the step writes (`laps.json` when the first lap opens), or with the
 stop that ends the run there: a kill never leaves a visit's line without the stage it moved the run to.
@@ -41,7 +50,7 @@ from station_core import driver, fsio, records_link
 from station_core.records_client import ComponentUnavailable
 from back_core import trace
 
-from . import common, forms, mirror, record, report, stations, window
+from . import common, forms, fresh, mirror, record, report, stations, window
 
 EXPECT = {"hooked": "build-v2", "built": "signoff-v2", "fixed": "recheck-v2"}
 # the window a visit's opening holds, by the stage it opens at (the window rule's words)
@@ -128,19 +137,30 @@ def open_visit(ctx, run, args):
     os.makedirs(os.path.join(run.run_dir, "visits"), exist_ok=True)
     state["visit"] = {"station": expected, "seq": written["seq"], "run_id": run_id, "run_dir": run_dir,
                       "identity": identity, "route": found["route"], "root": found["root"], "skill_md": skill_md}
+    launch_step = None
+    if fresh.applies(run, expected):        # THE FRESH SESSION: the id, the brief staged, the launch step
+        launch_step = fresh.make(ctx, run, state, state["visit"], MODES[expected], seq)
     window.take(run, state)                 # what the workspace holds when the visit opens
     common.save(run, state, "visiting")
+    how = ("run %s by its own SKILL.md (%s), with run_id %s and run_dir %s in its input, invocation.caller %s and "
+           "invocation.mode %s (the mode %s's own input schema takes from a calling station); a question it puts "
+           "to the owner is a pause (`pause --question`); when it has written its result, run `visit --result` "
+           "(a station that ends without a result it can give: `report`, which ends the run visit-unfinished)"
+           % (expected, skill_md, run_id, run_dir, common.STATION, MODES[expected], expected))
+    extra = {}
+    if launch_step is not None:
+        extra["launch_step"] = launch_step
+        how = ("%s runs in the fresh session `launch_step` launches, by its own SKILL.md (%s), with run_id %s and "
+               "run_dir %s in its input, invocation.caller %s and invocation.mode %s, as the brief %s says: %s; a "
+               "station that ends without a result it can give: `report`, which ends the run visit-unfinished"
+               % (expected, skill_md, run_id, run_dir, common.STATION, MODES[expected], launch_step["brief"],
+                  launch_step["how"]))
     return ctx.emit(ctx.envelope(
         next="visit --result", run_id=common.run_id(run), visited=expected, identity=identity, route=found["route"],
         root=found["root"], skill_md=skill_md, summon=forms.summon(expected, state["slice"], state["doc"]),
         visit_run_id=run_id, visit_run_dir=run_dir, caller=common.STATION, mode=MODES[expected],
         report_only=common.report_only(run), workspace=common.workspace(run), doc=state["doc"], slice=state["slice"],
-        trace_seq=written["seq"],
-        how=("run %s by its own SKILL.md (%s), with run_id %s and run_dir %s in its input, invocation.caller %s and "
-             "invocation.mode %s (the mode %s's own input schema takes from a calling station); a question it puts "
-             "to the owner is a pause (`pause --question`); when it has written its result, run `visit --result` "
-             "(a station that ends without a result it can give: `report`, which ends the run visit-unfinished)"
-             % (expected, skill_md, run_id, run_dir, common.STATION, MODES[expected], expected))))
+        trace_seq=written["seq"], how=how, **extra))
 
 
 def _skill_md(found, name):
@@ -243,6 +263,17 @@ def close_visit(ctx, run, args):
         identity, route, rules, why = detail
         return _refused(ctx, run, state, name, identity, route, visit["run_dir"], rules, why)
     found, identity, path, doc, held = detail
+    if fresh.launched(visit):               # THE FRESH SESSION: the check reading and the reviewing session
+        if args.reading is None:
+            raise driver.Usage("%s's visit ran in a launched session: `visit --result` takes the launch helper's check "
+                               "reading, `--reading FILE`, the output of `%s`"
+                               % (name, " ".join(fresh.check_argv(ctx, run))))
+        problems = fresh.problems(run, visit, args.reading)
+        if problems:
+            return common.refuse(ctx, run, "the launched session's result is refused: %s" % "; ".join(problems))
+    elif args.reading is not None:
+        raise driver.Usage("--reading is taken only by `visit --result` of a signoff-v2 visit launched in a fresh "
+                           "session (Claude Code); this visit to %s was not launched" % name)
     told = stations.outcome(name, doc)
     line = trace.line(kind="visit", caller=common.STATION, expected=name, identity=identity, route=found["route"],
                       run_dir=visit["run_dir"], status=str(doc.get("status")), at=common.now())
@@ -250,6 +281,8 @@ def close_visit(ctx, run, args):
     state["visits"].append({"station": name, "run_id": visit["run_id"], "run_dir": visit["run_dir"],
                             "status": doc.get("status"), "word": told["word"], "result": path,
                             "result_sha256": fsio.sha256_file(path), "lap": state["lap"]})
+    if fresh.launched(visit):
+        state["visits"][-1]["launch"] = visit["launch"]
     state["visit"] = None
     if name == "build-v2":
         state["build"] = told["word"]
@@ -333,9 +366,11 @@ def _next(ctx, run, step, told, **extra):
 
 
 def handler(ctx, args):
-    """`visit --run-dir D (--station NAME | --result)`."""
+    """`visit --run-dir D (--station NAME | --result [--reading FILE])`."""
     if bool(args.station) == bool(args.result):
         raise driver.Usage("visit takes one of --station NAME (open a visit) or --result (read the station's result)")
+    if args.station and args.reading is not None:
+        raise driver.Usage("--reading goes with --result (the launch helper's check reading), never with --station")
     if args.station:
         run = common.open_run(ctx, args.run_dir, tuple(EXPECT), "visit --station")
         return open_visit(ctx, run, args)

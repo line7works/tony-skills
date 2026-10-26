@@ -459,7 +459,8 @@ def plant_child(script, tmp, run_dir, reviewing=None, prompt=None, reading=None)
 def visit(test, drive, run_dir, station, which, ws, before_result=None, evidence=True, after_result=None):
     """One visit: `visit --station`, then `before_result` (what the station itself writes while it runs, and what a
     test plants while the visit is open), the station's result written as the station would, then `after_result`
-    (what a test plants after the station wrote its result, before `visit --result`), `visit --result`. A change to
+    (what a test plants after the station wrote its result, before `visit --result`), then what a launched child
+    leaves and its check reading (`plant_child`, a signoff-v2 visit on Claude Code only), `visit --result`. A change to
     the build doc across `before_result` is listed in the result as that station lists its own write
     (`station_result`'s `doc_move`); `evidence=False` lists none (a doc move no station claims)."""
     code, out, err = drive(["visit", "--run-dir", run_dir, "--station", station])
@@ -476,7 +477,7 @@ def visit(test, drive, run_dir, station, which, ws, before_result=None, evidence
                                    doc_move=(doc_before, doc_after) if evidence else None))
     if after_result is not None:
         after_result(out)
-    return drive(["visit", "--run-dir", run_dir, "--result"])
+    return drive(["visit", "--run-dir", run_dir, "--result"] + plant_child(drive.script, drive.tmp, run_dir))
 
 
 # ---- the records component, through its CLI -------------------------------------------------------

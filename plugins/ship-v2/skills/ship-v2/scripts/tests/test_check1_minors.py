@@ -159,7 +159,8 @@ class TheMinors(unittest.TestCase):
             seen[station] = out
             if which is not None:
                 slib.put_result(out, slib.station_result(station, which, out, self.ws))
-                code, done, err = drive(["visit", "--run-dir", run_dir, "--result"])
+                code, done, err = drive(["visit", "--run-dir", run_dir, "--result"]
+                                        + slib.plant_child(drive.script, self.tmp, run_dir))
                 self.assertEqual(code, 0, (station, done, err))
                 return done
         opened("build-v2", "completed")

@@ -156,6 +156,15 @@ class FreshSignoff(unittest.TestCase):
         code, out, err = slib.Driver(self.tree, self.tmp)(["check-input", os.path.join(self.tmp, "input-blank.json")])
         self.assertEqual(code, 4, (out, err))
 
+    def test_the_depth_examples_hold_against_the_input_schema(self):
+        import jsonschema
+        schema = testlib.load_json(os.path.join(testlib.REF, "input.schema.json"))
+        checker = jsonschema.Draft202012Validator(schema)
+        for kind, name in (("valid", "signoff-depth-deep.json"), ("invalid", "signoff-depth-light.json"),
+                           ("invalid", "signoff-depth-lean.json"), ("invalid", "signoff-depth-without-words.json")):
+            doc = testlib.load_json(os.path.join(testlib.EX, "input", kind, name))
+            self.assertEqual(not list(checker.iter_errors(doc)), kind == "valid", name)
+
     # ---- the visit's close -----------------------------------------------------------------------------------------
 
     def signoff_result(self, drive, run_dir, ws, out, which="clean"):

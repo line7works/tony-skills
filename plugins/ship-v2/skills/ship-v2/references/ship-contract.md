@@ -173,6 +173,49 @@ Then the next step, from the station's own words and the records:
 
 On a report-only run, where signoff-v2 wrote nothing, the findings to fix are its result's own raised findings.
 
+**The fresh session** (E18 slice C; `scripts/ship_core/fresh.py`). On the Claude Code harness the signoff-v2 visit runs
+in a fresh session, never in the session that built: signoff-v2's independence rule is unchanged, and the session that
+wrote the code never reviews it. `visit --station signoff-v2` keeps everything it does above and also: makes a fresh
+random session id (a UUID; with a test's fixed clock, `SHIP_V2_TEST_NOW` under `SHIP_V2_TEST=1`, a name-based one
+derived from the visit's run id, run directory and that instant, so a test run stays byte for byte reproducible) and
+records it in the visit's state in `ship.json` (`visit.launch`: the id, the brief, the prompt `Read <brief path> and
+follow it.`, and the file that receives the child's standard output); writes the child session's brief,
+`brief-<seq>-signoff-v2.md`, under this run's directory (outside the visit's run directory and outside the workspace)
+through `common.stage_text`, so THE SAVE writes it (section 3.10) and `report` lists it; and prints a `launch_step`
+naming the adapter helper command that prints the launch (`adapters/claude-code/launch.py --run-dir D`) and its check
+mode (`--check`), with the brief and the standard-output file `child-<seq>-signoff-v2.json`. The brief is composed by
+the script from this run's own files and nothing else, its fields in this order: the workspace, the build doc, the
+slice, the path of the build visit's `result.json` (signoff-v2's helper takes it as `--build-result`), the signoff
+visit's run id and run directory, `invocation.caller` `ship-v2` and the visit's `invocation.mode`, and the signoff-v2
+`SKILL.md` path and identity (name, version, content hash) that `visit` resolved, which the child runs signoff-v2 by;
+then the owner's DEEP order with his words verbatim when the input carries one (section 4), or, with none, that
+signoff-v2's own rules choose the depth; on a report-only run, that the visit is report-only. No command option takes
+free text for the brief, so nothing from the ship session's conversation can reach it. The brief tells the child that
+no owner is present in its session: it does not take signoff-v2's Step 1 first-run `REVIEW.md` write, which needs the
+owner's word; Step 5's second-failure append stays signoff-v2's own; it answers no question on the owner's behalf; it
+ends with the lines signoff-v2's Step 6 adds by hand (the questions rule 5 raised, the `Next:` line, any `SKILL NOTE:`)
+in its final message; and it commits, pushes and edits nothing beyond signoff-v2's own writes. The ship session runs the
+launch's argv in the background from the workspace, standard output to the named file, and waits for it to end; it
+never runs signoff-v2 in its own session and never writes into the visit's run directory. THE WINDOW RULE is unchanged:
+the ship session touches nothing while the visit is open.
+
+At the close, `visit --result` for that visit takes the helper's check reading (`--reading FILE`; without it, exit 2
+naming the helper's check command) and keeps every check above; it also refuses (exit 5, nothing written, the run still
+`visiting`) when the reading does not hold (it is not the helper's `launch_check` reading of this harness, the
+recorded session id and the launch prompt's sha256, or its `holds` is not true), or when the reviewing session the
+visit's own `input.json` records (`invocation.sessions.reviewing`, written by signoff-v2's `check-input`) is not the
+recorded session id. The refusal names what failed and both ids. The core never runs the check itself: the reading is a
+file the ship session gets from the helper and hands over, the trust shape of the hook reading, so the core stays
+harness-blind. A child that ends with no `result.json` in the visit's run directory (a crash, an auth failure, its turn
+limit, a denial, a question it could not ask) ends the run as any visit with no result does: `report` stops
+`visit-unfinished` (section 3.8), its reason carrying the child's `subtype` and `result` from its standard-output file
+when that file holds them. After `visit --result` holds, the ship session delivers in chat the child's `chat.md`
+(signoff-v2's Step 6 block) and the child's final message (the `result` in its standard-output file), then goes on by
+the table above. recheck-v2's visit stays in the ship session: recheck-v2 allows a driving session that wrote the fix
+(`invocation.session_wrote_fix`) and holds it to confirming or downgrading only. On Codex nothing changes: `visit
+--station signoff-v2` prints no `launch_step`, and `--reading` is a usage slip there, as it is for build-v2 and
+recheck-v2 visits.
+
 ### 3.5 `fix --run-dir D --fixes FILE`
 
 The lap's fixes (kind `fixes`): per fix the finding it answers (one of the lap's named findings), every path it
@@ -286,7 +329,13 @@ C2-6): a station that ended without a result
 `visit --result` takes (it left none, or `visit --result` refuses the one it left) still reaches a terminal status, the
 stop `visit-unfinished` naming the station and why, the visit's opening trace line left as the record that it was
 handed over. The result is read there as `visit --result` reads it, writing nothing (`visit.judge`): one it would take
-is refused at `report`, exit 2, "run `visit --result` first" (re-check 1's R1S2-5). At `clean`, `exhausted` and `fixed`,
+is refused at `report`, exit 2, "run `visit --result` first" (re-check 1's R1S2-5). For a signoff-v2 visit launched
+in a fresh session (section 3.4) a result `visit --result` would take is one whose check reading holds and whose
+reviewing session is the recorded id: `report --reading FILE` holds the reading as `visit --result` does, so a reading
+that does not hold (or a reviewing session that is another, with or without `--reading`) ends the run
+`visit-unfinished`, and only a result that would be taken is refused (exit 2, "run `visit --result --reading FILE`
+first"); no refusal of `visit --result` leaves the run without a terminal status (A31 (2)). `--reading` at any other
+stage, or at a visit that was not launched, is exit 2. At `clean`, `exhausted` and `fixed`,
 `report` is a check point of THE WINDOW RULE (section 3.5): what moved since the last pin is held first; the doc moved
 (stop 2) or a path outside the footprint (stop 4) is the run's end, reported as such; a path inside it nothing names is
 refused, exit 5. Reads the slice's card from the doc as it stands (read twice; a doc that no
@@ -308,8 +357,8 @@ hand). One rule, stated once here and once in `scripts/ship_core/common.py` (`sa
 
 - **One routine.** Every write of the run's state (`ship.json`) and its checkpoint (`checkpoint.json`, the stage and
   the state's sha256) goes through `save`, and with them everything else the command writes into its run directory:
-  its trace lines, `pauses.json`, `laps.json`, `fixes.json`, `events.json`, a grant's receipt finished, `chat.md`,
-  `result.json`. A command stages what it writes and the one save at its end writes it all, so a command's run-directory
+  its trace lines, `pauses.json`, `laps.json`, `fixes.json`, `events.json`, a grant's receipt finished, the launched
+  signoff session's brief (section 3.4), `chat.md`, `result.json`. A command stages what it writes and the one save at its end writes it all, so a command's run-directory
   writes land together or not at all.
 - **The journal.** The save first writes `save.json` (replaced whole by one rename): for each file its name, the sha256
   of the bytes it holds now (or none), the bytes it will hold and their sha256, and the journal's own sha256. Then each
@@ -378,8 +427,15 @@ script's own run-directory write): this is a commit the executor makes. Stated o
 
 `references/input.schema.json`, closed. The shared fields (back-loop section 3) and `station`, each optional: `slice`
 (the slice the invocation names), `minor_fixes` (`words`: the owner's words ordering the slice's MINORs fixed),
-`extra_laps` (`count` and `words`: the laps beyond the extra lap the owner ordered, his words verbatim). The fixes, the
-questions, the answers and the hook reading arrive later, in their own files (`references/answer.schema.json`).
+`extra_laps` (`count` and `words`: the laps beyond the extra lap the owner ordered, his words verbatim),
+`signoff_depth` (E18 slice C: `depth`, whose one value is `DEEP`, and `words`, the owner's words verbatim, carried the
+way `minor_fixes` carries his; the launched signoff session's brief passes it to the child as his order, section 3.4).
+LIGHT never reaches the child through ship-v2: an inspection that scales down needs the owner's own typed word, so a
+`signoff_depth` of `LIGHT` or `LEAN` is refused at `check-input` (exit 4). With no order the brief names no depth and
+signoff-v2's own rules choose (LEAN, or DEEP on its content triggers). The fixes, the questions, the answers, the hook
+reading and the launched signoff session's check reading arrive later, in their own files
+(`references/answer.schema.json` for the first four; the check reading is the launch helper's own printout, section
+11).
 
 ## 5. Reading the build doc
 
@@ -548,6 +604,29 @@ armed): `helper-derived`, a reading of a harness record, never a fact the harnes
 hook this core can read. **The invocation facts**: each adapter's `invocation.py` (the back frame's). No manual-only
 control (owner pick P5): ship-v2 keeps its phrases and commands.
 
+**The signoff visit's fresh session** (E18 slice C; section 3.4). On Claude Code, `adapters/claude-code/launch.py`,
+given the run directory, finds the ship session's own transcript from the input's `invocation.session_id`, the way
+`invocation.py` finds a session's transcript (ruling E9-28), and reads from it the model id and the effort (the values
+`invocation.py` reports as `measurement.model_id` and `measurement.effort`); the input's `invocation` keeps its four
+keys and `back-loop.md` does not change. A transcript with no model, or a model below the Opus floor by
+`_common.floor_for`, prints no launch and exits 3, naming why. Otherwise it prints `launch`: the argv, the working
+directory (the workspace), the recorded session id and the standard-output file. The argv is a list, run with no shell:
+`claude`, `-p`, `--model`, `<model id>`, `--effort`, `<effort>`, `--permission-mode`, `auto`, `--session-id`,
+`<session id>`, `--settings`, `{"autoMemoryEnabled":false}` (that element exactly, with no shell quotes in it: a
+quoted element reads as a settings file path and the child dies at start), `--output-format`, `json`, and the prompt
+`Read <brief path> and follow it.` as one element. The effort is the transcript's last recorded one; `--effort` and its
+value are left out when the transcript records none or a value `claude --effort` does not take (`low`, `medium`,
+`high`, `xhigh`, `max`), so the child then runs at the harness default effort. The permission mode is `auto`: the child
+runs signoff-v2's own commands without an owner to answer a prompt. The memory setting keeps the workspace's
+auto-memory out of the child: the building session can write to that memory, and a child started without the setting
+loads it. The argv never carries `bypassPermissions`, `--dangerously-skip-permissions` or `--bare`. After the child
+ends, `launch.py --check` reads the child's transcript (the recorded session id's record, found the same way and bound
+to the workspace as its `cwd`) and prints the reading `visit --result --reading FILE` takes: it holds only when that
+record exists and its first prompt is exactly the launch's prompt. `helper-derived`, a reading of a harness record. The
+user-level `CLAUDE.md` and the files it loads reach the child as rules (they carry no builder text), and the harness's
+git-status block names files the packet lists anyway. Codex has no fresh session in this round (a `codex exec` child
+is not built): its signoff visit runs as before.
+
 ## 12. Stops and exits
 
 The exits are the back loop's: 0, 1, 2, 3, 4, 5, 10 (back-loop section 2). A stop is `status: stopped` with one tag:
@@ -583,7 +662,8 @@ key outside this repository.
 Run a station's phases (the one station command it runs is `skill-identity`); answer a question meant for the owner;
 turn a pause into a stop; take a third lap without the owner's words; write into the build doc, but the `Status:` line
 a grant's card move sets (section 6); write a card event but that grant's `card_set`, or any finding or disposition; run a git command that changes a branch, an index or a worktree (the save step's commit is the executor's, printed and never run, section 3.11); push, open a pull request or
-merge (`scripts/tests/test_static.py`); launch a harness or summon a reader; read a v1 skill's files.
+merge (`scripts/tests/test_static.py`); launch a harness or summon a reader (the signoff visit's fresh session is the adapter helper's printed launch, run
+by the ship session, section 11); read a v1 skill's files.
 
 ## 15. Interface
 
@@ -592,5 +672,6 @@ D`), `identity <workspace>`, `skill-identity`; `--help` on each, without `jsonsc
 syntax, standard library plus `jsonschema==4.25.1` through `uv run` (PEP 723) and the vendored CommonMark reader
 (section 5); git 2.50.1. Run-directory artifacts: `input.json`, `checkpoint.json`, `ship.json`, `trace.jsonl`,
 `visits/<seq>-<station>/` (each the station's own run), `laps.json`, `fixes.json`, `pauses.json`, `events.json`,
-`records-events.json` (an append's input), `receipt-<pause>.json` (a grant's transaction, section 6), `chat.md`,
-`result.json`; while a save is under way, its journal `save.json` and a `.<name>.ship-v2-tmp` (section 3.10). `ship.json` holds the window rule's pin (`pin`), ship-v2's own writes since it (`own`) and the verdict mirrors recorded as they stood (`mirrors`, section 3.11).
+`records-events.json` (an append's input), `receipt-<pause>.json` (a grant's transaction, section 6),
+`brief-<seq>-signoff-v2.md` (the launched signoff session's brief, section 3.4) and `child-<seq>-signoff-v2.json` (its
+standard output, written by the ship session's launch, never by a ship script), `chat.md`, `result.json`; while a save is under way, its journal `save.json` and a `.<name>.ship-v2-tmp` (section 3.10). `ship.json` holds the window rule's pin (`pin`), ship-v2's own writes since it (`own`) and the verdict mirrors recorded as they stood (`mirrors`, section 3.11).
