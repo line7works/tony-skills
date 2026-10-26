@@ -247,7 +247,8 @@ class OneChangedByte(unittest.TestCase):
     def test_the_installed_shape_is_skipped_never_passed(self):
         root = plugin_root()
         import shutil
-        lone = os.path.join(self.tmp, "cache", "market", core_of(root), "0.1.0")
+        version = testlib.load_json(os.path.join(root, ".claude-plugin", "plugin.json"))["version"]
+        lone = os.path.join(self.tmp, "cache", "market", core_of(root), version)
         shutil.copytree(root, lone, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         found, missing = differences(lone)
         self.assertEqual(found, [])

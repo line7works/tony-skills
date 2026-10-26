@@ -102,7 +102,8 @@ class Route3b(_Scratch):
     def setUp(self):
         _Scratch.setUp(self)
         self.market = os.path.join(self.tmp, "cache", "one-market")
-        installed = os.path.join(self.market, testlib.CORE, "0.1.0")
+        core_version = testlib.load_json(os.path.join(testlib.PLUGIN, ".claude-plugin", "plugin.json"))["version"]
+        installed = os.path.join(self.market, testlib.CORE, core_version)
         shutil.copytree(testlib.PLUGIN, installed,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "evals", "setups"))
         self.scripts = os.path.join(installed, "skills", testlib.CORE, "scripts")
