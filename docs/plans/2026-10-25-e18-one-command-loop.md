@@ -80,7 +80,7 @@ Not in this slice:
 
 ## Slice C — ship-v2 runs the signoff visit in a fresh session
 
-Status: not started
+Status: built
 
 Requirements:
 
@@ -199,11 +199,37 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
   - `test_packet.py`, `ROUND_9_STOPS` "slice B's heading with an en dash (C1A8-2)": 1 case. Old: the snapshot stops at the heading. New: `test_slice_bs_heading_with_a_spaced_en_dash_builds_the_snapshot`, the snapshot builds and its spec carries the heading.
 - Before photo at fa939e1, one suite at a time: vertical-v2 654 OK (skipped=2), ship-v2 443 OK (skipped=1), handoff-v2 416 OK (skipped=2), architect-v2 513 OK (skipped=3), blueprint-v2 462 OK (skipped=2), inspect-v2 515 OK, precon-v2 519 OK (skipped=3). After at 939e9e2: 664, 446, 416, 513, 462, 515 and 519, all OK with the same skips; the 10 added in vertical-v2 and 3 in ship-v2 are the new modules and the new-reading cases.
 
+2026-10-26, Slice C (build-v2 run build-e18-C-20261026-1):
+
+- The check reading is the helper's own printout, not an `answer.schema.json` kind (that file is outside the footprint): `{reading_version 1, kind launch_check, harness, session_id, prompt_sha256, holds, how, transcript}`, held by the core in code (`ship_core/fresh.py`) the way `hook` holds its reading. `visit --result` takes it as `--reading FILE`, the flag name `hook` uses; without it on a launched visit, exit 2 naming the helper's check command; `--reading` on any other visit or with `--station` is exit 2.
+- The session id is `uuid4`. With a test's fixed clock (`SHIP_V2_TEST_NOW` under `SHIP_V2_TEST=1`) it is a name-based UUID of the visit's run id, run directory and that instant, so the kill sweep's byte-for-byte comparison of a rerun after a kill still holds; each visit still gets its own id, and the new module checks both.
+- The brief is `brief-<seq>-signoff-v2.md` and the child's output `child-<seq>-signoff-v2.json`, both at the top of the ship run's directory (THE SAVE's journal takes plain names only), `<seq>` the visit's run directory number. The output file is the ship session's write, never a script's; `report` lists it as a run artifact when it is there, as it lists every top-level file.
+- The brief's fields are a `## The visit` bullet list in the order requirement 3 names (12 fields, plus `Depth: DEEP` when ordered); the owner's words sit verbatim between `<<<` and `>>>` marker lines, since they may span lines.
+- `signoff_depth` is `{depth, words}`, `depth` const `DEEP`; LIGHT, LEAN or a blank `words` is exit 4 at `check-input`.
+- The child's `subtype` and `result` ride in the result's `reason` (`result.schema.json` is closed and outside the footprint), as JSON strings after the existing words.
+- The refusal of a launched visit (reading, reviewing session) is held after the result and its window are read and before the window's stop is acted on, so a stop at that visit's close also needs a reading that holds.
+- `launch.py` finds the ship session's transcript as `invocation.py` does (`_common._transcript_hits`, `_bind_session`), not bound to the workspace; in `--check` mode the child's record is also bound to the workspace as its `cwd`, and a missing, ambiguous or foreign record prints `holds: false` (exit 0) rather than an exit 3. Its first prompt is the first typed user record of that session, read with `hook.typed_text`.
+- `launch.py` refuses (exit 1) an argv in which any element would carry a banned word; it is mode 644 like `hook.py`. The closed visit keeps its `launch` in `ship.json`'s `visits` row.
+- Existing tests and helpers changed only to plant what a real child leaves (requirement 13), each through `slib.plant_child`, which writes the visit's `input.json` with `invocation.sessions.reviewing`, a fixture child transcript under a fixture home, and the real helper's `--check` reading:
+  - `slib.py`: `plant_child`, `child_record`, `launch_of`, `LAUNCH` added; `visit()` passes the planted `--reading` (an empty list for any visit with no launch).
+  - `killlib.py`: `Case.signoff_runs` plants into `reading.json` beside the case; `visit_steps` adds `--reading` to signoff-v2's close.
+  - `test_check1_minors.py`, C2-8's `opened`: the signoff-v2 close plants.
+  - `test_pause.py`, the report-only run's signoff-v2 close: plants.
+  - `test_save_step.py`, `Loop.signoff` (also `test_unsaved_mirror`'s): plants.
+  - `test_terminal_class.py`, `Run.signoff`: plants.
+  - `test_window.py`, three direct signoff-v2 closes (a hand edit before its own write, its own writes with the verdict doc, a grant while the visit is open): plant.
+- Before photo at 6543274, one suite at a time: ship-v2 446 OK (skipped=1), claude-code adapter 45 OK, codex adapter 24 OK. After at 13555b1: 462 OK (skipped=1), 60 OK, 24 OK; the 16 and 15 added are the two new modules.
+
 ## Deviations
 
 2026-10-25, Slice A (run build-e18-A-20261025-1): none.
 
 2026-10-25, Slice B (build-v2 run build-e18-B-20261025-1): none.
+
+2026-10-26, Slice C (build-v2 run build-e18-C-20261026-1):
+
+- `report` takes `--reading FILE` at `visiting` for a launched visit: no requirement names it. Without it the new `visit --result` refusals (exit 5) would leave the run with no terminal status, since `report` at `visiting` refuses a result `visit --result` would take (R1S2-5) and cannot read the reading itself (the E15 lane contract A31 (2)). A reviewing session that is another ends the run `visit-unfinished` with or without it. · builder call
+- On a report-only run the brief carries one more field and section, `Report only`: requirement 3's list names none, and without it the child would run a writing signoff that `visit --result` refuses on a report-only run. A normal run's brief holds exactly the named fields. · builder call
 
 ## Discovered
 
@@ -221,6 +247,14 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
 - `## Slice A- x` (a dash with no space before it) stays refused by the plan reader while signoff-v2's ledger now reads it as slice `A-`: the split carried from Slice A, not changed here.
 - One full ship-v2 suite run takes about 29 minutes (1773 s before, 1751 s after); vertical-v2 about 19 minutes.
 - The build ran in a subagent sharing its parent's `CLAUDE_CODE_SESSION_ID`, as in Slice A: the input's `invocation.session_id` and the answer's `session_id` name the driving session.
+
+2026-10-26, Slice C (build-v2 run build-e18-C-20261026-1):
+
+- `evals/seeded-cases/lane_observe.py` (outside the footprint) drives its signoff-v2 visit on the Claude Code harness and closes it with no `--reading`, so the seeded families now observe exit 2 there (`visit-result-refused`). `test_seeded_cases.py` holds only that no step errors, so the suite stays green; the answer key outside the repository will differ. Not changed.
+- `adapters/README.md`, the adapter index (outside the footprint), still lists `invocation.py` and `hook.py` only for Claude Code; `profile.md` names `launch.py`.
+- `test_terminal_class.py` does not enumerate the new refusals (requirement 13 limits edits to existing tests); their way to a terminal status is held in `test_e18_fresh_signoff.py`.
+- The LIGHT and LEAN refusal case passed before the change too: the closed schema refused `signoff_depth` as an unknown key.
+- The build ran in a subagent sharing its parent's `CLAUDE_CODE_SESSION_ID`, as in Slices A and B. One full ship-v2 suite run took about 30 minutes (1781 s before, 1813 s after). No live `claude -p` child and no live `/ship-v2` run (C-29).
 
 ## Punch list
 
