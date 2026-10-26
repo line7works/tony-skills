@@ -98,10 +98,11 @@ class TheReaders(unittest.TestCase):
                     self.assertTrue(readings.slice_form(level, name % D), (name, level))
             self.assertFalse(readings.slice_form(4, name % D), name)
         self.assertTrue(readings.slice_form(3, "Slice B %s x" % D))
+        self.assertTrue(readings.slice_form(3, "Slice B - x"))     # E18: the hyphen form is refused at level 3 too
         self.assertTrue(readings.slice_form(1, "Slice B %s x" % D))
         self.assertFalse(readings.slice_form(2, "Slice B %s x" % D))
         for name in ("Notes on slice A %s what we learned", "Why slice B %s took longer", "Slice A notes",
-                     "Next: then: Slice B %s x", "Slice D · 2026-10-01", "Slices %s overview", "Slice B - x",
+                     "Next: then: Slice B %s x", "Slice D · 2026-10-01", "Slices %s overview",
                      "2 slices %s overview"):
             with self.subTest(name=name):
                 self.assertFalse(readings.slice_form(3, name.replace("%s", D)), name)

@@ -72,10 +72,12 @@ accept also stops `doc-unreadable`, naming the line, when the second reading fin
 (b) a heading of level 1 or 2 whose rendered name, with format characters (Unicode category Cf) removed, folded
     (THE FOLD, `fences.fold`, A16 (3), A17 (1): NFKD with the combining marks removed, NFKC, case folding) and its
     leading punctuation, symbols and spaces (Unicode categories P, S and Z) set aside (A17 (1), C1A10-1), starts with
-    `slice` and is not a level 2 heading whose rendered name matches the build-doc form's slice pattern (C1A8-2: an en
-    dash, a hyphen or a colon for the form's dash, no spaces around it, a lower-case `slice`, a zero-width character, a
-    level 1 heading; C1A10-1: an accented letter such as `Sl` U+00EF `ce`, a leading curly quote such as U+2018 before
-    `Slice`): no reading would take it as a slice, so its slice would vanish from the sign-off check. Also (A20,
+    `slice` and is not a level 2 heading whose rendered name matches the build-doc form's slice pattern, its dash one
+    or more em dashes, en dashes or hyphens with one space on each side (E18; C1A8-2 as E18 narrowed it: a colon for
+    the form's dash, a dash with no spaces around it or with no space on one side, a lower-case `slice`, a zero-width
+    character, a level 1 heading; C1A10-1: an accented letter such as `Sl` U+00EF `ce`, a leading curly quote such as
+    U+2018 before `Slice`): no reading would take it as a slice, so its slice would vanish from the sign-off check.
+    Also (A20,
     C1A12-1 and C1A12-2) a heading of level 1, 2 or 3 whose rendered name, format characters removed and folded, with
     its leading punctuation, symbols and spaces set aside, then any leading numbering of A18 (2)'s forms dropped
     (`spec.LEADING`, its marks read as spaces, again and again, and digits joined directly to the name included, so a
@@ -121,7 +123,7 @@ ORDER = ("unlisted", "unmapped", "slice-form", "label-heading", "slices", "card"
 SLICE = templates.BUILD["slice"]
 D = templates.D
 LABELS = (fences.STATUS_LABEL, fences.BASE_LABEL)
-FORM = re.compile(r"slice \S+ %s " % D)        # A20: the slice form `slice <name> <dash> `, read folded
+FORM = re.compile(r"slice \S+ %s " % templates.SLICE_DASH)   # A20, E18: `slice <name> <dash> `, read folded
 JOINED = re.compile(r"[0-9]+(?=[^\W\d_])")    # A20: digits joined directly to the name (a folded U+00B2 is `2`)
 LABEL_WORD = re.compile(r"[^\s:]+: *")          # A20: one word ending in a colon (`Next:`)
 SEPARATOR = "\\-\u2010-\u2015"                       # A21 (2): a hyphen or U+2010 to U+2015

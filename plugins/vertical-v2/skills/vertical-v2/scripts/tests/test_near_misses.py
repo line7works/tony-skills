@@ -78,9 +78,6 @@ LABEL_CONTROL = with_b(CODE_SPAN + ["", "Status: signed off"])
 
 # (2) C1A8-2: (what, doc, the heading's first line)
 SLICE_FORM_SHAPES = [
-    ("an en dash", with_b(["Status: built"], heading="## Slice B %s the spinner" % EN_DASH),
-     "## Slice B %s the spinner" % EN_DASH),
-    ("a hyphen", with_b(["Status: built"], heading="## Slice B - the spinner"), "## Slice B - the spinner"),
     ("a colon", with_b(["Status: built"], heading="## Slice B: the spinner"), "## Slice B: the spinner"),
     ("no spaces around the dash", with_b(["Status: built"], heading="## Slice B%sthe spinner" % D),
      "## Slice B%sthe spinner" % D),
@@ -90,6 +87,12 @@ SLICE_FORM_SHAPES = [
      "# Slice B %s the spinner" % D),
     ("a Setext heading with an en dash", with_b([], heading="Slice B %s the spinner\n---" % EN_DASH),
      "Slice B %s the spinner" % EN_DASH),
+]
+# E18 (slice B) reverses C1A8-2 for the spaced en dash and the spaced hyphen: each now reads as slice B, with its
+# card: (what, doc)
+SPACED_DASH_SHAPES = [
+    ("an en dash", with_b(["Status: signed off"], heading="## Slice B %s the spinner" % EN_DASH)),
+    ("a hyphen", with_b(["Status: signed off"], heading="## Slice B - the spinner")),
 ]
 # a level 3 note inside slice B is not touched: it runs
 LEVEL_3_NOTE = with_b(["", "### Slice D %s 2026-10-01" % M, "a note on the day.", "", "Status: signed off"])
@@ -184,6 +187,16 @@ class TheReadings(unittest.TestCase):
                 self.assertEqual([p for p in fences.read(text).problems if p[1] != fences.STRAY], [], what)
                 self.assert_stops(what, text, first, "slice")
 
+    def test_a_spaced_en_dash_or_hyphen_reads_as_slice_b_in_every_reader(self):
+        """E18: the two shapes C1A8-2 refused before the slice-heading dash widened."""
+        for what, text in SPACED_DASH_SHAPES:
+            with self.subTest(shape=what):
+                self.assertEqual(fences.read(text).problems, [], what)
+                self.assertEqual([(s["name"], s["status"]) for s in gatemod.slices_of(text)],
+                                 [("A", "signed off"), ("B", "signed off")], what)
+                self.assertIsNone(readings().difference(text), what)
+                spec.clean(text)
+
     def test_a_level_3_slice_note_is_not_touched(self):
         self.assertEqual([(s["name"], s["status"]) for s in gatemod.slices_of(LEVEL_3_NOTE)],
                          [("A", "signed off"), ("B", "signed off")])
@@ -264,6 +277,15 @@ class TheGate(unittest.TestCase):
     def test_every_slice_form_near_miss_stops_the_gate(self):
         self.stops(SLICE_FORM_SHAPES)
 
+    def test_a_spaced_en_dash_or_hyphen_passes_the_gate(self):
+        """E18: the two shapes C1A8-2 refused before the slice-heading dash widened."""
+        for what, doc in SPACED_DASH_SHAPES:
+            for records in (False, True):
+                with self.subTest(shape=what, records=records):
+                    code, out, err, run_dir = self.gate(doc, records)
+                    self.assertEqual(code, 0, (what, out, err))
+                    self.assertEqual(out["next"], "ask", what)
+
     def test_every_heading_named_like_a_label_stops_the_gate(self):
         self.stops(LABEL_HEADING_SHAPES)
 
@@ -337,8 +359,8 @@ class TheScope(unittest.TestCase):
         for index, (what, doc, first) in enumerate((LABEL_SHAPES[0], LABEL_SHAPES[5], SLICE_FORM_SHAPES[0],
                                                      LABEL_HEADING_SHAPES[0])):
             with self.subTest(shape=what):
-                # records off: the frozen records importer reads some of these shapes from the commit (the en-dash
-                # slice B as `built`), which would stop the gate `card-disagrees` against the plain working-tree doc
+                # records off: the frozen records importer reads some of these shapes from the commit (slice B as
+                # `built`), which would stop the gate `card-disagrees` against the plain working-tree doc
                 ws, info = vlib.make_repo(self.tmp, doc_text=doc, records=False, name="ws-%d" % index)
                 testlib.write_text(os.path.join(ws, vlib.DOC), vlib.build_doc())
                 drive, run_dir = vlib.start(self.tmp, ws, run="run-%d" % index,
