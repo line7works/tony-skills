@@ -18,7 +18,14 @@ inside it nothing names is refused, exit 5). At `fixed`, when the window holds, 
 existing tag `recheck-stopped`, its reason naming each unsaved file and why the step was not taken, in the save step
 refusal's own words (`mirror.not_taken`); no new stop word, and recheck-v2 is not visited. At `visiting` the station's result is read as `visit --result` reads
 it, writing nothing (`visit.judge`): one it would take is refused here (exit 2: run `visit --result` first); one it
-would refuse, or none, ends the run `visit-unfinished`, saying which (slice 2 re-check 1's R1S2-5). It reads the slice's card from the doc as it stands (read
+would refuse, or none, ends the run `visit-unfinished`, saying which (slice 2 re-check 1's R1S2-5). For a signoff-v2
+visit launched in a fresh session (E18 slice C, `fresh.py`) a result `visit --result` would take is one whose check
+reading holds and whose reviewing session is the recorded id: with no `--reading` and that session the recorded one,
+`report` refuses (exit 2: run `visit --result --reading FILE` first); given the reading, `report --reading FILE` holds
+it as `visit --result` does and refuses (exit 2) only when both hold, so a reading that does not hold ends the run
+`visit-unfinished` and no refusal of `visit --result` leaves the run without a terminal status. A launched visit's
+`visit-unfinished` reason also carries the child's `subtype` and `result` from its standard-output file when that file
+holds them. `--reading` anywhere else is a usage slip. It reads the slice's card from the doc as it stands (read
 twice, CR-27), the findings the records hold open (the `Remains` lines; a report-only run's planned grants are not
 in the records), the fixes this run recorded (the `Fixed` lines) and the trace, renders the `SHIP:` block
 (`forms.render`) into `chat.md`, assembles `result.json`, validates it against `references/result.schema.json` and
@@ -31,7 +38,7 @@ import os
 from station_core import driver, fsio, records_link, validate
 from back_core import trace
 
-from . import common, doc as docmod, forms, mirror, record, window
+from . import common, doc as docmod, forms, fresh, mirror, record, window
 
 CONDITION_TAGS = {1: "extra-lap-exhausted", 2: "spec-change", 3: "build-not-complete", 4: "outside-footprint"}
 
@@ -161,7 +168,7 @@ def check(ctx, result):
                             % "; ".join("%s %s" % (e.get("path"), e.get("message")) for e in (errors or semantic)[:4]))
 
 
-def _unfinished(run, state, prefix):
+def _unfinished(run, state, prefix, reading=None):
     """`report` at `visiting` (slice 2 check 1's C2-6, re-check 1's R1S2-5): the station ended without a result
     `visit --result` takes, so the run ends `visit-unfinished`, the visit's opening trace line left as the record that
     it was handed over; a result standing that `visit --result` would take is refused here, exit 2."""
@@ -169,21 +176,34 @@ def _unfinished(run, state, prefix):
     visit = state.get("visit") or {}
     name = visit.get("station") or "the station"
     verdict, detail = visitmod.judge(run, state, prefix)
-    if verdict == "take":
+    launched = fresh.launched(visit)
+    if reading is not None and not launched:
+        raise driver.Usage("--reading is taken by `report` only at a signoff-v2 visit launched in a fresh session "
+                           "(Claude Code); this visit to %s was not launched" % name)
+    problems = fresh.problems(run, visit, reading) if launched and verdict == "take" else []
+    if verdict == "take" and not problems:
+        if launched:
+            raise driver.Usage("%s's result in %s stands%s: run `visit --result --reading FILE` first, with the launch "
+                               "helper's check reading; when that reading does not hold, `report --reading FILE` ends "
+                               "the run `visit-unfinished`" % (name, visit.get("run_dir"), (
+                                   " and the check reading holds" if reading is not None else "")))
         raise driver.Usage("%s's result in %s stands and `visit --result` takes it: run `visit --result` first (the "
                            "run ends `visit-unfinished` only when the station left no result this run can take)"
                            % (name, visit.get("run_dir")))
-    if verdict == "missing":
+    if verdict == "take":
+        why = "`visit --result` refuses the launched session's result: %s" % "; ".join(problems)
+    elif verdict == "missing":
         why = "it left no result in %s" % (visit.get("run_dir") or "its run directory")
     elif verdict == "refuse":
         why = "`visit --result` refuses the result it left: %s" % detail
     else:
         why = "`visit --result` refuses the station at its result: %s" % detail[3]
+    said = fresh.child_said(run, visit)
     state = dict(state, visit=None)
     state["ending"] = {"status": "stopped", "tag": "visit-unfinished", "condition": None, "by": name,
                        "reason": "the visit to %s ended without a result this run can take: %s (no result holds, so "
                                  "the run ends here; the trace's opening line for the visit is the record that it "
-                                 "was handed over)" % (name, why)}
+                                 "was handed over)%s" % (name, why, "; %s" % said if said else "")}
     return state
 
 
@@ -203,6 +223,9 @@ def handler(ctx, args):
                            "excepted")
     state = common.state(run)
     stage = run.checkpoint["phase"]
+    if args.reading is not None and stage != "visiting":
+        raise driver.Usage("--reading is taken by `report` only at stage 'visiting', for a signoff-v2 visit launched "
+                           "in a fresh session; this run is at stage %r" % stage)
     if stage == "fixed":
         not_taken = mirror.not_taken(run, state)        # THE SAVE STEP not taken (A31 (1)), or out of turn
         if not_taken is None:
@@ -218,7 +241,7 @@ def handler(ctx, args):
                             "by": "recheck-v2"})
         stage = "ending"
     if stage == "visiting":
-        state = _unfinished(run, state, ctx.prefix)
+        state = _unfinished(run, state, ctx.prefix, args.reading)
         stage = "ending"
     if stage in ("clean", "exhausted"):
         held = window.hold(run, state, "after the last station's result and before the report")

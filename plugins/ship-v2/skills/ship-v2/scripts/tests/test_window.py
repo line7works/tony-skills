@@ -237,7 +237,8 @@ class TheWindowRule(unittest.TestCase):
         cr25lib.card(run.tmp, run.ws, "signoff-v2", "built", "signed off with conditions", "signoff-run")
         slib.put_result(visit, slib.station_result("signoff-v2", "findings", visit, run.ws,
                                                    doc_move=(before, slib.sha(os.path.join(run.ws, slib.DOC)))))
-        self.stopped(run, run.drive(["visit", "--run-dir", run.run_dir, "--result"]), "doc")
+        self.stopped(run, run.drive(["visit", "--run-dir", run.run_dir, "--result"]
+                                    + slib.plant_child(run.drive.script, run.tmp, run.run_dir)), "doc")
 
     def test_signoff_visit_a_doc_write_its_result_does_not_list_is_stop_2(self):
         run = self.run_("snolist")
@@ -282,7 +283,8 @@ class TheWindowRule(unittest.TestCase):
             slib.put_result(visit, result)
             if edited:
                 testlib.write_text(verdict, "# Verdict\n\nsigned off, said a hand\n")
-            res = run.drive(["visit", "--run-dir", run.run_dir, "--result"])
+            res = run.drive(["visit", "--run-dir", run.run_dir, "--result"]
+                            + slib.plant_child(run.drive.script, run.tmp, run.run_dir))
             if edited:
                 self.stopped(run, res, "outside")
             else:
@@ -456,7 +458,8 @@ class TheWindowRule(unittest.TestCase):
         slib.put_result(visit, slib.station_result("signoff-v2", "findings", visit, run.ws, doc_move=(before, after)))
         run.grant("waive", run.findings[0], "Waive it while the review closes")
         self.assertNotEqual(slib.sha(os.path.join(run.ws, slib.DOC)), after, "ship-v2 moved the line")
-        code, out, err = run.drive(["visit", "--run-dir", run.run_dir, "--result"])
+        code, out, err = run.drive(["visit", "--run-dir", run.run_dir, "--result"]
+                                   + slib.plant_child(run.drive.script, run.tmp, run.run_dir))
         self.assertEqual(code, 0, (out, err))
         self.assertNotIn("stop_tag", out, out)
 

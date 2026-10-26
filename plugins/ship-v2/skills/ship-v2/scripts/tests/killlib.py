@@ -190,6 +190,7 @@ class Case(object):
         cr25lib.card(self.dir, self.ws, "signoff-v2", "built", "signed off with conditions", "signoff-run")
         slib.put_result(visit, slib.station_result("signoff-v2", "findings", visit, self.ws,
                                                    doc_move=(before, self.doc_sha())))
+        slib.plant_child(self.drive.script, self.dir, self.run_dir, reading=self.path("reading.json"))
 
     def recheck_runs(self, which, fixed=None, card=None, run_id="recheck-run"):
         visit, before = self.visit_out(), self.doc_sha()
@@ -208,10 +209,13 @@ class Case(object):
 
 
 def visit_steps(case, station, runs):
+    """A visit's three steps; the signoff-v2 visit, launched on Claude Code, closes with the check reading its `runs`
+    plants (`slib.plant_child`)."""
     run = case.run_dir
+    reading = ["--reading", case.path("reading.json")] if station == "signoff-v2" else []
     return [Ship("visit --station %s" % station, ["visit", "--run-dir", run, "--station", station]),
             Do("%s runs" % station, runs),
-            Ship("visit --result (%s)" % station, ["visit", "--run-dir", run, "--result"])]
+            Ship("visit --result (%s)" % station, ["visit", "--run-dir", run, "--result"] + reading)]
 
 
 def through_signoff(case):

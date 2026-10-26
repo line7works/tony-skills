@@ -9,12 +9,12 @@
     uv run ship.py select --run-dir D [--doc PATH | --name NAME] [--slice NAME]
     uv run ship.py hook --run-dir D --reading FILE
     uv run ship.py visit --run-dir D --station NAME
-    uv run ship.py visit --run-dir D --result
+    uv run ship.py visit --run-dir D --result [--reading FILE]
     uv run ship.py fix --run-dir D --fixes FILE
     uv run ship.py lap --run-dir D
     uv run ship.py pause --run-dir D --question FILE
     uv run ship.py pause --run-dir D --answer FILE
-    uv run ship.py report --run-dir D --bottom-line TEXT [--skill-note TEXT]
+    uv run ship.py report --run-dir D --bottom-line TEXT [--skill-note TEXT] [--reading FILE]
     uv run ship.py identity <workspace>
     uv run ship.py skill-identity
 
@@ -55,7 +55,10 @@ def _phases():
          "arguments": [{"flags": ["--station"], "metavar": "NAME", "default": None,
                         "help": "the next station in the loop's order: build-v2, signoff-v2 or recheck-v2"},
                        {"flags": ["--result"], "action": "store_true", "default": False,
-                        "help": "read the visited station's result.json from the visit's run directory"}],
+                        "help": "read the visited station's result.json from the visit's run directory"},
+                       {"flags": ["--reading"], "metavar": "FILE", "default": None,
+                        "help": "with --result, for a signoff-v2 visit launched in a fresh session (Claude Code): "
+                                "the launch helper's check reading (adapters/claude-code/launch.py --check)"}],
          "handler": visit.handler},
         {"name": "fix", "help": "record the lap's fixes against the named findings, held to the slice's footprint",
          "arguments": [{"flags": ["--fixes"], "metavar": "FILE", "required": True,
@@ -73,7 +76,10 @@ def _phases():
          "arguments": [{"flags": ["--bottom-line"], "metavar": "TEXT", "default": None,
                         "help": "two or three sentences on one line: what shipped, its state, what to do next"},
                        {"flags": ["--skill-note"], "metavar": "TEXT", "default": None,
-                        "help": "only when a rule was worked around, reinterpreted or excepted"}],
+                        "help": "only when a rule was worked around, reinterpreted or excepted"},
+                       {"flags": ["--reading"], "metavar": "FILE", "default": None,
+                        "help": "at a launched signoff-v2 visit only: the launch helper's check reading; one that does "
+                                "not hold ends the run visit-unfinished"}],
          "handler": report.handler},
     ]
 

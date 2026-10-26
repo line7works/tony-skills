@@ -170,7 +170,7 @@ class Run(object):
                                      "after_sha256": slib.sha(self.path(MIRROR)), "state": "done"})
             testlib.write_json(result["receipt"], receipt)
         slib.put_result(out, result)
-        return self.cmd("visit --result")
+        return self.cmd("visit --result", *slib.plant_child(self.drive.script, self.tmp, self.run_dir))
 
     def to_fixing(self):
         self.to_built()

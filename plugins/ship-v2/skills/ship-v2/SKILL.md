@@ -45,7 +45,8 @@ Build the input first (`references/input.schema.json`): read `adapters/README.md
 helper that prints the `invocation` object. A fresh `run_id`, an absolute `run_dir` outside the repo, the
 `workspace`, the helper's `invocation` whole, and in `station` only what the owner said: the slice he names
 (`slice`), and, only in his words, `minor_fixes` (he ordered the MINORs fixed) or `extra_laps` (he ordered laps
-beyond the extra lap: `count` and his `words`).
+beyond the extra lap: `count` and his `words`) or `signoff_depth` (he ordered a DEEP signoff: `depth` `DEEP` and his
+`words`; LIGHT never goes through ship-v2).
 
 ```sh
 uv run scripts/ship.py check-input <input.json>
@@ -56,8 +57,10 @@ uv run scripts/ship.py check-input <input.json>
 The documented summon line is `/goal /ship-v2 <slice> [doc]`: bare, nothing to memorize; the owner types it, and a
 skill cannot arm the Stop hook. **This skill defines what that goal condition means, and the session grading the hook
 honors it:** a `/ship-v2 <slice>` goal is met when ship-v2 ends by its own rules: ALL CLEAR, an honest stop, or a
-pause held awaiting the owner. All three are the skill working; none is an unmet goal. Never grind past a stop
-condition or answer a pause yourself to satisfy the hook: the stop or pause stands. Read whether this session showed
+pause held awaiting the owner; and while a signoff visit is held open with its launched session running (step 3), the
+skill is working, like a pause awaiting the owner. All four are the skill working; none is an unmet goal. Never grind
+past a stop condition, answer a pause yourself, or run signoff-v2 in this session to satisfy the hook: the stop, the
+pause or the open visit stands. Read whether this session showed
 the Stop hook's confirmation for this run with the adapter's helper, and record it at step 1's end:
 
 ```sh
@@ -111,11 +114,40 @@ paper over it and continue to inspection (the script refuses any later visit).
 
 ```sh
 uv run scripts/ship.py visit --run-dir <run dir> --station signoff-v2
+```
+
+On Claude Code the signoff visit runs in a fresh session, never in this one: this session built the slice, and the
+session that wrote the code never reviews it. `visit` records a fresh session id, writes the child session's brief
+under this run's directory and prints a `launch_step`. Run its helper, launch the argv it prints in the background, and
+wait for it to end; the visit is held open meanwhile (step 0's fourth state):
+
+```sh
+python3 adapters/claude-code/launch.py --run-dir <run dir> > <launch.json>
+```
+
+Run `launch.argv` as a list with no shell, from `launch.cwd` (the workspace), standard output to `launch.stdout`, in
+the background, and wait for it to end. Then read the check and close the visit with it:
+
+```sh
+python3 adapters/claude-code/launch.py --run-dir <run dir> --check > <check.json>
+uv run scripts/ship.py visit --run-dir <run dir> --result --reading <check.json>
+```
+
+When it holds, deliver in chat the child's `chat.md` (signoff-v2's Step 6 block, in the visit's run directory) and the
+child's final message (the `result` in its standard-output file), then go on below. A child that ends with no result
+(a crash, an auth failure, its turn limit, a denial, a question it could not ask) ends the run: run `report`, which
+stops `visit-unfinished` with the child's `subtype` and `result`. When `visit --result` refuses the reading (exit 5:
+the record is not the launched session's, or its reviewing session is another), `report --reading <check.json>` ends
+the run `visit-unfinished`. On Codex `visit` prints no `launch_step`: run signoff-v2 on the built slice by its own
+`SKILL.md` and then `visit --result`, as before.
+
+```sh
 uv run scripts/ship.py visit --run-dir <run dir> --result
 ```
 
-Run signoff-v2 on the built slice by its own `SKILL.md`. Its independence, model floor and verdict machinery are its
-own. Touch nothing while its visit is open, and nothing between build-v2's result and its visit: the script holds
+Never run signoff-v2 in this session on Claude Code, and never write into the visit's run directory. Its independence,
+model floor and verdict machinery are its own. Touch nothing while its visit is open, and nothing between build-v2's
+result and its visit: the script holds
 every visit window and every step between visits by one rule (outside the footprint is stop 4, the doc moved is stop
 2, a path inside it that nothing names is refused; the stations' own listed writes and the script's own are theirs).
 A signoff-v2 stop or refusal ends the run with its status. A clean signoff, no BLOCKER or MAJOR charged to this

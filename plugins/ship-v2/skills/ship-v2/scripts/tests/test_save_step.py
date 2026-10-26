@@ -86,7 +86,8 @@ class Loop(unittest.TestCase):
                                  "after_sha256": slib.sha(self.path(MIRROR)), "state": "done"})
         testlib.write_json(result["receipt"], receipt)
         slib.put_result(out, result)
-        return self.drive(["visit", "--run-dir", self.run_dir, "--result"])
+        return self.drive(["visit", "--run-dir", self.run_dir, "--result"]
+                          + slib.plant_child(self.drive.script, self.tmp, self.run_dir))
 
     def fix(self, lap):
         self.write("src/turnstile.py", FIXED % (lap + 1))
