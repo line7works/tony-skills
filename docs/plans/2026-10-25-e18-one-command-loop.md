@@ -16,7 +16,7 @@ Constraints:
 
 ## Slice A — signoff-v2 reads any slice-heading dash
 
-Status: signed off with conditions
+Status: signed off
 
 Requirements:
 
@@ -208,3 +208,7 @@ On the owner's "PR" and "merge": reinstall every bumped plugin, verify each inst
 - MINOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:110 · (The slice_heading_index docstring still describes the heading as `## Slice <X>` followed by an em dash only, which no longer matches what is read; the module docstring was updated but this one was not.) · A maintainer reading the function believes hyphen and en dash headings are not read. · A
 - MINOR · plugins/signoff-v2/skills/signoff-v2/scripts/tests/test_e18_heading_dashes.py:85 · (The name-equality test compares raw group(1) on both sides, not the name each side matches on (the ledger's rstrip(':') against the component's strip()), and EVERY_HEADING holds no colon heading, so the module cannot catch the colon divergence.) · The colon divergence in the first MAJOR passes test_every_heading_names_the_records_component_slice green. · A
 - MINOR · plugins/signoff-v2/skills/signoff-v2/scripts/tests/test_e18_heading_dashes.py:114 · (DocstringNamesTheSeparators only checks that the words 'em dashes', 'en dashes' and 'hyphens' appear in the card bullet, so a docstring that names them with the opposite meaning stays green.) · An edit to 'no longer reads em dashes, en dashes or hyphens' passes the test. · A
+
+### 2026-10-25 — recheck: Slice A
+- MAJOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:113 · (Requirement 2 is unmet for a colon heading: slice_heading_index matches group(1).rstrip(':') while the records component names the slice group(1).strip() with no colon strip (legacy.py:219), so `## Slice A:` is slice A to signoff-v2 and slice A: to the records component. Requirement 3 (a heading with no separator reads as today) pulls the other way, so the spec conflicts with itself for this shape.) · fixed · executed probe.py: for '## Slice A:' and '## Slice A: - x' legacy names 'A:' and ledger.card_of(t,'A:')=('built',4) while card_of(t,'A')=(None,None); set_card('A:') moves the card legacy reads; now at plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:142
+- MAJOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:111 · (The widened SLICE_HEADING and RECORD_HEADING patterns now match hyphen and en dash headings inside fenced code blocks, which the records component skips (FENCE_RE, legacy.py:194-205). slice_heading_index, card_of, set_card and ledger_home have no fence awareness, so a fenced example heading placed before the real one now wins. The base ledger read only the em dash and ignored such a fenced example.) · fixed · executed probe.py: fenced '## Slice A - example' plus 'Status: not started' above the real em dash slice: card_of returns ('built',10) matching legacy status_line 10 and set_card leaves the fence untouched; now at plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:51
