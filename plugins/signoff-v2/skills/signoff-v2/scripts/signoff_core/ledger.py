@@ -8,7 +8,14 @@ is the placement Appendix A fixes and the component does not do:
   section when none exist yet (created then); when records sit in more than one place, the place
   whose tail comes last in the file, so a record this run appends is the last record in file
   order and never dead under the open filter. One home per doc. Appends land at the home's tail.
-- **The card.** One `Status:` line per slice, under the slice's `## Slice <X> —` heading.
+- **The card.** One `Status:` line per slice, under the slice's `## Slice <X>` heading, whose
+  separator, when it has one, is one or more em dashes, en dashes or hyphens (so `--` too):
+  the records component's own slice and record heading patterns, so the slice this station
+  names is the slice the component names. The name is the heading's slice field stripped, as the
+  component names it, so `## Slice A:` is slice `A:`.
+- **Fences.** A line inside a fenced code block is quoted text: no heading and no `Status:` line
+  there is read, as the component reads it. A fence opens on three or more backticks or tildes
+  and closes only on a marker of the same character.
 - **The verdict doc.** `docs/reviews/<YYYY-MM-DD>-signoff-<feature>-<slice>.md`, where `<feature>`
   is the build doc's topic (`docs/plans/<YYYY-MM-DD>-<topic>.md`, else the filename minus
   `-build-plan.md`) and `<slice>` is the slice's letter or name lower-cased with spaces as
@@ -24,10 +31,11 @@ import re
 
 from . import canon
 
-RECORD_HEADING = re.compile(r"^###\s+(\d{4}-\d{2}-\d{2})\s+—\s+(review|recheck):\s*(.+?)\s*$")
+RECORD_HEADING = re.compile(r"^###\s+(\d{4}-\d{2}-\d{2})\s+[\u2014\u2013-]+\s+(review|recheck):\s*(.*?)\s*$")
 SECTION = re.compile(r"^##\s+(.*?)\s*$")
-SLICE_HEADING = re.compile(r"^##\s+Slice\s+(\S+?)\s*(?:—.*)?$")
+SLICE_HEADING = re.compile(r"^##\s+Slice\s+(.+?)(?:\s+[\u2014\u2013-]+\s*(.*?))?\s*$")
 STATUS = re.compile(r"^Status:\s*(.*?)\s*$")
+FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 PUNCH_LIST = "Punch list"
 PLAN_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}-(?P<topic>.+)$")
 
@@ -40,10 +48,31 @@ def lines_of(text):
     return text.split("\n")
 
 
+def unfenced(lines):
+    """[bool] per line: True when the line is read, False for a fence marker or a line inside a
+    fence. A fence closes only on a marker of the same character, as the records component's
+    `parse_document` reads it."""
+    out = []
+    in_fence, marker = False, None
+    for line in lines:
+        match = FENCE.match(line)
+        if match:
+            char = match.group(1)[0]
+            if not in_fence:
+                in_fence, marker = True, char
+            elif char == marker:
+                in_fence, marker = False, None
+            out.append(False)
+            continue
+        out.append(not in_fence)
+    return out
+
+
 def section_bounds(lines):
     """[(title, start index of the heading, end index exclusive)] for every `## ` section."""
+    read = unfenced(lines)
     marks = [(index, SECTION.match(line).group(1))
-             for index, line in enumerate(lines) if SECTION.match(line)]
+             for index, line in enumerate(lines) if read[index] and SECTION.match(line)]
     out = []
     for position, (index, title) in enumerate(marks):
         end = marks[position + 1][0] if position + 1 < len(marks) else len(lines)
@@ -60,9 +89,10 @@ def ledger_home(text):
     """
     lines = lines_of(text)
     sections = section_bounds(lines)
+    read = unfenced(lines)
     last_record = None
     for index, line in enumerate(lines):
-        if RECORD_HEADING.match(line):
+        if read[index] and RECORD_HEADING.match(line):
             last_record = index
     if last_record is not None:
         for title, start, end in sections:
@@ -105,9 +135,11 @@ def append_at_home(text, block):
 
 def slice_heading_index(text, slice_name):
     """The index of the `## Slice <X> —` heading for this slice, or None."""
-    for index, line in enumerate(lines_of(text)):
-        match = SLICE_HEADING.match(line)
-        if match and match.group(1).rstrip(":") == slice_name:
+    lines = lines_of(text)
+    read = unfenced(lines)
+    for index, line in enumerate(lines):
+        match = SLICE_HEADING.match(line) if read[index] else None
+        if match and match.group(1).strip() == slice_name:
             return index
     return None
 
@@ -118,7 +150,10 @@ def card_of(text, slice_name):
     start = slice_heading_index(text, slice_name)
     if start is None:
         return None, None
+    read = unfenced(lines)
     for index in range(start + 1, len(lines)):
+        if not read[index]:
+            continue
         if SECTION.match(lines[index]):
             break
         match = STATUS.match(lines[index])

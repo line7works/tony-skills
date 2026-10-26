@@ -1,0 +1,214 @@
+# E18 round 1: the one-command loop (build plan, 2026-10-25)
+
+Intent: one `/ship-v2 <slice>` should run build, signoff, fix and recheck to the end, honestly independent, with no second window. Today it cannot. ship-v2 builds in its own session, then signoff-v2 refuses because the reviewing session is the building session (canary finding C-6), so every slice needs a builder, a separate window for signoff and often another for recheck. And two stations read only an em dash in a slice heading (C-1 for ship-v2 and the reader it shares, C-23 for signoff-v2's ledger), so every plan so far has needed the owner's "em dash ok" exception. This plan fixes those three, and nothing else.
+
+Source: E17's carried findings C-6, C-1 and C-23 (the E17 close report, group 1, and the control room's notes). The owner picked this round ("One command loop") and gave the go for this plan ("go em dash ok", 2026-10-25). Revised the same day after the Board's plan check (B1, B2, M1 to M6, m1 to m7) on the owner's "yes to all, go revise the plan", which also ruled: ship-v2 starts signoff-v2 in a fresh session on the owner's `/ship-v2`; that session runs in `auto` permission mode; a hyphen or en dash slice heading becomes valid; a DEEP order reaches the signoff session through ship-v2's input, LIGHT never does.
+
+Constraints:
+
+- The repo is public: no secrets, personal paths, mail addresses, key-shaped strings or em dashes in any file. One exception: this plan's four slice headings use an em dash, because the installed ship-v2 and signoff-v2 read no other (the owner: "go em dash ok"). New code and text add none: where a pattern must name the em dash, it uses the Python escape for U+2014, as the stations already do.
+- signoff-v2's independence rule does not change (AGENTS.md invariants): the session that wrote the code never reviews it, reviewers are always fresh, and they never receive the author's rationale. Slice C moves the signoff visit into a fresh session; it does not relax the rule.
+- Never rewrite stored history: earlier verdict docs, records, run directories, plans, `RESULTS.md` files and setups records stay as they are.
+- A file several stations carry byte for byte stays byte for byte equal across every copy after each slice. `back-files.txt` says a builder who needs a copied file changed stops and asks, because the change reaches the four E14 cores that ruling E15-2 froze: this round changes `station_core/templates.py` in every copy (Slice B) on the owner's go ("yes to all", 2026-10-25), so build-v2 does not stop on it. No other listed file changes.
+- Each check is one line, `<name>: <command>`, the command run from the repository root and reported under exactly that text (build-v2 matches it). The name holds no colon.
+- Run the suites one at a time, never side by side (C-25).
+- No push, no PR, no merge: the owner's word only.
+
+## Slice A — signoff-v2 reads any slice-heading dash
+
+Status: signed off
+
+Requirements:
+
+- signoff-v2's ledger (`plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:27` `RECORD_HEADING` and `:29` `SLICE_HEADING`) reads slice and record headings by the records component's own patterns (`plugins/records/scripts/records_core/legacy.py:40-41`): a separator of one or more em dashes, en dashes or hyphens, so `--` too.
+- For any heading, the slice name signoff-v2 reads equals the name the records component reads for it, so the card signoff-v2 sets and the records it appends name the same slice. Two names change with this, both deliberately: a heading whose em dash has no spaces around it (`## Slice A`, the dash, then `x`) now reads the whole run as the name (today `A`), and a multi-word name such as `## Slice A notes` now reads (today none). No real plan holds either shape.
+- A heading with no separator still reads as today (`## Slice A` names slice `A`).
+- What signoff-v2 writes does not change: the record block is still the records component's `render` bytes.
+- The module docstring's card line (`ledger.py:11`, the `Status:` line under the slice's heading, which it shows with an em dash) names the separators read.
+
+Checks:
+
+- the new module test_e18_heading_dashes is red before the change and green after (card_of and set_card find slice A under an em dash, en dash, hyphen and double hyphen heading; a record heading with each separator is found; for each heading in the module, those four and the two changed names, the slice name equals the records component's; a bare `## Slice A` reads as before): uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/signoff-v2/skills/signoff-v2/scripts/tests -t plugins/signoff-v2/skills/signoff-v2/scripts/tests -p test_e18_heading_dashes.py
+- the full signoff-v2 core suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/signoff-v2/skills/signoff-v2/scripts/tests -t plugins/signoff-v2/skills/signoff-v2/scripts/tests -p 'test_*.py'
+
+Footprint: plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py, plugins/signoff-v2/skills/signoff-v2/scripts/tests/test_e18_heading_dashes.py
+
+Not in this slice:
+
+- C-1 (Slice B)
+- what signoff-v2 or the records component write (C-17, C-31)
+- the version number (Slice D)
+
+## Slice B — the shared plan reader takes any slice-heading dash
+
+Status: not started
+
+Requirements:
+
+- The build-doc form's slice heading (`templates.BUILD["slice"]` in `station_core/templates.py:175`) reads `## Slice <name> <dash> <short>` where `<dash>` is one or more em dashes, en dashes or hyphens (so `--` too, as the records component, build-v2 and recheck-v2 read it), with one space on each side.
+- The second reading's slice form (`FORM` in `readings.py:124`) takes the same dashes.
+- This reverses vertical-v2's ruling C1A8-2 for the spaced en dash, the spaced hyphen and the spaced double hyphen only: they now read as exact slice headings. Everything else C1A8-2 and A21 (2) refuse stays refused: a colon for the dash, a dash with no spaces around it, a lower-case `slice`, a zero-width character, an accented letter, a leading curly quote, a level 1 heading, and a numbered or labelled level 2 heading (`## 2. Slice B - beta`, `## Next: Slice B - beta`).
+- One reading widens on purpose: a level 3 heading on the hyphen, en dash or double hyphen form (`### Slice B - x`) is refused as a near miss, as the em dash form is today. Today it is not refused (FORM read the em dash only). No real plan holds such a heading (0 of 696 plan files checked by the Board). A21's own note that widening level 3 "would stop 189 headings of the 25 real plans" is about the label form (`### 7.1 Slice 1: the frame`), which stays as it is.
+- `templates.D` stays the em dash: what blueprint-v2 and the other stations write does not change.
+- The rule texts that describe C1A8-2 (`readings.py:72-78`, and `vertical-contract.md:552`, the one contract line that states it) say what is now read.
+- Every copy stays byte for byte equal: `station_core/templates.py` in architect-v2, blueprint-v2, handoff-v2, inspect-v2, precon-v2, ship-v2 and vertical-v2, and `readings.py` in handoff-v2 (`handoff_core/`), ship-v2 (`ship_core/`) and vertical-v2 (`vertical_core/`).
+- An existing test changes only where it pins the old reading of a slice-heading dash, refused or not refused, and then only to the new reading. Known from the Board's prototype: 11 vertical-v2 tests in 4 files (`test_near_misses.py` 7, `test_numbered_slices.py` 2, `test_slice_behind.py:104` 1, `test_packet.py` 1). Each change is named in the build ledger with the case and its new reading.
+- ship-v2's `select` reads a plan whose slice headings use a hyphen: it finds the slice, its card and its footprint.
+
+Checks:
+
+- the new vertical-v2 module test_e18_slice_dashes is red before the change and green after (an em dash, en dash, hyphen and double hyphen heading each read as the slice, with its card, in both readings; the near misses named in the third requirement are still refused; a level 3 `### Slice B - x` is now refused): uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/vertical-v2/skills/vertical-v2/scripts/tests -t plugins/vertical-v2/skills/vertical-v2/scripts/tests -p test_e18_slice_dashes.py
+- the new ship-v2 module test_e18_slice_dashes is red before the change and green after (select on a hyphen-heading plan names the slice, its card and its footprint; the seven `station_core/templates.py` copies and the three `readings.py` copies are byte for byte equal): uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/scripts/tests -t plugins/ship-v2/skills/ship-v2/scripts/tests -p test_e18_slice_dashes.py
+- the full vertical-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/vertical-v2/skills/vertical-v2/scripts/tests -t plugins/vertical-v2/skills/vertical-v2/scripts/tests -p 'test_*.py'
+- the full ship-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/scripts/tests -t plugins/ship-v2/skills/ship-v2/scripts/tests -p 'test_*.py'
+- the full handoff-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/handoff-v2/skills/handoff-v2/scripts/tests -t plugins/handoff-v2/skills/handoff-v2/scripts/tests -p 'test_*.py'
+- the full architect-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/architect-v2/skills/architect-v2/scripts/tests -t plugins/architect-v2/skills/architect-v2/scripts/tests -p 'test_*.py'
+- the full blueprint-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/blueprint-v2/skills/blueprint-v2/scripts/tests -t plugins/blueprint-v2/skills/blueprint-v2/scripts/tests -p 'test_*.py'
+- the full inspect-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/inspect-v2/skills/inspect-v2/scripts/tests -t plugins/inspect-v2/skills/inspect-v2/scripts/tests -p 'test_*.py'
+- the full precon-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/precon-v2/skills/precon-v2/scripts/tests -t plugins/precon-v2/skills/precon-v2/scripts/tests -p 'test_*.py'
+
+Footprint: plugins/architect-v2/skills/architect-v2/scripts/station_core/templates.py, plugins/blueprint-v2/skills/blueprint-v2/scripts/station_core/templates.py, plugins/handoff-v2/skills/handoff-v2/scripts/station_core/templates.py, plugins/inspect-v2/skills/inspect-v2/scripts/station_core/templates.py, plugins/precon-v2/skills/precon-v2/scripts/station_core/templates.py, plugins/ship-v2/skills/ship-v2/scripts/station_core/templates.py, plugins/vertical-v2/skills/vertical-v2/scripts/station_core/templates.py, plugins/handoff-v2/skills/handoff-v2/scripts/handoff_core/readings.py, plugins/ship-v2/skills/ship-v2/scripts/ship_core/readings.py, plugins/vertical-v2/skills/vertical-v2/scripts/vertical_core/readings.py, plugins/vertical-v2/skills/vertical-v2/scripts/tests/, plugins/ship-v2/skills/ship-v2/scripts/tests/, plugins/handoff-v2/skills/handoff-v2/scripts/tests/, plugins/architect-v2/skills/architect-v2/scripts/tests/, plugins/blueprint-v2/skills/blueprint-v2/scripts/tests/, plugins/inspect-v2/skills/inspect-v2/scripts/tests/, plugins/precon-v2/skills/precon-v2/scripts/tests/, plugins/vertical-v2/skills/vertical-v2/references/, plugins/ship-v2/skills/ship-v2/references/, plugins/handoff-v2/skills/handoff-v2/references/
+
+Not in this slice:
+
+- what any station writes (`templates.D` and every render stay the em dash; C-17, C-31)
+- signoff-v2's ledger (Slice A)
+- `fences.py`, which reads the slice heading only through `templates.BUILD["slice"]`
+- the readers that widen with no edit, through the shared pattern, on purpose: `blueprint_core/buildoc.py:32`, `vertical_core/packet.py:164` and `vertical_core/gate.py`, whose messages (`gate.py:158`, `templates.py:328`) keep showing the em dash form; the four E14 suites cover them
+- the title line form (`# <Feature> <dash> build plan (<date>)`), which no station's slice reading uses
+- the version number (Slice D)
+
+## Slice C — ship-v2 runs the signoff visit in a fresh session
+
+Status: not started
+
+Requirements:
+
+- On the Claude Code harness, `visit --station signoff-v2` keeps everything it does today and also: makes a fresh random session id (a UUID) and records it in the visit's state in `ship.json`; writes the child session's brief under this ship run's directory (outside the visit's run directory and outside the workspace) through `common.stage_text`, so THE SAVE covers it and `report` lists it; and prints a `launch_step` naming the adapter helper command that prints the launch.
+- The Claude Code adapter's new helper (`adapters/claude-code/launch.py`, given the run directory) finds the ship session's own transcript from the input's `invocation.session_id`, the way `adapters/claude-code/invocation.py` finds it, and reads from it the model id and the effort (the values `invocation.py` reports as `measurement.model_id` and `measurement.effort`). The ship input's `invocation` keeps its four keys (`harness`, `caller`, `mode`, `session_id`) and `back-loop.md` does not change. A transcript with no model, or a model below the Opus floor by `_common.floor_for`, prints no launch and exits 3, naming why.
+- The helper prints `launch`: the argv, the working directory (the workspace), the recorded session id, and the file under this ship run's directory that receives the child's standard output. The argv is a list, run with no shell: `claude`, `-p`, `--model`, `<model id>`, `--effort`, `<effort>`, `--permission-mode`, `auto`, `--session-id`, `<session id>`, `--settings`, `{"autoMemoryEnabled":false}` (that element exactly, with no shell quotes in it: a quoted element reads as a settings file path and the child dies at start), `--output-format`, `json`, and the prompt `Read <brief path> and follow it.` as one element. The effort is the transcript's last recorded one; `--effort` and its value are left out when the transcript records none, or when the value is not one `claude --effort` takes (`low`, `medium`, `high`, `xhigh`, `max`), so the child then runs at the harness default effort. The memory setting keeps the workspace's auto-memory out of the child: the building session can write to that memory, and a child started without it loads it (the Board's probe; the control room's probe in a repo with a project memory: with the setting, no memory index; without it, the index's first bullet quoted). The argv never carries `bypassPermissions`, `--dangerously-skip-permissions` or `--bare`.
+- The brief is composed by the script from this run's own files and nothing else: the workspace, the build doc, the slice, the path of the build visit's `result.json` (signoff-v2's helper takes it as `--build-result`), the signoff visit's run id and run directory, `invocation.caller` `ship-v2` and the visit's `invocation.mode`, the signoff-v2 `SKILL.md` path and identity (name, version, content hash) that `visit` resolved, which the child runs signoff-v2 by, and the owner's DEEP order if the input carries one (next requirement). No command option takes free text for the brief, so nothing from the ship session's conversation can reach it.
+- The ship input's `station` may carry `signoff_depth`, whose one value is `DEEP`, with the owner's `words` verbatim, the same way it carries `minor_fixes`. The brief passes it to the child as the owner's order through ship-v2's input, which the owner ruled may carry DEEP (2026-10-25). LIGHT never reaches the child through ship-v2: an inspection that scales down needs the owner's own typed word. With no order, the brief names no depth and signoff-v2's own rules choose (LEAN, or DEEP on its content triggers).
+- The brief tells the child that no owner is present in its session: it does not take Step 1's first-run `REVIEW.md` write, which needs the owner's word; Step 5's second-failure append stays signoff-v2's own, as its rules say; it answers no question on the owner's behalf; and it ends with the lines signoff-v2's Step 6 adds by hand (the questions rule 5 raised, the `Next:` line, any `SKILL NOTE:`) in its final message. The child commits, pushes and edits nothing beyond signoff-v2's own writes.
+- The ship session runs the argv in the background from the workspace, standard output to the named file, and waits for it to end. It never runs signoff-v2 in its own session and never writes into the visit's run directory. THE WINDOW RULE is unchanged: the ship session touches nothing while the visit is open.
+- SKILL.md Step 0 adds a fourth held state to the three a `/ship-v2` goal accepts: a signoff visit held open while its launched session runs. The hook honors it as the skill working, like a pause awaiting the owner.
+- After the child ends, the helper's check mode reads the child's transcript (the recorded session id's record, found the way `invocation.py` finds a transcript) and prints a reading: it holds only when that record exists and its first prompt is exactly the launch's prompt. On the Claude Code harness, `visit --result` for signoff-v2 takes that reading and keeps every check it makes today. It also refuses (exit 5, nothing written, the run still `visiting`) when the reading does not hold, or when the reviewing session the visit's own `input.json` records (`invocation.sessions.reviewing`, written by signoff-v2's `check-input`) is not the recorded session id. The refusal names what failed and both ids.
+- A child that ends with no `result.json` in the visit's run directory (a crash, an auth failure, its turn limit, a denial, a question it could not ask) ends the run as today: `report` stops `visit-unfinished`, and the result carries the child's `subtype` and `result` from its standard-output file when that file holds them.
+- After `visit --result` holds, the ship session delivers in chat the child's `chat.md` (signoff-v2's Step 6 block) and the child's final message (the `result` in its standard-output file), then goes on by the existing table: fixing, clean, or the stop.
+- On the Codex harness nothing changes: `visit --station signoff-v2` prints no `launch_step`.
+- The ship-v2 test helpers that drive a signoff-v2 visit on the Claude Code harness (`scripts/tests/slib.py`'s `visit`, `scripts/tests/killlib.py`'s `through_signoff`, and any other helper or test that does the same) also plant what a real child leaves: the visit's `input.json` with `invocation.sessions.reviewing` set to the recorded session id, and a check reading that holds, made from a fixture child transcript under a fixture home (the seam `adapters/claude-code` tests already use). An existing test or helper changes only to plant those; each change is named in the build ledger.
+- recheck-v2's visit stays in the ship session: recheck-v2 allows a driving session that wrote the fix (`invocation.session_wrote_fix`) and holds it to confirming or downgrading only (recheck-v2 pilot contract, section 7).
+- SKILL.md Steps 0 and 3 say how the visit runs: run `visit`, run the `launch_step` helper, launch its argv in the background, wait, run the helper's check mode, run `visit --result` with its reading, deliver the child's `chat.md` and final message; never run signoff-v2 in this session. The contract's section 3.4 (the visit), section 4 (the input) and section 11 (the harness seams) say the same, name the brief's fields, the memory setting and the permission mode.
+
+Checks:
+
+- the new core module test_e18_fresh_signoff is red before the change and green after (a signoff-v2 visit on the Claude Code harness records a session id that is a UUID and differs on each visit, stages a brief that holds exactly the named fields and, when the input carries one, the DEEP order with the owner's words verbatim, and prints a `launch_step`; an input `signoff_depth` of `LIGHT` or `LEAN` is refused; `visit --result` refuses a result whose recorded reviewing session is not the recorded id, refuses a check reading that does not hold, and accepts a result with both; a visit whose child left no result reports `visit-unfinished` with the child's `subtype` and `result`; a Codex visit prints no `launch_step`): uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/scripts/tests -t plugins/ship-v2/skills/ship-v2/scripts/tests -p test_e18_fresh_signoff.py
+- the new adapter module test_e18_launch is red before the change and green after (over fixture transcripts, the helper prints exactly the argv list above with the transcript's model id and effort, its settings element exactly the memory-off JSON object named in the third requirement, with no shell quotes, leaves `--effort` out when none is recorded or the recorded value is outside the five `claude --effort` takes, always carries `--permission-mode auto`, never carries a banned flag, and refuses a transcript with no model or a model below the floor; its check mode holds on a fixture child record whose first prompt is the launch's prompt and fails on a missing record or another prompt): uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/adapters/claude-code/tests -t plugins/ship-v2/skills/ship-v2/adapters/claude-code/tests -p test_e18_launch.py
+- the full ship-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/scripts/tests -t plugins/ship-v2/skills/ship-v2/scripts/tests -p 'test_*.py'
+- the claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/adapters/claude-code/tests -t plugins/ship-v2/skills/ship-v2/adapters/claude-code/tests -p 'test_*.py'
+- the codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/adapters/codex/tests -t plugins/ship-v2/skills/ship-v2/adapters/codex/tests -p 'test_*.py'
+
+Footprint: plugins/ship-v2/skills/ship-v2/scripts/ship.py, plugins/ship-v2/skills/ship-v2/scripts/ship_core/, plugins/ship-v2/skills/ship-v2/adapters/claude-code/, plugins/ship-v2/skills/ship-v2/references/ship-contract.md, plugins/ship-v2/skills/ship-v2/references/input.schema.json, plugins/ship-v2/skills/ship-v2/references/examples/, plugins/ship-v2/skills/ship-v2/SKILL.md, plugins/ship-v2/skills/ship-v2/scripts/tests/
+
+Not in this slice:
+
+- signoff-v2 and its independence rule, which do not change
+- `visit --result` running the check itself: the reading is a file the ship session gets from the helper and hands over, the same trust shape as the hook reading (`hook.json`), so the core stays harness-blind
+- the ship input's `invocation` keys and `back-loop.md`, which do not change
+- a fresh session for the Codex harness (a `codex exec` child)
+- recheck-v2's visit, which stays in the ship session
+- the user-level `CLAUDE.md` and the files it loads, which reach the child as rules (they carry no builder text), and the harness's git-status block, which names files the packet lists anyway
+- a live end-to-end `/ship-v2` run, which needs the installed stations (C-29) and comes after the merge
+- reviewer isolation (C-8, C-30) and the build-v2 plan-reading findings (C-4, C-5, C-24, C-27)
+- the version number (Slice D)
+
+## Slice D — version bumps so an update delivers the round
+
+Status: not started
+
+Requirements:
+
+- Every plugin whose files Slices A to C changed gets its patch version raised by one in its `.claude-plugin/plugin.json` (today signoff-v2, ship-v2, vertical-v2 and handoff-v2 at 0.1.0; architect-v2, blueprint-v2, inspect-v2 and precon-v2 at 0.1.1), so `/plugin update <name>@tony-skills` delivers the change on every machine (E17 close, item 8). The catalog (`.claude-plugin/marketplace.json`) carries no versions and does not change.
+- Each changed plugin's `README.md` states the new version wherever it states the current one.
+- Where a station reports its version through its own CLI (`skill-identity`) or a result's `plugin_version`, it reports the new one. Every changed plugin's result examples move with it, the same way for all eight.
+- A test that ties the real manifest's version to a written one (known: precon-v2's `test_exit_test.py:227` builds the installed shape as `<base>/precon-v2/0.1.1` around the real manifest, and `sibling.py:93` takes an installed folder only when its name is the manifest's version) reads the version from the manifest instead. A test that builds its own fixture manifest is not touched.
+- No other change.
+
+Checks:
+
+- every changed plugin's manifest and README carry the new version, and each station's skill-identity reports it: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/scripts/tests -t plugins/ship-v2/skills/ship-v2/scripts/tests -p test_e18_versions.py
+- the full signoff-v2 core suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/signoff-v2/skills/signoff-v2/scripts/tests -t plugins/signoff-v2/skills/signoff-v2/scripts/tests -p 'test_*.py'
+- the signoff-v2 claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/signoff-v2/skills/signoff-v2/adapters/claude-code/tests -t plugins/signoff-v2/skills/signoff-v2/adapters/claude-code/tests -p 'test_*.py'
+- the signoff-v2 codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/signoff-v2/skills/signoff-v2/adapters/codex/tests -t plugins/signoff-v2/skills/signoff-v2/adapters/codex/tests -p 'test_*.py'
+- the full ship-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/scripts/tests -t plugins/ship-v2/skills/ship-v2/scripts/tests -p 'test_*.py'
+- the ship-v2 claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/adapters/claude-code/tests -t plugins/ship-v2/skills/ship-v2/adapters/claude-code/tests -p 'test_*.py'
+- the ship-v2 codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/ship-v2/skills/ship-v2/adapters/codex/tests -t plugins/ship-v2/skills/ship-v2/adapters/codex/tests -p 'test_*.py'
+- the full vertical-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/vertical-v2/skills/vertical-v2/scripts/tests -t plugins/vertical-v2/skills/vertical-v2/scripts/tests -p 'test_*.py'
+- the vertical-v2 claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/vertical-v2/skills/vertical-v2/adapters/claude-code/tests -t plugins/vertical-v2/skills/vertical-v2/adapters/claude-code/tests -p 'test_*.py'
+- the vertical-v2 codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/vertical-v2/skills/vertical-v2/adapters/codex/tests -t plugins/vertical-v2/skills/vertical-v2/adapters/codex/tests -p 'test_*.py'
+- the full handoff-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/handoff-v2/skills/handoff-v2/scripts/tests -t plugins/handoff-v2/skills/handoff-v2/scripts/tests -p 'test_*.py'
+- the handoff-v2 claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/handoff-v2/skills/handoff-v2/adapters/claude-code/tests -t plugins/handoff-v2/skills/handoff-v2/adapters/claude-code/tests -p 'test_*.py'
+- the handoff-v2 codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/handoff-v2/skills/handoff-v2/adapters/codex/tests -t plugins/handoff-v2/skills/handoff-v2/adapters/codex/tests -p 'test_*.py'
+- the full architect-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/architect-v2/skills/architect-v2/scripts/tests -t plugins/architect-v2/skills/architect-v2/scripts/tests -p 'test_*.py'
+- the architect-v2 claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/architect-v2/skills/architect-v2/adapters/claude-code/tests -t plugins/architect-v2/skills/architect-v2/adapters/claude-code/tests -p 'test_*.py'
+- the architect-v2 codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/architect-v2/skills/architect-v2/adapters/codex/tests -t plugins/architect-v2/skills/architect-v2/adapters/codex/tests -p 'test_*.py'
+- the full blueprint-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/blueprint-v2/skills/blueprint-v2/scripts/tests -t plugins/blueprint-v2/skills/blueprint-v2/scripts/tests -p 'test_*.py'
+- the blueprint-v2 claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/blueprint-v2/skills/blueprint-v2/adapters/claude-code/tests -t plugins/blueprint-v2/skills/blueprint-v2/adapters/claude-code/tests -p 'test_*.py'
+- the blueprint-v2 codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/blueprint-v2/skills/blueprint-v2/adapters/codex/tests -t plugins/blueprint-v2/skills/blueprint-v2/adapters/codex/tests -p 'test_*.py'
+- the full inspect-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/inspect-v2/skills/inspect-v2/scripts/tests -t plugins/inspect-v2/skills/inspect-v2/scripts/tests -p 'test_*.py'
+- the inspect-v2 claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/inspect-v2/skills/inspect-v2/adapters/claude-code/tests -t plugins/inspect-v2/skills/inspect-v2/adapters/claude-code/tests -p 'test_*.py'
+- the inspect-v2 codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/inspect-v2/skills/inspect-v2/adapters/codex/tests -t plugins/inspect-v2/skills/inspect-v2/adapters/codex/tests -p 'test_*.py'
+- the full precon-v2 suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/precon-v2/skills/precon-v2/scripts/tests -t plugins/precon-v2/skills/precon-v2/scripts/tests -p 'test_*.py'
+- the precon-v2 claude-code adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/precon-v2/skills/precon-v2/adapters/claude-code/tests -t plugins/precon-v2/skills/precon-v2/adapters/claude-code/tests -p 'test_*.py'
+- the precon-v2 codex adapter suite passes: uv run --python /usr/bin/python3 --with jsonschema==4.25.1 python3 -m unittest discover -s plugins/precon-v2/skills/precon-v2/adapters/codex/tests -t plugins/precon-v2/skills/precon-v2/adapters/codex/tests -p 'test_*.py'
+
+Footprint: plugins/signoff-v2/.claude-plugin/plugin.json, plugins/ship-v2/.claude-plugin/plugin.json, plugins/vertical-v2/.claude-plugin/plugin.json, plugins/handoff-v2/.claude-plugin/plugin.json, plugins/architect-v2/.claude-plugin/plugin.json, plugins/blueprint-v2/.claude-plugin/plugin.json, plugins/inspect-v2/.claude-plugin/plugin.json, plugins/precon-v2/.claude-plugin/plugin.json, plugins/signoff-v2/README.md, plugins/ship-v2/README.md, plugins/vertical-v2/README.md, plugins/handoff-v2/README.md, plugins/architect-v2/README.md, plugins/blueprint-v2/README.md, plugins/inspect-v2/README.md, plugins/precon-v2/README.md, plugins/signoff-v2/skills/signoff-v2/references/examples/, plugins/ship-v2/skills/ship-v2/references/examples/, plugins/vertical-v2/skills/vertical-v2/references/examples/, plugins/handoff-v2/skills/handoff-v2/references/examples/, plugins/architect-v2/skills/architect-v2/references/examples/, plugins/blueprint-v2/skills/blueprint-v2/references/examples/, plugins/inspect-v2/skills/inspect-v2/references/examples/, plugins/precon-v2/skills/precon-v2/references/examples/, plugins/precon-v2/skills/precon-v2/scripts/tests/test_exit_test.py, plugins/ship-v2/skills/ship-v2/scripts/tests/test_e18_versions.py
+
+Not in this slice:
+
+- any behavior change
+- historical records that name a version (`RESULTS.md` files, setups records, evidence)
+- installing the plugins, which is the control room's step after the merge, verified file for file against main
+
+## After the slices
+
+On the owner's "PR" and "merge": reinstall every bumped plugin, verify each installed copy against main file for file, then the first live `/ship-v2` run on a small slice in a window opened after the reinstall. That run is the round's real proof: one command, build to recheck, with the signoff visit in its own session.
+
+## Build assumptions
+
+2026-10-25, Slice A (build-v2 run build-e18-A-20261025-1):
+
+- `RECORD_HEADING` takes the records component's pattern whole, its label group `(.*?)` included, so a record heading with nothing after `review:` or `recheck:` now reads as one, as the component reads it (today `(.+?)` refused it). `ledger_home` uses only whether a line matches.
+- The two patterns are written in `ledger.py` with the dashes as escapes, not imported: the core reaches the records component only as a subprocess, and `signoff_core/record_grammar.py`, which holds the same two patterns, is left to its own job.
+- `test_e18_heading_dashes` imports `records_core.legacy` by path (`testlib.RECORDS_ROOT`) to read the component's own patterns; the core does not import it.
+- `slice_heading_index` keeps its `.rstrip(":")`, so `## Slice A:` still names `A`.
+- 2026-10-25, ruling after signoff-v2 run signoff-a-20261025-deb2: "Requirement 2 wins for a colon heading (owner, 2026-10-25)". The line above is superseded: `slice_heading_index` names the slice `group(1).strip()`, as the records component does, so `## Slice A:` names `A:` and a bare `## Slice A` still names `A`.
+- Before photo at e11c788: core suite 429 tests OK (skipped=2). After at aaa080e: 437 OK (skipped=2), the 8 added being the new module.
+
+## Deviations
+
+2026-10-25, Slice A (run build-e18-A-20261025-1): none.
+
+## Discovered
+
+2026-10-25, Slice A (run build-e18-A-20261025-1):
+
+- `ledger.py:110`, the `slice_heading_index` docstring, still shows the heading with an em dash only; requirement 5 names the module docstring's card line, so that line was left as it is.
+- Under the new pattern six `## Slice` headings in tracked Markdown read a name where they read none before: four in `docs/evidence/agent-file-flip/fresh-session-rerun.md`, one in `docs/evidence/readers/slice-b-openrouter-runs.md`, one in `docs/reviews/2026-09-06-inspect-readers-gpt-2.md`. None is in a plan, and signoff-v2 reads only the build doc.
+- The build ran in a subagent, which shares its parent's `CLAUDE_CODE_SESSION_ID`, so the input's `invocation.session_id` and the answer's `session_id` name the driving session. signoff-v2 run from that same session would read it as the building session.
+- One full signoff-v2 core suite run takes about 14 minutes (843 s before, 822 s after).
+
+## Punch list
+
+### 2026-10-25 — review: Slice A
+- MAJOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:113 · (Requirement 2 is unmet for a colon heading: slice_heading_index matches group(1).rstrip(':') while the records component names the slice group(1).strip() with no colon strip (legacy.py:219), so `## Slice A:` is slice A to signoff-v2 and slice A: to the records component. Requirement 3 (a heading with no separator reads as today) pulls the other way, so the spec conflicts with itself for this shape.) · A build doc with `## Slice A:` (or `## Slice A: - x`) and a Status line: ledger.card_of(text, 'A') returns ('built', 4) and set_card moves that card, while legacy.parse_document names the slice 'A:' and card_of(text, 'A:') returns (None, None); the card signoff-v2 sets and the records it appends name different slices. The spec, correctness and seams reviewers' probes and the session's own probe all print records name 'A:' against ledger name 'A'. · A
+- MAJOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:111 · (The widened SLICE_HEADING and RECORD_HEADING patterns now match hyphen and en dash headings inside fenced code blocks, which the records component skips (FENCE_RE, legacy.py:194-205). slice_heading_index, card_of, set_card and ledger_home have no fence awareness, so a fenced example heading placed before the real one now wins. The base ledger read only the em dash and ignored such a fenced example.) · A plan with a fence holding `## Slice A - example` and `Status: not started` above the real `## Slice A <em dash> alpha` and `Status: built`: the new ledger's card_of returns ('not started', 6), the base ledger returned ('built', 11) and the records component reads line 11. set_card writes the verdict inside the fence and the real card stays built while the component's card_set event says otherwise. A fenced `### <date> - review: A` likewise moves ledger_home. No tracked file holds this shape today. · A
+- MINOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:32 · (A third slice name changes that the spec's 'two names change' does not declare: a dash with no space before it and a space after (`## Slice A<em dash> alpha`, `## Slice A- alpha`) read A before and now reads the whole run, matching the records component but not build-v2's doc.py:36.) · build-v2 reads slice A and moves its card; signoff-v2 then runs on slice A, the full review runs, and set_card raises DocumentShape because card_of(text, 'A') is (None, None). No tracked file holds the shape (seams sweep of 474 files, 0 hits). · A
+- MINOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:32 · (SLICE_HEADING's `^##\s+` accepts a tab after ##, while the records component treats only lines starting with '## ' as headings, so signoff-v2 reads a slice the component does not see.) · `##<tab>Slice A - x`: the new ledger names slice A and sets its card; legacy.parse_document lists no slices. Probes by the correctness and seams reviewers. · A
+- MINOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:110 · (The slice_heading_index docstring still describes the heading as `## Slice <X>` followed by an em dash only, which no longer matches what is read; the module docstring was updated but this one was not.) · A maintainer reading the function believes hyphen and en dash headings are not read. · A
+- MINOR · plugins/signoff-v2/skills/signoff-v2/scripts/tests/test_e18_heading_dashes.py:85 · (The name-equality test compares raw group(1) on both sides, not the name each side matches on (the ledger's rstrip(':') against the component's strip()), and EVERY_HEADING holds no colon heading, so the module cannot catch the colon divergence.) · The colon divergence in the first MAJOR passes test_every_heading_names_the_records_component_slice green. · A
+- MINOR · plugins/signoff-v2/skills/signoff-v2/scripts/tests/test_e18_heading_dashes.py:114 · (DocstringNamesTheSeparators only checks that the words 'em dashes', 'en dashes' and 'hyphens' appear in the card bullet, so a docstring that names them with the opposite meaning stays green.) · An edit to 'no longer reads em dashes, en dashes or hyphens' passes the test. · A
+
+### 2026-10-25 — recheck: Slice A
+- MAJOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:113 · (Requirement 2 is unmet for a colon heading: slice_heading_index matches group(1).rstrip(':') while the records component names the slice group(1).strip() with no colon strip (legacy.py:219), so `## Slice A:` is slice A to signoff-v2 and slice A: to the records component. Requirement 3 (a heading with no separator reads as today) pulls the other way, so the spec conflicts with itself for this shape.) · fixed · executed probe.py: for '## Slice A:' and '## Slice A: - x' legacy names 'A:' and ledger.card_of(t,'A:')=('built',4) while card_of(t,'A')=(None,None); set_card('A:') moves the card legacy reads; now at plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:142
+- MAJOR · plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:111 · (The widened SLICE_HEADING and RECORD_HEADING patterns now match hyphen and en dash headings inside fenced code blocks, which the records component skips (FENCE_RE, legacy.py:194-205). slice_heading_index, card_of, set_card and ledger_home have no fence awareness, so a fenced example heading placed before the real one now wins. The base ledger read only the em dash and ignored such a fenced example.) · fixed · executed probe.py: fenced '## Slice A - example' plus 'Status: not started' above the real em dash slice: card_of returns ('built',10) matching legacy status_line 10 and set_card leaves the fence untouched; now at plugins/signoff-v2/skills/signoff-v2/scripts/signoff_core/ledger.py:51
