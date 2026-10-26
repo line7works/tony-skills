@@ -7,7 +7,7 @@ Strictly user-invoked. The `-v2` suffix stays while v1 handoff is installed, and
 
 ## Status
 
-Version 0.1.0, interface version 1. Built in E15 slice 1, hand-back 2. Counts measured on the E15 slice 3 tree, each
+Version 0.1.1, interface version 1. Built in E15 slice 1, hand-back 2. Counts measured on the E15 slice 3 tree, each
 suite run under `/usr/bin/python3` 3.9.6 and under `uv run` with `jsonschema==4.25.1`; the two runtimes give the same
 counts.
 

@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the handoff is recorded; the thread is safe to clear",
   "report_only": true,
   "run_dir": "/work/example/run",

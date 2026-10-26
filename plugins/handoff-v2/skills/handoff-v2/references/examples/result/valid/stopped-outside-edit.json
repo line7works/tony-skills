@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the build doc /work/example/workspace/docs/plans/2026-09-20-turnstile.md is at neither the bytes this run read (89acac9bb50d) nor the bytes its write produces (not planned yet); it hashes to 2200e4bc70a8: the doc was edited after this run planned its write. On disk, slice A reads `Status: signed off with conditions` (this run's card_set moved the card from 'signed off with conditions' to 'signed off'). This run's events landed in the records log (seq 6 waived, seq 7 card_set) and are reported as landed; the doc is left as it is, neither written by this run nor reverted. Read the doc and the log: set each moved slice's Status: line to the card the records hold and add the grant lines `records.py render --run-id run` gives, then run handoff again",
   "report_only": false,
   "run_dir": "/work/example/run",

@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "1 of 1 question(s) unanswered: the run ends with nothing written (the doc, the log and the pointer are as found); answer them and run handoff again, or clear and accept the loss",
   "report_only": false,
   "run_dir": "/work/example/run",

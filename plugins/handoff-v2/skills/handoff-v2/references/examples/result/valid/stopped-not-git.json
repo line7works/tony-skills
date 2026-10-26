@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the workspace is not a git work tree root with a commit: there is no branch, no tree state and no checkpoint to photograph, so handoff-v2 cannot run here; nothing was written",
   "report_only": false,
   "run_dir": "/work/example/run",

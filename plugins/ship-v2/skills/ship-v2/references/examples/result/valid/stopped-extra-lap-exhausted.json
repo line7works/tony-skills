@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-0001"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the extra lap is exhausted without ALL CLEAR (stop condition 1)",
   "report_only": false,
   "run_dir": "/tmp/ship-v2/run-0001",

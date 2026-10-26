@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-example-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.2",
   "reason": "the lane cannot run: run-0001-gpt-astra answered lane-unavailable (codex not on PATH). Nothing from this lane is triaged; re-ask the owner",
   "report_only": false,
   "run_dir": "/tmp/station-runs/run-0001",

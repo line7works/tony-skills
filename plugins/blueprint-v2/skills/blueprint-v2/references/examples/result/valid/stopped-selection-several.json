@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-example-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.2",
   "reason": "several candidates, listed for the owner and never picked (scope: docs/scope/2026-09-20-widget.md, docs/widget-scope.md). Ask which one, then start a new run and record his pick with `choose` before harvest",
   "report_only": false,
   "run_dir": "/tmp/station-runs/run-0001",

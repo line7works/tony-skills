@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "no build doc matches 'spinner' in the repo's tiers (docs/plans/, then docs/<feature>-build-plan.md, then an Intent: line, then a phase or slice doc): ask the owner which build doc this is, and run again with --doc",
   "report_only": false,
   "run_dir": "/work/example/run",

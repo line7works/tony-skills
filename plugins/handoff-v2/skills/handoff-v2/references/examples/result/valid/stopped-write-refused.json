@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the planned doc would not read cleanly (the line rules and the second reading) at line 40: a raw HTML line; nothing was written",
   "report_only": false,
   "run_dir": "/work/example/run",

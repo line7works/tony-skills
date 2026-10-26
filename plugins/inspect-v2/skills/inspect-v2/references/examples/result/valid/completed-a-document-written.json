@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-example-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.2",
   "reason": "the plan was inspected: APPROVED WITH CONDITIONS; 1 finding(s) raised in the records, 0 question(s), 1 refuted; the stamp was written",
   "report_only": false,
   "run_dir": "/tmp/station-runs/run-0001",

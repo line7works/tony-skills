@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the handoff block of 2026-09-25 (line 35 when this run read the doc) changed after the photograph: an earlier block is never edited, so the owner settles the edit before this run writes; nothing was written",
   "report_only": false,
   "run_dir": "/work/example/run",

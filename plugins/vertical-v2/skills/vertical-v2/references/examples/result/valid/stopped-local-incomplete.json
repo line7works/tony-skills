@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "4cd53208-8cb8-4de2-bb71-be7594182bb1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the local review is incomplete: the lens seams came back empty after its re-send",
   "report_only": false,
   "run_dir": "/tmp/vertical-v2/run-0001",

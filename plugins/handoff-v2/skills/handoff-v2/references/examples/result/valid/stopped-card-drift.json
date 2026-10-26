@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "slice A's Status: line reads 'signed off with conditions', the card the records' last card move for it started from, and that move (a card_set at seq 7 by handoff-v2 run first, 'signed off with conditions' to 'signed off') is in the log: its event landed and its Status: line did not, so the doc contradicts the record and this run writes nothing over it; nothing was written. Two ways out: resume the interrupted run's write with its run directory (for a handoff-v2 run, `handoff.py write --run-dir <the run directory of run first>`), which settles the doc half; or set the line to the card the records hold, `Status: signed off`, by hand. Then run handoff again",
   "report_only": false,
   "run_dir": "/work/example/run",

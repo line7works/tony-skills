@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the input names slice 'Z' as the one just finished, and the build doc holds no such slice (it holds A, B); nothing was written",
   "report_only": false,
   "run_dir": "/work/example/run",
