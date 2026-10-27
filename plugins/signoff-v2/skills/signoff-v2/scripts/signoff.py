@@ -737,7 +737,9 @@ def provenance_of(workspace, built):
         if text:
             texts.append(text)
     texts.extend(withheld_text(workspace, built))
-    material = packetmod.read_text_or_none(built["material_path"]) or ""
+    # The whole material, however large (E18 fix round 1): a quotation from past the per-file cap
+    # is still delivered text, never withheld-only.
+    material = packetmod.read_text_or_none(built["material_path"], limit=None) or ""
     return {"paths": paths, "delivered_paths": delivered_paths, "anchors": anchors,
             "withheld_text": "\n".join(texts), "delivered_text": material,
             "workspace": workspace}
