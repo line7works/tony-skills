@@ -7,7 +7,7 @@ your harness from what it tells you about itself (its system prompt, its tool na
 
 | Harness | Profile | Helpers (each with `--help`, JSON on stdout, diagnostics on stderr) |
 |---|---|---|
-| Claude Code | `claude-code/profile.md` | `claude-code/invocation.py` (the invocation facts and the answer's `session_id`); `claude-code/hook.py` (the Stop-hook reading, from this session's own transcript: exit 0, 2, 3) |
+| Claude Code | `claude-code/profile.md` | `claude-code/invocation.py` (the invocation facts and the answer's `session_id`); `claude-code/hook.py` (the Stop-hook reading, from this session's own transcript: exit 0, 2, 3); `claude-code/launch.py` (prints the signoff visit's launch for a fresh session, and with `--check` reads that session's transcript) |
 | Codex CLI | `codex/profile.md` | `codex/invocation.py` (the same, from the executor's own rollout); `codex/hook.py` (always `Hook: NOT armed`, labelled honestly: Codex has no Stop hook, E15-12) |
 
 **A harness this index does not list has no adapter** (OpenCode among them: E13's pick P3 stands in E15). There is
