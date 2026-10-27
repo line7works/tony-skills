@@ -81,7 +81,7 @@
       }
     ]
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "problems": [
     {
       "why": "the reviewer ran 'claude-sonnet-5', class 'sonnet': below the floor. A verdict from below the Opus-class floor is never recorded (v1 Step 0)."

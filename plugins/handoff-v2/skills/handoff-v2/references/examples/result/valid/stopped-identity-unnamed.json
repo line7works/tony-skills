@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the doc docs/phase-two.md yields no identity (not a dated plan, not a flat build plan, and no title line to slug): ask the owner to name it, and run again with his name in station.feature; never guessed",
   "report_only": false,
   "run_dir": "/work/example/run",

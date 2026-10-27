@@ -47,12 +47,12 @@ lists a candidate as its folder spells it, so `select` and every later use of a 
 disk spelling on a case-insensitive disk; and the plugin has its marketplace entry. The seeded case L3-03 is renamed
 `L3-03-two-scope-homes-one-tier`, for what it now proves (the two scope homes are one tier).
 
-Interface version 1, plugin version 0.1.1. Tests: 462.
+Interface version 1, plugin version 0.1.2. Tests: 462.
 
 ## Layout
 
 ```text
-.claude-plugin/plugin.json           name blueprint-v2, version 0.1.1
+.claude-plugin/plugin.json           name blueprint-v2, version 0.1.2
 skills/blueprint-v2/
   SKILL.md                           the portable procedure
   agents/openai.yaml                 the Codex sidecar

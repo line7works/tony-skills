@@ -224,7 +224,8 @@ class RosterRoutes(_Exit):
         """This core copied into `layout`'s shape; a readers roster whose rows are all outside rows, so a
         request built against it carries `authorized` on the named row and proves which roster was read."""
         base = os.path.join(self.tmp, "layout-" + layout)
-        plugin = {"3a": os.path.join(base, "precon-v2"), "3b": os.path.join(base, "precon-v2", "0.1.1"),
+        version = testlib.load_json(os.path.join(testlib.PLUGIN, ".claude-plugin", "plugin.json"))["version"]
+        plugin = {"3a": os.path.join(base, "precon-v2"), "3b": os.path.join(base, "precon-v2", version),
                   "none": os.path.join(base, "precon-v2")}[layout]
         skill = os.path.join(plugin, "skills", "precon-v2")
         shutil.copytree(testlib.SKILL, skill, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))

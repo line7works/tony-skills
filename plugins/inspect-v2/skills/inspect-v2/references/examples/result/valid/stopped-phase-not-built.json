@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-example-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.2",
   "reason": "the `harvest` phase of precon-v2 is not built yet",
   "report_only": false,
   "run_dir": "/tmp/station-runs/run-0001",

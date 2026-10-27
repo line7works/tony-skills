@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the build doc changed since this run read it: the photograph is read once, now, and the run never writes from a record that moved under it; nothing was written. Run handoff again",
   "report_only": false,
   "run_dir": "/work/example/run",

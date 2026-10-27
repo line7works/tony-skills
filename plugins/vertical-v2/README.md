@@ -8,7 +8,7 @@ installed, and both are renamed at cutover.
 
 ## Status
 
-Version 0.1.0, interface version 1. Built in E15 slice 1 (hand-back 1) on the E15 back frame
+Version 0.1.1, interface version 1. Built in E15 slice 1 (hand-back 1) on the E15 back frame
 (`skills/vertical-v2/references/back-loop.md`, `skills/vertical-v2/references/back-files.txt`). Since the full
 review's fix round (the E15 lane contract A32) every packet and summons copy carries the build doc under review alone
 among the plans: every other file under `docs/plans/`, and any other Markdown file the build-doc form reads as a build

@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "4cd53208-8cb8-4de2-bb71-be7594182bb1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "every slice must stand signed off before a whole-build review; short: slice B (built). A built slice's remedy is a fresh signoff, never a recheck.",
   "report_only": false,
   "run_id": "run-0001",

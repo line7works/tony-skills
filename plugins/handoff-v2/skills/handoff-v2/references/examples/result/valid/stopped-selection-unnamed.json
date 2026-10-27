@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the invocation names nothing to match a build doc against: ask the owner which build doc this handoff is for, and run again with --name or --doc (the lone doc on disk is never taken)",
   "report_only": false,
   "run_dir": "/work/example/run",

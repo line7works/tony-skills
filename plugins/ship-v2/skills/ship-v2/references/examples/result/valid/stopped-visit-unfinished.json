@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-0001"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the visit to build-v2 ended without a result this run can take: it left no result in /tmp/ship-v2/run-0001/visits/0-build-v2 (no result holds, so the run ends here)",
   "report_only": false,
   "run_dir": "/tmp/ship-v2/run-0001",

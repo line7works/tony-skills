@@ -90,7 +90,7 @@
       }
     ]
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "problems": [
     {
       "why": "the reviewing session is the session that built the slice (sess-build-1); the context that wrote the code never grades it"

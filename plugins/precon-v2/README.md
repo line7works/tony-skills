@@ -33,12 +33,12 @@ Slice 3c's second hand-back: `setups/manual-only.sh` installs the manual-only pr
 controls; the two prompts per harness are in `setups/<harness>/prompts/`; the live measurement is
 the control room's.
 
-Interface version 1, plugin version 0.1.1. Tests: 519.
+Interface version 1, plugin version 0.1.2. Tests: 519.
 
 ## Layout
 
 ```text
-.claude-plugin/plugin.json           name precon-v2, version 0.1.1
+.claude-plugin/plugin.json           name precon-v2, version 0.1.2
 skills/precon-v2/
   SKILL.md                           the portable procedure
   agents/openai.yaml                 the Codex sidecar (manual-only)

@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "a handoff block sits outside `## Handoffs` (line 36 (2026-09-25)): the blocks live in one section and are never moved by a handoff, so the owner settles where they belong before this run writes; nothing was written",
   "report_only": false,
   "run_dir": "/work/example/run",

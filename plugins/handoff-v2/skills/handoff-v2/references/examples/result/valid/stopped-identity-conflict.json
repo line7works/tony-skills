@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "the doc's identity derives as 'turnstile' (dated-plan) and the input names 'spinner': the identity is derived one way per doc, and the owner's name is taken only when none derives; nothing was written",
   "report_only": false,
   "run_dir": "/work/example/run",

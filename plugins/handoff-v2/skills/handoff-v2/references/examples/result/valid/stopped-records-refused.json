@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-test-1"
   },
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "reason": "reading the log's head: the records component refused `verify` (exit 7, conflict): the chain is broken at line 3",
   "report_only": false,
   "run_dir": "/work/example/run",
