@@ -464,11 +464,11 @@
     },
     "notes": {
       "type": "array",
-      "description": "what was kept as a note rather than raised: a location outside the source set, or what the reviewer itself kept",
+      "description": "what was kept as a note rather than raised: a location outside the source set, or what the reviewer itself kept. A note has the finding shape except that its severity may be null; `findings` keeps a required severity",
       "items": {
         "allOf": [
           {
-            "$ref": "#/$defs/finding"
+            "$ref": "#/$defs/note"
           }
         ],
         "type": "object",
@@ -1004,6 +1004,71 @@
             "MAJOR",
             "MINOR"
           ]
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_kind": {
+          "enum": [
+            "executed",
+            "read",
+            "reasoned"
+          ]
+        },
+        "why": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "location",
+        "file",
+        "line",
+        "severity",
+        "claim",
+        "scenario",
+        "evidence_kind"
+      ],
+      "properties": {
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "BLOCKER",
+            "MAJOR",
+            "MINOR",
+            null
+          ],
+          "description": "as the reviewer wrote it: a note the reviewer kept may carry no severity (answer.schema.json allows null there), and nothing raises or gates on a note's severity"
         },
         "claim": {
           "type": "string",

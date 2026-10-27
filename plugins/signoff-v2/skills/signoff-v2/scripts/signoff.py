@@ -838,7 +838,13 @@ def cmd_record(args):
                                   verdict_recorded=not resolved["report_only"],
                                   writes_none=bool(resolved["report_only"]),
                                   verdict_doc="docs/reviews/(planned)", **common)
-    refused = validate.semantic(proposed, resolved)
+    # E18 fix round 1: the result schema as well, so a proposal `finish` would refuse with exit 4
+    # stops here instead, before the verdict doc, the records events and the card.
+    schema_refused = [{"path": row["path"],
+                       "message": "result.schema.json at %s: %s" % (row["path"], row["message"])}
+                      for row in validate.schema_errors(
+                          proposed, inputs.load_schema(references_dir(args), "result.schema.json"))]
+    refused = schema_refused + validate.semantic(proposed, resolved)
     if refused:
         finish(run, resolved, "stopped", args,
                stop_reason="the proposed completion does not validate: %s; nothing is recorded"
