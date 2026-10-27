@@ -66,7 +66,12 @@ class AKeptNoteWithoutASeverityRecords(_Case):
         sub = {"type": "object", "properties": {"notes": schema["properties"]["notes"]},
                "$defs": schema["$defs"]}
         self.assertEqual(validate.schema_errors({"notes": [note]}, sub), [])
-        self.assertTrue(validate.schema_errors({"notes": [dict(note, severity="NOTE")]}, sub))
+        # Requirement 4 (the owner's "fold and fix"): a note records any severity the answer
+        # allows, while a raised finding still refuses one outside BLOCKER, MAJOR and MINOR.
+        self.assertEqual(validate.schema_errors({"notes": [dict(note, severity="NOTE")]}, sub), [])
+        sub = {"type": "object", "properties": {"findings": schema["properties"]["findings"]},
+               "$defs": schema["$defs"]}
+        self.assertTrue(validate.schema_errors({"findings": [dict(row, severity="NOTE")]}, sub))
 
 
 class TheChatBlockPrintsANullSeverityNoteWithoutOne(unittest.TestCase):
@@ -87,24 +92,28 @@ class TheChatBlockPrintsANullSeverityNoteWithoutOne(unittest.TestCase):
 
 class AProposalTheSchemaRefusesWritesNothing(_Case):
     """Requirement 2: the check before any project-record write runs the result schema as well as
-    the semantic validator. A kept note whose claim is null passes the semantic checks and fails
-    the schema; the run stops with no verdict doc, no records event and no card move, naming the
+    the semantic validator. Since requirement 4 no answer the answer schema accepts fails the
+    result schema, so the test points `record` at a copy of the references whose result schema
+    refuses a result that records a verdict: the proposal passes the semantic checks and fails the
+    schema, and the run stops with no verdict doc, no records event and no card move, naming the
     schema error."""
 
     def test_nothing_is_recorded_and_the_error_is_named(self):
+        from test_fr1_answer_values import strict_skill_root
         answer = self.answer()
-        answer["notes_kept"] = [dict(KEPT, claim=None)]
+        answer["notes_kept"] = [dict(KEPT)]
         code, doc, err = self.through_answer(answer)
         self.assertEqual(code, 0, err or json.dumps(doc))
         before_doc = self.doc_text()
-        code, doc, err = self.record()
+        root = strict_skill_root(self.dir)
+        code, doc, err = self.phase(["record", "--run-dir", self.run_dir, "--skill-root", root])
         self.assertEqual(code, 10, err or json.dumps(doc))
         result = self.result()
         self.assertEqual(result["status"], "stopped", json.dumps(result)[:1200])
         self.assertEqual(result["refusal_reason"], "answer_invalid")
         self.assertFalse(result["verdict_recorded"])
         self.assertTrue(result["writes_none"])
-        self.assertIn("/notes/0/claim", result["stop_reason"])
+        self.assertIn("fr1_test_refusal", result["stop_reason"])
         self.assertIn("result.schema.json", result["stop_reason"])
         self.assertEqual(validate.schema_errors(result, result_schema()), [])
         self.assertEqual(read_log(self.workspace), [], "no records event, not even a levelling")
