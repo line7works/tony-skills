@@ -84,6 +84,9 @@ def load(since=None):
     else:
         errors.append(f"missing log: {LOG}")
     seen = set()
+    # A worktree carries its own copy of docs/feedback.md, so the same GUIDE line can sit in
+    # several checkouts: one text is one finding (or one malformed report), cited from the first file read.
+    seen_lines = set()
     for pattern in FEEDBACK_GLOBS:
         for path in sorted(glob.glob(pattern)):
             if path in seen:
@@ -92,6 +95,10 @@ def load(since=None):
             with open(path, encoding="utf-8") as f:
                 for i, raw in enumerate(f, 1):
                     if raw.startswith("- ") and re.search(r'"GUIDE:', raw, re.I):
+                        text = raw.strip()
+                        if text in seen_lines:
+                            continue
+                        seen_lines.add(text)
                         item, err = parse_fb_line(raw.rstrip("\n"), path, i)
                         (findings.append(item) if item else errors.append(err))
     if since:
