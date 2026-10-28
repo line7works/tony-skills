@@ -131,23 +131,46 @@ def chat_block(result):
     if notes:
         lines.append("Kept as notes, not raised")
         for row in notes:
-            lines.append("- %s · %s · %s" % (row.get("location"), row.get("claim"), row.get("why")))
+            # E18 fix round 1: a kept note is recorded as the answer wrote it, so any field may be
+            # null or empty; the line names what is missing rather than printing "None".
+            lines.append("- %s · %s · %s" % (shown(row.get("location"), "no location"),
+                                              shown(row.get("claim"), "no claim"),
+                                              shown(row.get("why"), "no reason")))
     lines.append("Tried and failed to break:")
     for row in (result.get("checks_executed") or []):
-        head = (row.get("output") or "").strip().split("\n")[0]
-        lines.append("- %s (%s) → %s" % (row.get("name"), row.get("command") or "no command", head))
+        lines.append("- %s (%s) → %s" % (row.get("name"), row.get("command") or "no command",
+                                          output_head(row)))
     if not (result.get("checks_executed") or []):
         lines.append("- nothing was executed; this review lists no check it ran")
     if result.get("session_checks"):
         lines.append("Checks the reviewing session executed:")
         for row in result["session_checks"]:
-            head = (row.get("output") or "").strip().split("\n")[0]
-            lines.append("- %s (%s, exit %s) → %s" % (row.get("name"),
-                                                     row.get("command") or "no command",
-                                                     row.get("exit_code"), head))
+            lines.append("- %s (%s, %s) → %s" % (row.get("name"),
+                                                row.get("command") or "no command",
+                                                exit_text(row), output_head(row)))
     for row in (result.get("problems") or []):
         lines.append("Refused: %s" % row.get("why", row))
     return "\n".join(lines) + "\n"
+
+
+def shown(value, missing):
+    """A recorded field as a line prints it: the value, or `missing` when it is null or blank."""
+    if value is None or not str(value).strip():
+        return missing
+    return str(value)
+
+
+def output_head(row):
+    """The first line of a check's output, or "no output" when the answer carried none (the
+    answer schema lets a check's output be null or missing)."""
+    head = str(row.get("output") or "").strip().split("\n")[0]
+    return head or "no output"
+
+
+def exit_text(row):
+    """`exit N`, or "no exit code" when the check carried none."""
+    code = row.get("exit_code")
+    return "no exit code" if code is None else "exit %s" % code
 
 
 def bottom_line(result, counts):

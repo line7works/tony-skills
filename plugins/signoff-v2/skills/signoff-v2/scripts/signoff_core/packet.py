@@ -652,11 +652,14 @@ def moved_entries(workspace, built, exclude=()):
     return sorted(moved)
 
 
-def read_text_or_none(full):
-    """The file's text, or None when it is absent, binary, or not UTF-8."""
+def read_text_or_none(full, limit=MAX_DELIVERED_BYTES):
+    """The file's text, or None when it is absent, binary, or not UTF-8.
+
+    Reads at most `limit` + 1 bytes, the per-file delivery cap by default; `limit=None` reads the
+    whole file, which the provenance check needs for the assembled material (E18 fix round 1)."""
     try:
         with open(full, "rb") as fh:
-            raw = fh.read(MAX_DELIVERED_BYTES + 1)
+            raw = fh.read() if limit is None else fh.read(limit + 1)
     except (OSError, IOError):
         return None
     if BINARY_MARKER in raw:

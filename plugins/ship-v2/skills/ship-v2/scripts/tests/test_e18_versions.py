@@ -6,6 +6,9 @@ vertical-v2 and handoff-v2 from 0.1.0 to 0.1.1; architect-v2, blueprint-v2, insp
 station's `skill-identity` reports it as `version` and `plugin_version`, and every result example that carries a
 `plugin_version` carries it. In the installed shape a sibling plugin is not beside this one; its rows are reported
 as SKIPPED with that reason, never as passed.
+
+E18 fix round 1, slice C, raises signoff-v2 and ship-v2 again, from 0.1.1 to 0.1.2, so an update delivers that
+round's fixes; the other six keep the versions slice D gave them.
 """
 import glob
 import json
@@ -18,8 +21,8 @@ import unittest
 import testlib
 
 NEW = {
-    "signoff-v2": "0.1.1",
-    "ship-v2": "0.1.1",
+    "signoff-v2": "0.1.2",
+    "ship-v2": "0.1.2",
     "vertical-v2": "0.1.1",
     "handoff-v2": "0.1.1",
     "architect-v2": "0.1.2",

@@ -464,11 +464,11 @@
     },
     "notes": {
       "type": "array",
-      "description": "what was kept as a note rather than raised: a location outside the source set, or what the reviewer itself kept",
+      "description": "what was kept as a note rather than raised: a location outside the source set, or what the reviewer itself kept. A note has the finding's fields, each recorded as the answer wrote it (any reported field null or any string, as answer.schema.json `$defs/reported` allows); `findings` keeps a required severity of BLOCKER, MAJOR or MINOR",
       "items": {
         "allOf": [
           {
-            "$ref": "#/$defs/finding"
+            "$ref": "#/$defs/note"
           }
         ],
         "type": "object",
@@ -483,8 +483,7 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "name",
-          "output"
+          "name"
         ],
         "properties": {
           "name": {
@@ -504,7 +503,11 @@
             ]
           },
           "output": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "as the reviewer wrote it: answer.schema.json lets a check carry a null or missing output, and the result records it so. Only a check with a non-empty output counts toward the clean-review rule"
           }
         }
       }
@@ -1018,6 +1021,75 @@
             "executed",
             "read",
             "reasoned"
+          ]
+        },
+        "why": {
+          "type": "string",
+          "minLength": 1
+        },
+        "finding_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "note": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "a note's reported fields are recorded as written: a note the reviewer kept carries whatever answer.schema.json `$defs/reported` allows (any field null or any string), and nothing raises or gates on a note",
+      "required": [
+        "location",
+        "file",
+        "line",
+        "severity",
+        "claim",
+        "scenario",
+        "evidence_kind"
+      ],
+      "properties": {
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "severity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "as the reviewer wrote it: a note the reviewer kept may carry no severity, or one outside BLOCKER, MAJOR and MINOR (answer.schema.json allows any string or null there), and nothing raises or gates on a note's severity"
+        },
+        "claim": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenario": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence_kind": {
+          "type": [
+            "string",
+            "null"
           ]
         },
         "why": {

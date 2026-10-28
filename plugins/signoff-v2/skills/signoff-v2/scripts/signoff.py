@@ -737,7 +737,9 @@ def provenance_of(workspace, built):
         if text:
             texts.append(text)
     texts.extend(withheld_text(workspace, built))
-    material = packetmod.read_text_or_none(built["material_path"]) or ""
+    # The whole material, however large (E18 fix round 1): a quotation from past the per-file cap
+    # is still delivered text, never withheld-only.
+    material = packetmod.read_text_or_none(built["material_path"], limit=None) or ""
     return {"paths": paths, "delivered_paths": delivered_paths, "anchors": anchors,
             "withheld_text": "\n".join(texts), "delivered_text": material,
             "workspace": workspace}
@@ -838,7 +840,13 @@ def cmd_record(args):
                                   verdict_recorded=not resolved["report_only"],
                                   writes_none=bool(resolved["report_only"]),
                                   verdict_doc="docs/reviews/(planned)", **common)
-    refused = validate.semantic(proposed, resolved)
+    # E18 fix round 1: the result schema as well, so a proposal `finish` would refuse with exit 4
+    # stops here instead, before the verdict doc, the records events and the card.
+    schema_refused = [{"path": row["path"],
+                       "message": "result.schema.json at %s: %s" % (row["path"], row["message"])}
+                      for row in validate.schema_errors(
+                          proposed, inputs.load_schema(references_dir(args), "result.schema.json"))]
+    refused = schema_refused + validate.semantic(proposed, resolved)
     if refused:
         finish(run, resolved, "stopped", args,
                stop_reason="the proposed completion does not validate: %s; nothing is recorded"
@@ -846,7 +854,11 @@ def cmd_record(args):
                stop_reason_code="answer_invalid", refusal_reason="answer_invalid",
                answer_refused=True, writes_none=True,
                problems=[{"why": row["message"]} for row in refused],
-               **dict((k, v) for k, v in common.items() if k not in ("findings", "notes")))
+               # E18 fix round 1, requirement 5: the raised findings and the notes stay in the
+               # stopped result and its chat block, so a raised finding never vanishes. The result
+               # schema records every value the answer schema allows on them, so they never make
+               # this stop's own result fail.
+               **common)
         return
 
     if resolved["report_only"]:
@@ -1176,20 +1188,20 @@ def do_record(run, resolved, state, adjudication, client, args):
         "Run: %s · source: %s" % (run_id, (reviewed or {}).get("commit")),
         "",
         "Checks the reviewer executed:"]
+    # E18 fix round 1: a check is recorded as the answer wrote it, so its output or exit code may
+    # be null or missing; the line names what is missing rather than printing "None".
     for row in adjudication["checks_executed"]:
-        head = (row.get("output") or "").strip().split("\n")[0]
-        method_lines.append("- %s (`%s`, exit %s) → %s"
+        method_lines.append("- %s (`%s`, %s) → %s"
                             % (row.get("name"), row.get("command") or "no command",
-                               row.get("exit_code"), head))
+                               resultmod.exit_text(row), resultmod.output_head(row)))
     if not adjudication["checks_executed"]:
         method_lines.append("- none were reported")
     # E17 fix round 1: the reviewing session's own checks, listed apart, never as the reviewer's.
     method_lines.extend(["", "Checks the reviewing session executed:"])
     for row in adjudication.get("session_checks") or []:
-        head = (row.get("output") or "").strip().split("\n")[0]
-        method_lines.append("- %s (`%s`, exit %s) → %s"
+        method_lines.append("- %s (`%s`, %s) → %s"
                             % (row.get("name"), row.get("command") or "no command",
-                               row.get("exit_code"), head))
+                               resultmod.exit_text(row), resultmod.output_head(row)))
     if not adjudication.get("session_checks"):
         method_lines.append("- none were reported")
 

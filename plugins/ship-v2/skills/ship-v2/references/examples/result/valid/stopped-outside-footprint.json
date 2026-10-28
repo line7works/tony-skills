@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-0001"
   },
-  "plugin_version": "0.1.1",
+  "plugin_version": "0.1.2",
   "reason": "a fix wants files outside slice A's footprint: src/spinner.py; stop condition 4",
   "report_only": false,
   "run_dir": "/tmp/ship-v2/run-0001",
