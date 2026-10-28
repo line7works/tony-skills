@@ -39,7 +39,9 @@ import os
 from . import canon, ledger, receipt as rcpt
 from . import native_lines as native
 from . import records_client as rcl
+from . import validate
 from .constants import STATION
+from .record_grammar import SEP
 
 FINDINGS = "findings"
 CARD = "card"
@@ -174,8 +176,36 @@ def location_object(raw, path, line):
             "more": [], "resolved": bool(path and line)}
 
 
+HYPHEN = " - "
+SEPARATOR_NOTE = ("A quoted record separator (a middle dot between two spaces) in a finding's "
+                  "claim or scenario was written as a hyphen in this record, because the records "
+                  "format reserves it; the run's answer.json keeps the reviewer's words as written.")
+
+
+def unseparated(text):
+    """`text` with every records separator ` · ` written as ` - ` (E18 fix round 2, Slice A).
+
+    The punch list joins a finding's fields with the separator, so the records event schema
+    refuses it inside a native finding's claim and scenario, and a `/fb` line a reviewer quotes
+    always carries it. Replaced until none is left, because ` · · ` leaves one after one pass."""
+    if not isinstance(text, str):
+        return text
+    while SEP in text:
+        text = text.replace(SEP, HYPHEN)
+    return text
+
+
+def quotes_separator(raised):
+    """True when a raised finding's claim or scenario holds the separator."""
+    return any(isinstance(row.get(field), str) and SEP in row[field]
+               for row in raised for field in ("claim", "scenario"))
+
+
 def finding_events(raised, doc, slice_name, at, run_id, harness, identity, raised_by):
-    """One `finding_raised` per raised finding, in the order the reviewer reported them."""
+    """One `finding_raised` per raised finding, in the order the reviewer reported them.
+
+    The claim and scenario carry the separator written as a hyphen (`unseparated`); the
+    adjudication and the run's answer.json keep the reviewer's words."""
     events = []
     for row in raised:
         events.append({
@@ -186,8 +216,8 @@ def finding_events(raised, doc, slice_name, at, run_id, harness, identity, raise
             "slice": slice_name,
             "severity": row["severity"],
             "location": location_object(row["location"], row["file"], row["line"]),
-            "claim": row["claim"],
-            "scenario": row["scenario"],
+            "claim": unseparated(row["claim"]),
+            "scenario": unseparated(row["scenario"]),
             "raised_by": raised_by,
             "actor": {"station": STATION, "run_id": run_id, "harness": harness},
             "origin": {"kind": "native"},
@@ -204,6 +234,51 @@ def card_event(doc, slice_name, before, after, at, run_id, harness, identity):
         "origin": {"kind": "native"},
         "source": {"known": True, "identity": identity},
     }
+
+
+EVENT_SCHEMA = ("references", "event.schema.json")
+# What `append` assigns and the caller never supplies (interface `append`): a position, the hash
+# of the line before it, and a finding's id. Values of the right shape stand in for them so
+# the rest of the event is checked exactly as the component will check the line it lands.
+STAND_IN_PREV = "0" * 63 + "1"
+STAND_IN_FINDING = "f1:" + "0" * 20
+
+
+def event_schema(client, station_plugin_root=None):
+    """The records component's published event schema (`references/event.schema.json`, a file of
+    its interface, read and never copied). First from the root the client resolved; a root that
+    carries only `scripts/records.py` (a wrapper in front of the component) falls back to the
+    component installed beside this station (the resolver's routes 3a and 3b). None when neither
+    ships one."""
+    roots = [client.root]
+    if station_plugin_root:
+        try:
+            roots.append(rcl.records_root(None, station_plugin_root, environ={}))
+        except LookupError:
+            pass
+    for root in roots:
+        path = os.path.join(root, *EVENT_SCHEMA)
+        if os.path.isfile(path):
+            return canon.read_json(path)
+    return None
+
+
+def event_schema_problems(events, schema):
+    """[{index, kind, field, why}] for every event of `events` the records event schema refuses,
+    as the line would land in the log; [] when every event would be accepted (E18 fix round 2)."""
+    problems = []
+    for index, event in enumerate(events, 1):
+        line = dict(event, seq=index, prev=STAND_IN_PREV)
+        if event.get("kind") in ("finding_raised", "defect_raised"):
+            line.setdefault("finding", STAND_IN_FINDING)
+        for row in validate.schema_errors(line, schema):
+            problems.append({
+                "index": index, "kind": event.get("kind"), "field": row["path"],
+                "why": "event %d (%s) fails the records event schema at %s: %s; the records "
+                       "component would refuse it at `record`, so the answer is refused here and "
+                       "nothing is receipted" % (index, event.get("kind"), row["path"],
+                                                 row["message"])})
+    return problems
 
 
 def do_append(client, receipt, name, workspace, doc, events, expect_head, scratch_dir, log):

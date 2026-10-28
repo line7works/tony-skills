@@ -690,6 +690,15 @@ def cmd_record_answer(args):
         failed = ansmod.failing_session_checks(raw)
         if failed:
             adjudication = ansmod.session_check_refusal(adjudication, failed)
+    # E18 fix round 2, Slice A: every event `record` would append is checked against the records
+    # event schema here, so an answer the component would refuse late is refused before anything
+    # is receipted, naming the field and the rule. A report-only run appends nothing.
+    if adjudication["ok"] and not resolved["report_only"]:
+        refused = would_be_refused(args, resolved, state, adjudication)
+        if refused:
+            adjudication = dict(adjudication, ok=False, refusal_reason="answer_invalid",
+                                problems=refused, verdict=None,
+                                verdict_matches_mapping=None)
     state["adjudication"] = adjudication
     state["reviewer"] = reviewer
     state["phase"] = "record" if adjudication["ok"] else "done"
@@ -721,6 +730,30 @@ def cmd_record_answer(args):
           "verdict_matches_mapping": adjudication["verdict_matches_mapping"],
           "clean_review_checks_listed": adjudication["clean_review_checks_listed"]},
          EXIT_OK, args.plugin_root)
+
+
+def would_be_refused(args, resolved, state, adjudication):
+    """The records event schema's refusals of the events `record` would append for this answer:
+    one `finding_raised` per raised finding, then the `card_set`. [] when all would land."""
+    workspace = resolved["workspace"]
+    doc = resolved["target"]["build_doc"]
+    slice_name = resolved["target"]["slice"]
+    run_id = resolved["invocation"]["run_id"]
+    harness = resolved["invocation"].get("harness")
+    at = inputs.at_instant(resolved["invocation"]["run_date"])
+    identity = state.get("source_identity")
+    schema = rw.event_schema(open_records(args),
+                             getattr(args, "plugin_root", None) or PLUGIN)
+    if schema is None:
+        raise Terminal("stopped", "reference unavailable: the records component's "
+                                  "references/event.schema.json", "reference_unavailable")
+    card_before, _ = ledger.card_of(ledger.read_text(workspace, doc) or "", slice_name)
+    events = rw.finding_events(adjudication["raised"], doc, slice_name, at, run_id, harness,
+                               identity, slice_name)
+    events.append(rw.card_event(doc, slice_name, card_before or "none",
+                                vdmod.card_for(adjudication["verdict"]), at, run_id, harness,
+                                identity))
+    return rw.event_schema_problems(events, schema)
 
 
 def provenance_of(workspace, built):
@@ -1204,6 +1237,9 @@ def do_record(run, resolved, state, adjudication, client, args):
                                resultmod.exit_text(row), resultmod.output_head(row)))
     if not adjudication.get("session_checks"):
         method_lines.append("- none were reported")
+    # E18 fix round 2, Slice A: said once, in plain words, when a quoted separator was rewritten.
+    if rw.quotes_separator(adjudication["raised"]):
+        method_lines.extend(["", rw.SEPARATOR_NOTE])
 
     if not receipt.steps():
         breaks = rcptmod.guard_breaks(receipt.doc["guard"], workspace, own_identity(workspace))
