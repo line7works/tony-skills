@@ -547,6 +547,13 @@ def adjudicate(a, source_paths, sessions, withheld_lines=(), provenance=None):
     """What the run records from one reviewer answer. Never edits the answer."""
     source_paths = set(source_paths or ())
     withheld_lines = tuple(withheld_lines or ())
+    # E18 fix round 1: a withheld line the delivered material also carries is words the reviewer
+    # was given, so the line check below never cites it. A line found only in withheld text is
+    # still cited. With no delivered text every withheld line is checked, as before.
+    delivered = _normalize((provenance or {}).get("delivered_text"))
+    if delivered:
+        withheld_lines = tuple(line for line in withheld_lines
+                               if _normalize(line) not in delivered)
     listed = checks_listed(a)
     findings = a.get("findings")
     findings = list(findings) if isinstance(findings, list) else []
