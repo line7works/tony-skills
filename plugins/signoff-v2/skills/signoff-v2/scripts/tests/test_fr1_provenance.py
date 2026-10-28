@@ -7,6 +7,11 @@ as if the words came only from the builder's withheld notes. The cap on each del
 only the provenance check's read of the assembled material is whole. A quotation found only in
 withheld text is still refused, however large the packet.
 
+After the signoff (owner's ruling "fix it"): `answer.py` `citations`, the line check `adjudicate`
+runs beside the quoted-span check, refused a whole withheld line even when the delivered material
+carries it, at any packet size. The end-to-end quotation now keeps its trailing period so it reaches
+that check, and a line the delivered text carries is not refused there either.
+
 The end-to-end cases plant files in the S1-02 seeded case and drive the real `signoff.py`; the
 direct cases call `provenance_of` on a packet description. They were written red first.
 """
@@ -20,6 +25,7 @@ from test_fix2_astra import _Case
 testlib.add_scripts_to_path()
 
 import signoff  # noqa: E402
+from signoff_core import answer as ansmod  # noqa: E402
 from signoff_core import packet as packetmod  # noqa: E402
 
 CAP = packetmod.MAX_DELIVERED_BYTES
@@ -51,8 +57,17 @@ class _Large(_Case):
         return packet, testlib.read_text(packet["material_path"])
 
     def quoting(self, sentence):
+        """The sentence quoted whole, trailing period kept, so the normalized withheld line is a
+        substring of the answer and the answer passes through both independence checks:
+        `citations` (withheld lines) and `provenance_citations` (quoted spans)."""
         answer = self.answer()
-        answer["notes"] = 'The packet closes with "%s" at its very end.' % sentence.rstrip(".")
+        answer["notes"] = 'The packet closes with "%s" at its very end.' % sentence
+        return answer
+
+    def mentioning(self, sentence):
+        """The sentence written whole with no quotation marks, so only `citations` can see it."""
+        answer = self.answer()
+        answer["notes"] = "The packet closes with %s It sits at the very end." % sentence
         return answer
 
     def assert_large_packet(self):
@@ -94,6 +109,112 @@ class AWithheldOnlyQuotationIsStillRefused(_Large):
         result = self.result()
         self.assertEqual(result["refusal_reason"], "independence", json.dumps(result)[:1200])
         self.assertFalse(result["verdict_recorded"])
+
+
+class AWholeDeliveredLineIsNotRefused(_Large):
+    """Requirement 3: the line check (`citations`) never refuses a withheld line that the delivered
+    material also carries, quoted or not."""
+
+    def test_written_unquoted_it_is_recorded(self):
+        self.plant()
+        code, doc, err = self.through_answer(self.mentioning(LATE))
+        self.assertEqual(code, 0, err or json.dumps(doc))
+        self.assert_large_packet()
+
+
+class AWithheldOnlyLineIsStillRefusedUnquoted(_Large):
+    """Requirement 3's other half: a whole withheld-only line, no quotation marks, is refused by
+    the line check alone."""
+
+    def test_independence_refuses_it(self):
+        self.plant()
+        code, doc, err = self.through_answer(self.mentioning(PRIVATE))
+        self.assertEqual(code, 10, err or json.dumps(doc))
+        result = self.result()
+        self.assertEqual(result["refusal_reason"], "independence", json.dumps(result)[:1200])
+        lines = [row.get("line") for row in result.get("problems") or []]
+        self.assertIn(PRIVATE, lines, json.dumps(result)[:1200])
+
+
+class _Small(_Large):
+    """The same notes with a small packet: no file near the cap."""
+
+    def plant(self):
+        self.write(NOTES, "# Builder notes\n\n%s\n%s\n" % (LATE, PRIVATE))
+        self.write("small/late.txt", "The closing line follows.\n%s\n" % LATE)
+
+
+class ASmallPacketDeliveredLineIsNotRefused(_Small):
+    """Requirement 3 at any packet size: the reviewer's recorded scenario was a small packet."""
+
+    def test_quoted_whole_it_is_recorded(self):
+        self.plant()
+        code, doc, err = self.through_answer(self.quoting(LATE))
+        self.assertEqual(code, 0, err or json.dumps(doc))
+
+    def test_written_unquoted_it_is_recorded(self):
+        self.plant()
+        code, doc, err = self.through_answer(self.mentioning(LATE))
+        self.assertEqual(code, 0, err or json.dumps(doc))
+
+
+class ASmallPacketWithheldOnlyLineIsStillRefused(_Small):
+
+    def test_quoted_whole_it_is_refused(self):
+        self.plant()
+        code, doc, err = self.through_answer(self.quoting(PRIVATE))
+        self.assertEqual(code, 10, err or json.dumps(doc))
+        self.assertEqual(self.result()["refusal_reason"], "independence")
+
+    def test_written_unquoted_it_is_refused(self):
+        self.plant()
+        code, doc, err = self.through_answer(self.mentioning(PRIVATE))
+        self.assertEqual(code, 10, err or json.dumps(doc))
+        self.assertEqual(self.result()["refusal_reason"], "independence")
+
+
+class AdjudicateConsultsTheDeliveredText(unittest.TestCase):
+    """Requirement 3 at the function: `adjudicate`'s line check skips a withheld line the delivered
+    text carries, in a finding, in the verdict notes and in the rest of the answer, and still cites
+    a line found only in withheld text."""
+
+    SET = ["src/a.py"]
+    SESSIONS = {"building": "sess-build", "reviewing": "sess-review"}
+
+    def an_answer(self, text):
+        return {"session_id": "sess-review", "verdict": "rejected", "notes": text,
+                "findings": [{"location": "src/a.py:3", "severity": "MAJOR", "claim": text,
+                              "scenario": "run it", "evidence_kind": "read"}],
+                "notes_kept": [{"location": "src/a.py:4", "severity": None, "claim": text,
+                                "scenario": None, "evidence_kind": None}],
+                "checks_executed": [{"name": "unit", "command": "true", "exit_code": 0,
+                                     "output": text}]}
+
+    def adjudicate(self, text, delivered):
+        provenance = {"paths": [], "delivered_paths": [], "anchors": [],
+                      "withheld_text": "\n".join((LATE, PRIVATE)), "delivered_text": delivered}
+        return ansmod.adjudicate(self.an_answer(text), self.SET, self.SESSIONS,
+                                 withheld_lines=(LATE, PRIVATE), provenance=provenance)
+
+    def test_a_delivered_line_is_not_cited(self):
+        got = self.adjudicate("It reads %s" % LATE, "# Packet\n\n%s\n" % LATE)
+        self.assertNotEqual(got["refusal_reason"], "independence", json.dumps(got)[:1200])
+        self.assertEqual(got["citations"], [])
+
+    def test_a_delivered_line_is_matched_ignoring_whitespace_and_case(self):
+        spread = LATE.upper().replace(" ", "\n  ")
+        got = self.adjudicate("It reads %s" % LATE, "# Packet\n\n%s\n" % spread)
+        self.assertEqual(got["citations"], [], json.dumps(got)[:1200])
+
+    def test_a_withheld_only_line_is_still_cited(self):
+        got = self.adjudicate("It reads %s" % PRIVATE, "# Packet\n\n%s\n" % LATE)
+        self.assertEqual(got["refusal_reason"], "independence")
+        self.assertIn(PRIVATE, got["citations"])
+
+    def test_with_no_delivered_text_every_withheld_line_is_cited(self):
+        got = self.adjudicate("It reads %s" % LATE, "")
+        self.assertEqual(got["refusal_reason"], "independence")
+        self.assertIn(LATE, got["citations"])
 
 
 class ProvenanceOfReadsTheWholeMaterial(unittest.TestCase):
