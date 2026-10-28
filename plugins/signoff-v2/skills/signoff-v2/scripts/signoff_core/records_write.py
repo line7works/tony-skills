@@ -39,9 +39,8 @@ import os
 from . import canon, ledger, receipt as rcpt
 from . import native_lines as native
 from . import records_client as rcl
-from . import validate
 from .constants import STATION
-from .record_grammar import CARD_VALUES, SEP
+from .record_grammar import SEP
 
 FINDINGS = "findings"
 CARD = "card"
@@ -240,74 +239,6 @@ def card_event(doc, slice_name, before, after, at, run_id, harness, identity):
         "origin": {"kind": "native"},
         "source": {"known": True, "identity": identity},
     }
-
-
-EVENT_SCHEMA = ("references", "event.schema.json")
-# What `append` assigns and the caller never supplies (interface `append`): a position, the hash
-# of the line before it, and a finding's id. Values of the right shape stand in for them so
-# the rest of the event is checked exactly as the component will check the line it lands.
-STAND_IN_PREV = "0" * 63 + "1"
-STAND_IN_FINDING = "f1:" + "0" * 20
-
-
-def event_schema(client, station_plugin_root=None):
-    """The records component's published event schema (`references/event.schema.json`, a file of
-    its interface, read and never copied). First from the root the client resolved; a root that
-    carries only `scripts/records.py` (a wrapper in front of the component) falls back to the
-    component installed beside this station (the resolver's routes 3a and 3b). None when neither
-    ships one."""
-    roots = [client.root]
-    if station_plugin_root:
-        try:
-            roots.append(rcl.records_root(None, station_plugin_root, environ={}))
-        except LookupError:
-            pass
-    for root in roots:
-        path = os.path.join(root, *EVENT_SCHEMA)
-        if os.path.isfile(path):
-            return canon.read_json(path)
-    return None
-
-
-def event_schema_problems(events, schema):
-    """[{index, kind, field, why}] for every event of `events` the records event schema refuses,
-    as the line would land in the log; [] when every event would be accepted (E18 fix round 2)."""
-    problems = []
-    for index, event in enumerate(events, 1):
-        line = dict(event, seq=index, prev=STAND_IN_PREV)
-        if event.get("kind") in ("finding_raised", "defect_raised"):
-            line.setdefault("finding", STAND_IN_FINDING)
-        for row in validate.schema_errors(line, schema):
-            problems.append({
-                "index": index, "kind": event.get("kind"), "field": row["path"],
-                "why": "event %d (%s) fails the records event schema at %s: %s; the records "
-                       "component would refuse it at `record`, so the answer is refused here and "
-                       "nothing is receipted" % (index, event.get("kind"), row["path"],
-                                                 row["message"])})
-    return problems
-
-
-def card_set_before_problem(problem):
-    """True for a `card_set` refusal at `/before`: the value comes from the ledger doc's `Status:`
-    line, never from the reviewer's answer, so it never refuses the answer (requirement 5)."""
-    return problem.get("kind") == "card_set" and problem.get("field") == "/before"
-
-
-def status_line_stop(stop, doc, slice_name, card_before):
-    """The card append's refusal, naming the doc's `Status:` line when that line held a value
-    outside the six card values (E18 fix round 2, Slice A, requirement 5). The answer was
-    accepted and its findings recorded; only the card move is refused. Any other stop is
-    returned as it is."""
-    if stop.reason_code != "append_refused" or card_before is None \
-            or card_before in CARD_VALUES:
-        return stop
-    reason = ("the card move was refused, and only the card move: the `Status:` line of slice "
-              "%s in %s read %r before this run, which is not one of the six card values (%s), "
-              "so the records component refused the card_set event. The reviewer's answer was "
-              "accepted and its findings were recorded. The component said: %s"
-              % (slice_name, doc, card_before, ", ".join(CARD_VALUES), stop.reason))
-    return Stop(stop.status, stop.reason_code, reason,
-                dict(stop.extra, status_line=card_before))
 
 
 def do_append(client, receipt, name, workspace, doc, events, expect_head, scratch_dir, log):
