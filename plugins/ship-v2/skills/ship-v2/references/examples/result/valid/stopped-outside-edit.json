@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-0001"
   },
-  "plugin_version": "0.1.1",
+  "plugin_version": "0.1.2",
   "reason": "the build doc docs/plans/2026-09-20-widget.md is at neither the bytes this run read nor the bytes its write produces: the doc was edited after this run planned its write. On disk, slice A's line reads `Status: signed off with conditions`. This run's events landed in the records log (seq 7 waived, seq 8 card_set) and are reported as landed; the doc is left as it is, neither written by this run nor reverted",
   "report_only": false,
   "run_dir": "/tmp/ship-v2/run-0001",

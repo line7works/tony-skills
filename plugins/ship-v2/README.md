@@ -7,7 +7,7 @@ are renamed at cutover.
 
 ## Status
 
-Version 0.1.1, interface version 1. Built in E15 slice 2; the join's proofs added in E15 slice 3, slice 3's fix
+Version 0.1.2, interface version 1. Built in E15 slice 2; the join's proofs added in E15 slice 3, slice 3's fix
 round 1 (the E15 lane contract A30: the save step named before every recheck-v2 visit, recheck-v2's other endings read
 as `recheck-stopped`) and fix round 2 (A31: `report` at `fixed` while the verdict mirror is unsaved ends the run
 `recheck-stopped`; a test that every refusal leaves a terminal status reachable; the trace proof matches each replay

@@ -6,7 +6,7 @@
     "mode": "direct",
     "session_id": "session-0001"
   },
-  "plugin_version": "0.1.1",
+  "plugin_version": "0.1.2",
   "reason": "ALL CLEAR: the loop ended by its own rules",
   "report_only": true,
   "run_dir": "/tmp/ship-v2/run-0001",

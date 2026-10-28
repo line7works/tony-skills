@@ -91,7 +91,7 @@
       }
     ]
   },
-  "plugin_version": "0.1.1",
+  "plugin_version": "0.1.2",
   "problems": [
     {
       "why": "the reviewing session's check 'full suite' (`sh checks/unit.sh`) ran with exit 1; a failing session check stops the run whatever the reviewers raised, and nothing is recorded: fix it, then sign off afresh."
