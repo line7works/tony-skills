@@ -694,7 +694,25 @@ def cmd_record_answer(args):
     # event schema here, so an answer the component would refuse late is refused before anything
     # is receipted, naming the field and the rule. A report-only run appends nothing.
     if adjudication["ok"] and not resolved["report_only"]:
-        refused = would_be_refused(args, resolved, state, adjudication)
+        try:
+            refused = would_be_refused(args, resolved, state, adjudication)
+        except SchemaUnavailable as missing:
+            # Requirement 6: the usual stop, with JSON on stdout, a result.json and a chat block
+            # naming the missing schema. The answer is not refused; nothing is receipted.
+            state["reviewer"] = reviewer
+            state["phase"] = "done"
+            run.save_state(state)
+            finish(run, resolved, "stopped", args, stop_reason=str(missing),
+                   stop_reason_code="reference_unavailable", floor=floor_block,
+                   writes_none=True, source_set=source,
+                   source_identity=state.get("source_identity"), packet=built,
+                   review_sheet=sheet_block(state), reviewer=reviewer,
+                   findings=adjudication["raised"], notes=adjudication["notes"],
+                   checks_executed=adjudication["checks_executed"],
+                   session_checks=adjudication.get("session_checks"),
+                   clean_review_checks_listed=adjudication["clean_review_checks_listed"],
+                   verdict_stated=adjudication["verdict_stated"])
+            return
         if refused:
             adjudication = dict(adjudication, ok=False, refusal_reason="answer_invalid",
                                 problems=refused, verdict=None,
@@ -732,9 +750,18 @@ def cmd_record_answer(args):
          EXIT_OK, args.plugin_root)
 
 
+class SchemaUnavailable(Exception):
+    """The records component's event schema cannot be read (E18 fix round 2, requirement 6)."""
+
+
 def would_be_refused(args, resolved, state, adjudication):
     """The records event schema's refusals of the events `record` would append for this answer:
-    one `finding_raised` per raised finding, then the `card_set`. [] when all would land."""
+    one `finding_raised` per raised finding, then the `card_set`. [] when all would land.
+
+    A `card_set` refused at `/before` is left out (requirement 5): that value is the ledger doc's
+    `Status:` line, not the answer, so it never refuses the answer. `record` lands the findings
+    and its card append is refused, naming the line (`rw.status_line_stop`). Raises
+    `SchemaUnavailable` when no event schema can be read."""
     workspace = resolved["workspace"]
     doc = resolved["target"]["build_doc"]
     slice_name = resolved["target"]["slice"]
@@ -745,15 +772,18 @@ def would_be_refused(args, resolved, state, adjudication):
     schema = rw.event_schema(open_records(args),
                              getattr(args, "plugin_root", None) or PLUGIN)
     if schema is None:
-        raise Terminal("stopped", "reference unavailable: the records component's "
-                                  "references/event.schema.json", "reference_unavailable")
+        raise SchemaUnavailable("reference unavailable: the records component's "
+                                "references/event.schema.json could not be read, so the "
+                                "events this answer would append cannot be checked; nothing "
+                                "was receipted")
     card_before, _ = ledger.card_of(ledger.read_text(workspace, doc) or "", slice_name)
     events = rw.finding_events(adjudication["raised"], doc, slice_name, at, run_id, harness,
                                identity, slice_name)
     events.append(rw.card_event(doc, slice_name, card_before or "none",
                                 vdmod.card_for(adjudication["verdict"]), at, run_id, harness,
                                 identity))
-    return rw.event_schema_problems(events, schema)
+    return [problem for problem in rw.event_schema_problems(events, schema)
+            if not rw.card_set_before_problem(problem)]
 
 
 def provenance_of(workspace, built):
@@ -1280,15 +1310,20 @@ def do_record(run, resolved, state, adjudication, client, args):
     if card_step and card_step[0]["state"] == rcptmod.DONE:
         card_events = [rw.card_event(doc, slice_name, card_before or "none", card_after_value,
                                      at, run_id, harness, reviewed)]
-        if receipt.append_block(rw.CARD):
-            _, was_recovered = rw.settle_append(client, receipt, rw.CARD, workspace, doc,
-                                                card_events, run_id, "card_set", scratch)
-            if was_recovered:
-                recovered.append(rw.CARD)
-        else:
-            head_now = rw.head_of(client, workspace, doc)
-            rw.do_append(client, receipt, rw.CARD, workspace, doc, card_events,
-                         head_now["head"], scratch, head_now["log"])
+        # Requirement 5: a refused card append names the doc's `Status:` line when that line
+        # held a value outside the six card values; the findings above have landed.
+        try:
+            if receipt.append_block(rw.CARD):
+                _, was_recovered = rw.settle_append(client, receipt, rw.CARD, workspace, doc,
+                                                    card_events, run_id, "card_set", scratch)
+                if was_recovered:
+                    recovered.append(rw.CARD)
+            else:
+                head_now = rw.head_of(client, workspace, doc)
+                rw.do_append(client, receipt, rw.CARD, workspace, doc, card_events,
+                             head_now["head"], scratch, head_now["log"])
+        except rw.Stop as stop:
+            raise rw.status_line_stop(stop, doc, slice_name, card_before)
     rw.verify_targets(receipt, workspace)     # F6: nothing moved between the writes and here
     # Astra's F2: after the FINAL append, and on every recovery pass that reaches here, the source
     # now minus exactly the receipt's document targets must be the source pinned for review. A

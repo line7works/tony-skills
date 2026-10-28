@@ -41,7 +41,7 @@ from . import native_lines as native
 from . import records_client as rcl
 from . import validate
 from .constants import STATION
-from .record_grammar import SEP
+from .record_grammar import CARD_VALUES, SEP
 
 FINDINGS = "findings"
 CARD = "card"
@@ -178,8 +178,9 @@ def location_object(raw, path, line):
 
 HYPHEN = " - "
 SEPARATOR_NOTE = ("A quoted record separator (a middle dot between two spaces) in a finding's "
-                  "claim or scenario was written as a hyphen in this record, because the records "
-                  "format reserves it; the run's answer.json keeps the reviewer's words as written.")
+                  "claim, scenario or location was written as a hyphen in this record, because "
+                  "the records format reserves it; the run's answer.json keeps the reviewer's "
+                  "words as written.")
 
 
 def unseparated(text):
@@ -195,17 +196,22 @@ def unseparated(text):
     return text
 
 
+# The reviewer's single-line text fields a `finding_raised` carries (requirement 4 adds the
+# location, its trailing tag included).
+SINGLE_LINE_FIELDS = ("claim", "scenario", "location")
+
+
 def quotes_separator(raised):
-    """True when a raised finding's claim or scenario holds the separator."""
+    """True when a raised finding's claim, scenario or location holds the separator."""
     return any(isinstance(row.get(field), str) and SEP in row[field]
-               for row in raised for field in ("claim", "scenario"))
+               for row in raised for field in SINGLE_LINE_FIELDS)
 
 
 def finding_events(raised, doc, slice_name, at, run_id, harness, identity, raised_by):
     """One `finding_raised` per raised finding, in the order the reviewer reported them.
 
-    The claim and scenario carry the separator written as a hyphen (`unseparated`); the
-    adjudication and the run's answer.json keep the reviewer's words."""
+    The claim, scenario and location's raw text carry the separator written as a hyphen
+    (`unseparated`); the adjudication and the run's answer.json keep the reviewer's words."""
     events = []
     for row in raised:
         events.append({
@@ -215,7 +221,7 @@ def finding_events(raised, doc, slice_name, at, run_id, harness, identity, raise
             "ledger_doc": doc,
             "slice": slice_name,
             "severity": row["severity"],
-            "location": location_object(row["location"], row["file"], row["line"]),
+            "location": location_object(unseparated(row["location"]), row["file"], row["line"]),
             "claim": unseparated(row["claim"]),
             "scenario": unseparated(row["scenario"]),
             "raised_by": raised_by,
@@ -279,6 +285,29 @@ def event_schema_problems(events, schema):
                        "nothing is receipted" % (index, event.get("kind"), row["path"],
                                                  row["message"])})
     return problems
+
+
+def card_set_before_problem(problem):
+    """True for a `card_set` refusal at `/before`: the value comes from the ledger doc's `Status:`
+    line, never from the reviewer's answer, so it never refuses the answer (requirement 5)."""
+    return problem.get("kind") == "card_set" and problem.get("field") == "/before"
+
+
+def status_line_stop(stop, doc, slice_name, card_before):
+    """The card append's refusal, naming the doc's `Status:` line when that line held a value
+    outside the six card values (E18 fix round 2, Slice A, requirement 5). The answer was
+    accepted and its findings recorded; only the card move is refused. Any other stop is
+    returned as it is."""
+    if stop.reason_code != "append_refused" or card_before is None \
+            or card_before in CARD_VALUES:
+        return stop
+    reason = ("the card move was refused, and only the card move: the `Status:` line of slice "
+              "%s in %s read %r before this run, which is not one of the six card values (%s), "
+              "so the records component refused the card_set event. The reviewer's answer was "
+              "accepted and its findings were recorded. The component said: %s"
+              % (slice_name, doc, card_before, ", ".join(CARD_VALUES), stop.reason))
+    return Stop(stop.status, stop.reason_code, reason,
+                dict(stop.extra, status_line=card_before))
 
 
 def do_append(client, receipt, name, workspace, doc, events, expect_head, scratch_dir, log):
