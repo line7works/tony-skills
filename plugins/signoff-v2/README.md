@@ -16,7 +16,7 @@ where the findings are kept and which half is mechanical.
 ## Layout
 
 ```
-.claude-plugin/plugin.json       the plugin, at 0.1.2
+.claude-plugin/plugin.json       the plugin, at 0.1.3
 skills/signoff-v2/
   SKILL.md                       the portable procedure: v1's steps, with each script call named
   references/
