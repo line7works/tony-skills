@@ -8,7 +8,8 @@ station's `skill-identity` reports it as `version` and `plugin_version`, and eve
 as SKIPPED with that reason, never as passed.
 
 E18 fix round 1, slice C, raises signoff-v2 and ship-v2 again, from 0.1.1 to 0.1.2, so an update delivers that
-round's fixes; the other six keep the versions slice D gave them.
+round's fixes; the other six keep the versions slice D gave them. E18 fix round 2, slice C, raises the same two
+from 0.1.2 to 0.1.3 for that round's fixes; the other six are unchanged.
 """
 import glob
 import json
@@ -21,8 +22,8 @@ import unittest
 import testlib
 
 NEW = {
-    "signoff-v2": "0.1.2",
-    "ship-v2": "0.1.2",
+    "signoff-v2": "0.1.3",
+    "ship-v2": "0.1.3",
     "vertical-v2": "0.1.1",
     "handoff-v2": "0.1.1",
     "architect-v2": "0.1.2",
