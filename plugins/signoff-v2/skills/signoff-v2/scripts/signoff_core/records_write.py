@@ -40,7 +40,7 @@ from . import canon, ledger, receipt as rcpt
 from . import native_lines as native
 from . import records_client as rcl
 from .constants import STATION
-from .record_grammar import SEP
+from .record_grammar import _single_line
 
 FINDINGS = "findings"
 CARD = "card"
@@ -175,42 +175,37 @@ def location_object(raw, path, line):
             "more": [], "resolved": bool(path and line)}
 
 
-HYPHEN = " - "
-SEPARATOR_NOTE = ("A quoted record separator (a middle dot between two spaces) in a finding's "
-                  "claim, scenario or location was written as a hyphen in this record, because "
-                  "the records format reserves it; the run's answer.json keeps the reviewer's "
-                  "words as written.")
+TIDY_NOTE = ("A quoted record separator (a middle dot between two spaces), a bare middle dot or a "
+             "line break in a finding's claim, scenario or location was tidied in this record: "
+             "each such middle dot was written as a hyphen and each line break as a space, "
+             "because the records format reserves the one and a record field holds one line; "
+             "the run's answer.json keeps the reviewer's words as written.")
 
 
-def unseparated(text):
-    """`text` with every records separator ` · ` written as ` - ` (E18 fix round 2, Slice A).
-
-    The punch list joins a finding's fields with the separator, so the records event schema
-    refuses it inside a native finding's claim and scenario, and a `/fb` line a reviewer quotes
-    always carries it. Replaced until none is left, because ` · · ` leaves one after one pass."""
+def tidy(text):
+    """`text` as the records log may hold it (E18 fix round 2, Slice B): the record grammar's own
+    `_single_line` rule, so a line break becomes a space and the separator and any bare middle dot
+    become hyphens. Text that is not a string is left as it is."""
     if not isinstance(text, str):
         return text
-    while SEP in text:
-        text = text.replace(SEP, HYPHEN)
-    return text
+    return _single_line(text)
 
 
-# The reviewer's single-line text fields a `finding_raised` carries (requirement 4 adds the
-# location, its trailing tag included).
+# The reviewer's single-line text fields a `finding_raised` carries.
 SINGLE_LINE_FIELDS = ("claim", "scenario", "location")
 
 
-def quotes_separator(raised):
-    """True when a raised finding's claim, scenario or location holds the separator."""
-    return any(isinstance(row.get(field), str) and SEP in row[field]
+def tidied_any(raised):
+    """True when tidying changed a raised finding's claim, scenario or location."""
+    return any(isinstance(row.get(field), str) and tidy(row[field]) != row[field]
                for row in raised for field in SINGLE_LINE_FIELDS)
 
 
 def finding_events(raised, doc, slice_name, at, run_id, harness, identity, raised_by):
     """One `finding_raised` per raised finding, in the order the reviewer reported them.
 
-    The claim, scenario and location's raw text carry the separator written as a hyphen
-    (`unseparated`); the adjudication and the run's answer.json keep the reviewer's words."""
+    The claim, scenario and location's raw text are tidied (`tidy`) before they are written; the
+    adjudication and the run's answer.json keep the reviewer's words."""
     events = []
     for row in raised:
         events.append({
@@ -220,9 +215,9 @@ def finding_events(raised, doc, slice_name, at, run_id, harness, identity, raise
             "ledger_doc": doc,
             "slice": slice_name,
             "severity": row["severity"],
-            "location": location_object(unseparated(row["location"]), row["file"], row["line"]),
-            "claim": unseparated(row["claim"]),
-            "scenario": unseparated(row["scenario"]),
+            "location": location_object(tidy(row["location"]), row["file"], row["line"]),
+            "claim": tidy(row["claim"]),
+            "scenario": tidy(row["scenario"]),
             "raised_by": raised_by,
             "actor": {"station": STATION, "run_id": run_id, "harness": harness},
             "origin": {"kind": "native"},
