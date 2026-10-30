@@ -1204,6 +1204,9 @@ def do_record(run, resolved, state, adjudication, client, args):
                                resultmod.exit_text(row), resultmod.output_head(row)))
     if not adjudication.get("session_checks"):
         method_lines.append("- none were reported")
+    # E18 fix round 2, Slices A and B: said once, in plain words, when a saved field was tidied.
+    if rw.tidied_any(adjudication["raised"]):
+        method_lines.extend(["", rw.TIDY_NOTE])
 
     if not receipt.steps():
         breaks = rcptmod.guard_breaks(receipt.doc["guard"], workspace, own_identity(workspace))
