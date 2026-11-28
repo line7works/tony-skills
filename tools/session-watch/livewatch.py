@@ -2,15 +2,16 @@
 """Follow a Claude Code session transcript (.jsonl) and print one sanitized line per finished
 tool call and per turn end, for a Claude Code Monitor.
 
-Usage: livewatch.py <session.jsonl> [--repo PATH] [--subcommands a,b,c] [--once]
+Usage: livewatch.py <session.jsonl> [--repo PATH] [--subcommands a,b,c] [--show-skills] [--once]
 
-Never prints message text, addresses, ids or file contents: only the tool, the repo scripts a
-Bash command names (relative to the repo) with their flags, the shell verbs it uses, seconds,
-result size and an error flag. A Read/Write/Edit path shows relative to the repo; anything
-outside it, or under .claude/, shows only as "outside repo: .<ext> file".
+Never prints message text, addresses, ids, queries or file contents: only the tool, the repo
+scripts a Bash command names (relative to the repo) with their flag names, the shell verbs it
+uses, seconds, result size and an error flag. A Read/Write/Edit path shows relative to the
+repo; anything outside it, or under .claude/, shows only as "outside repo: .<ext> file".
 
 --repo         repo root (default: git root of the current directory, else the directory).
 --subcommands  words allowed to print after a script name (default: none print).
+--show-skills  print a Skill call's name when it is short and plain (default: "skill").
 --once         read to the end of the file and exit instead of following it.
 SKIP=n         env var: suppress the first n tool-call lines (replayed after a restart).
 """
@@ -19,14 +20,19 @@ import datetime as dt
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
 
 SCRIPT_TOKEN = re.compile(r"[\w./~+-]+\.(?:py|sh|js|ts|rb)(?![\w.])")
-FLAG = re.compile(r"(?<!\S)(--[a-z][\w-]*)")
+FLAG_TOKEN = re.compile(r"^--([a-z][a-z0-9-]{0,30})(?:=.*)?$")
+QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
+MAX_FLAGS = 10
 VERBS = ("git", "tee", "cat", "sed", "grep", "date", "python3 -", "jq", "ls", "find", "osascript")
 EXT = re.compile(r"^[A-Za-z0-9]{1,8}$")
+PLAIN = re.compile(r"^[a-z0-9:-]{1,40}$")
+WORD = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 
 
 def default_repo():
@@ -40,16 +46,49 @@ def default_repo():
 
 
 def ts(s):
-    return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    """Aware datetime for an ISO string (naive read as UTC), or None when it is not one."""
+    if not isinstance(s, str):
+        return None
+    try:
+        t = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+
+
+def plain(v, pattern=WORD):
+    return v if isinstance(v, str) and pattern.match(v) else "?"
+
+
+def flags(cmd):
+    """Flag names from the command text before any heredoc, outside quotes, at most MAX_FLAGS."""
+    head = cmd.split("<<", 1)[0]
+    try:
+        shlex.split(head)
+    except ValueError:
+        return []
+    found = []
+    for tok in re.split(r"[\s;|&()]+", QUOTED.sub(" ", head)):
+        if tok == "--":
+            break
+        m = FLAG_TOKEN.match(tok)
+        if m and m.group(1) not in found:
+            found.append(m.group(1))
+            if len(found) == MAX_FLAGS:
+                break
+    return sorted("--" + f for f in found)
 
 
 class Labeler:
-    def __init__(self, repo, subcommands=()):
+    def __init__(self, repo, subcommands=(), show_skills=False):
         self.repo = os.path.realpath(repo)
         self.subcommands = set(subcommands)
+        self.show_skills = show_skills
 
     def inside(self, path):
         """Repo-relative form of path, or None when it is outside the repo or under .claude/."""
+        if not isinstance(path, str) or not path:
+            return None
         p = os.path.expanduser(path)
         if not os.path.isabs(p):
             p = os.path.join(self.repo, p)
@@ -75,57 +114,72 @@ class Labeler:
                 out.append(rel)
         return out
 
-    def outside(self, path):
-        base = os.path.basename(path)
-        ext = base.rsplit(".", 1)[-1] if "." in base else ""
+    @staticmethod
+    def outside(path):
+        base = os.path.basename(path) if isinstance(path, str) else ""
+        ext = os.path.splitext(base)[1][1:]
         return f"outside repo: .{ext} file" if EXT.match(ext) else "outside repo: file"
 
     def label(self, name, inp):
+        if not isinstance(inp, dict):
+            inp = {}
         if name == "Bash":
-            c = inp.get("command", "")
-            flags = sorted(set(FLAG.findall(c)))
+            c = inp.get("command")
+            c = c if isinstance(c, str) else ""
+            head = c.split("<<", 1)[0]
             verbs = [w for w in VERBS if re.search(r"(^|[\s|;&(])" + re.escape(w) + r"(\s|$)", c)]
-            return f"{'; '.join(self.scripts(c)) or '(no repo script)'} {' '.join(flags)} [{','.join(verbs)}]"
+            return f"{'; '.join(self.scripts(head)) or '(no repo script)'} {' '.join(flags(c))} [{','.join(verbs)}]"
         if name in ("Read", "Write", "Edit"):
-            p = inp.get("file_path", "")
-            rel = self.inside(p) if p else None
-            return rel if rel else self.outside(p)
+            p = inp.get("file_path")
+            return self.inside(p) or self.outside(p)
         if name == "Agent":
-            return f"{inp.get('subagent_type', '')} model={inp.get('model', 'default')} effort={inp.get('effort', 'default')}"
+            return (f"{plain(inp.get('subagent_type', ''))} model={plain(inp.get('model', 'default'))} "
+                    f"effort={plain(inp.get('effort', 'default'))}")
         if name == "Skill":
-            return str(inp.get("skill", ""))[:80]
+            s = inp.get("skill")
+            return s if self.show_skills and isinstance(s, str) and PLAIN.match(s) else "skill"
         if name == "ToolSearch":
-            return str(inp.get("query", ""))[:80]
-        return ",".join(sorted(inp.keys()))[:80]
+            q = inp.get("query")
+            if isinstance(q, str) and q.startswith("select:"):
+                return f"select {len([x for x in q[7:].split(',') if x.strip()])} tools"
+            return "keyword search"
+        return ",".join(sorted(k for k in inp if isinstance(k, str) and WORD.match(k)))[:80]
 
 
 def result_size(c):
     if isinstance(c, str):
         return len(c)
-    return sum(len(x.get("text", "")) for x in (c or []) if isinstance(x, dict))
+    if isinstance(c, list):
+        return sum(len(x["text"]) for x in c if isinstance(x, dict) and isinstance(x.get("text"), str))
+    return 0
 
 
-def watch(f, labeler, out=sys.stdout, follow=True, skip=0):
+def watch(f, labeler, out=sys.stdout, follow=True, skip=0, sleep=time.sleep):
     calls, start, n = {}, None, 0
 
     def emit(s):
         print(s, file=out, flush=True)
 
     while True:
+        pos = f.tell()
         line = f.readline()
-        if not line:
+        if not line or not line.endswith("\n"):
             if not follow:
-                return
-            time.sleep(0.5)
+                return  # EOF, or a partial last line: ignore it
+            f.seek(pos)  # re-read the whole line once the writer finishes it
+            sleep(0.5)
             continue
         try:
             d = json.loads(line)
         except ValueError:
             continue
-        if not isinstance(d, dict) or not d.get("timestamp"):
+        if not isinstance(d, dict):
             continue
-        t = ts(d["timestamp"])
-        msg = d.get("message") or {}
+        t = ts(d.get("timestamp"))
+        if t is None:
+            continue
+        msg = d.get("message")
+        msg = msg if isinstance(msg, dict) else {}
         typ = d.get("type")
         content = msg.get("content")
         if typ == "user" and isinstance(content, str) and not d.get("isMeta"):
@@ -135,9 +189,10 @@ def watch(f, labeler, out=sys.stdout, follow=True, skip=0):
             emit(f"{(t - start).total_seconds():6.0f}s USER prompt ({len(content)} chars)")
         elif typ == "assistant":
             start = start or t
-            for b in content or []:
-                if isinstance(b, dict) and b.get("type") == "tool_use":
-                    calls[b.get("id")] = (b.get("name", "?"), labeler.label(b.get("name", ""), b.get("input") or {}), t)
+            for b in content if isinstance(content, list) else []:
+                if isinstance(b, dict) and b.get("type") == "tool_use" and isinstance(b.get("id"), str):
+                    name = plain(b.get("name"))
+                    calls[b["id"]] = (name, labeler.label(name, b.get("input")), t)
             if msg.get("stop_reason") == "end_turn":
                 emit(f"{(t - start).total_seconds():6.0f}s TURN END ({n} tool calls so far)")
         elif typ == "user" and isinstance(content, list):
@@ -158,9 +213,10 @@ def main(argv=None):
     ap.add_argument("transcript")
     ap.add_argument("--repo", default=None)
     ap.add_argument("--subcommands", default="")
+    ap.add_argument("--show-skills", action="store_true")
     ap.add_argument("--once", action="store_true")
     a = ap.parse_args(argv)
-    labeler = Labeler(a.repo or default_repo(), [s for s in a.subcommands.split(",") if s])
+    labeler = Labeler(a.repo or default_repo(), [s for s in a.subcommands.split(",") if s], a.show_skills)
     skip = int(os.environ.get("SKIP", "0") or 0)
     with open(a.transcript, encoding="utf-8", errors="replace") as f:
         watch(f, labeler, follow=not a.once, skip=skip)

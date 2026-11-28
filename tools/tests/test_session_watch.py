@@ -2,6 +2,7 @@
 
 Offline: every test builds its own temporary repo folder and .jsonl, so no real transcript is read.
 """
+import io
 import json
 import os
 import subprocess
@@ -13,6 +14,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LIVE = os.path.join(HERE, "..", "session-watch", "livewatch.py")
 TOOL = os.path.join(HERE, "..", "session-watch", "toolwatch.py")
 SECRET = "privatename"
+
+
+def load_livewatch():
+    sys.path.insert(0, os.path.dirname(LIVE))
+    try:
+        import livewatch
+    finally:
+        sys.path.pop(0)
+    return livewatch
 
 
 def rec(typ, t, content, **extra):
@@ -84,18 +94,117 @@ class SessionWatchTest(unittest.TestCase):
         self.assertFalse(any("#1 " in x for x in skipped), skipped)
         self.assertTrue(any("#2 Read" in x for x in skipped), skipped)
 
+    def labeler(self, **kw):
+        return load_livewatch().Labeler(self.repo, **kw)
+
     def test_livewatch_masks_path_without_extension_and_dot_claude(self):
-        sys.path.insert(0, os.path.dirname(LIVE))
-        try:
-            import livewatch
-        finally:
-            sys.path.pop(0)
-        lab = livewatch.Labeler(self.repo)
+        lab = self.labeler()
         self.assertEqual(lab.label("Read", {"file_path": f"/tmp/{SECRET}/README"}), "outside repo: file")
         self.assertEqual(lab.label("Edit", {"file_path": os.path.join(self.repo, ".claude", "x.json")}),
                          "outside repo: .json file")
         self.assertEqual(lab.label("Write", {"file_path": os.path.join(self.repo, "a", "b.txt")}), "a/b.txt")
         self.assertEqual(lab.label("Bash", {"command": f"bash {SECRET}.sh"}), "(no repo script)  []")
+
+    def test_toolsearch_and_skill_print_no_text(self):
+        lab = self.labeler()
+        self.assertEqual(lab.label("ToolSearch", {"query": f"select:{SECRET},Other"}), "select 2 tools")
+        self.assertEqual(lab.label("ToolSearch", {"query": f"find {SECRET} tools"}), "keyword search")
+        self.assertEqual(lab.label("Skill", {"skill": "sweep"}), "skill")
+        self.assertEqual(lab.label("Skill", {"skill": SECRET + " notes"}), "skill")
+        shown = self.labeler(show_skills=True)
+        self.assertEqual(shown.label("Skill", {"skill": "sun:sunrise"}), "sun:sunrise")
+        self.assertEqual(shown.label("Skill", {"skill": f"{SECRET} with spaces"}), "skill")
+
+    def test_dotfile_outside_repo_has_no_extension(self):
+        lab = self.labeler()
+        self.assertEqual(lab.label("Read", {"file_path": f"/tmp/x/.{SECRET}"}), "outside repo: file")
+        self.assertEqual(lab.label("Read", {"file_path": "/tmp/x/.env"}), "outside repo: file")
+        self.assertEqual(lab.label("Read", {"file_path": None}), "outside repo: file")
+        self.assertEqual(lab.label("Write", {}), "outside repo: file")
+
+    def test_quoted_and_heredoc_flags_do_not_print(self):
+        lab = self.labeler()
+        out = lab.label("Bash", {"command": f"echo '--{SECRET}' \"--{SECRET}2\" --real <<EOF\n--{SECRET}3\nEOF"})
+        self.assertNotIn(SECRET, out)
+        self.assertIn("--real", out)
+        self.assertNotIn(SECRET, lab.label("Bash", {"command": f"git log -- --{SECRET}"}))
+        self.assertEqual(lab.label("Bash", {"command": f"echo 'unclosed --{SECRET}"}), "(no repo script)  []")
+        self.assertNotIn("--Bad", lab.label("Bash", {"command": "x --Bad --caf\u00e9"}))
+
+    def test_flags_capped_at_ten(self):
+        out = self.labeler().label("Bash", {"command": "x " + " ".join(f"--f{i}" for i in range(15))})
+        self.assertEqual(out.count("--"), 10, out)
+
+    def test_paths_escaping_the_repo_are_masked(self):
+        lab = self.labeler()
+        outside_dir = os.path.join(os.path.dirname(self.repo), SECRET)
+        os.makedirs(outside_dir)
+        os.symlink(outside_dir, os.path.join(self.repo, "link"))
+        self.assertEqual(lab.label("Read", {"file_path": os.path.join(self.repo, "..", SECRET, "a.txt")}),
+                         "outside repo: .txt file")
+        self.assertEqual(lab.label("Read", {"file_path": os.path.join(self.repo, "link", "b.md")}),
+                         "outside repo: .md file")
+        self.assertEqual(lab.label("Write", {"file_path": os.path.join(self.repo, ".claude", "settings.json")}),
+                         "outside repo: .json file")
+        self.assertEqual(lab.label("Read", {"file_path": "../" + SECRET + "/c.py"}), "outside repo: .py file")
+
+    def test_split_record_while_following_is_processed_once(self):
+        lw = load_livewatch()
+        path = os.path.join(os.path.dirname(self.jsonl), "growing.jsonl")
+        call = json.dumps(rec("assistant", 1, [{"type": "tool_use", "id": "a", "name": "Read",
+                                                "input": {"file_path": "/tmp/q.md"}}]))
+        result = json.dumps(rec("user", 2, [{"type": "tool_result", "tool_use_id": "a", "content": "xy"}])) + "\n"
+        with open(path, "w") as w:
+            w.write(call + "\n" + result[:20])
+        steps = []
+
+        class Done(Exception):
+            pass
+
+        def fake_sleep(_):
+            steps.append(1)
+            if len(steps) == 1:
+                with open(path, "a") as w:
+                    w.write(result[20:])
+            elif len(steps) > 3:
+                raise Done
+
+        buf = io.StringIO()
+        with open(path) as f, self.assertRaises(Done):
+            lw.watch(f, lw.Labeler(self.repo), out=buf, follow=True, sleep=fake_sleep)
+        lines = buf.getvalue().splitlines()
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("#1 Read outside repo: .md file :: 1.0s, 2 chars", lines[0])
+
+    def test_partial_last_line_with_once(self):
+        with open(self.jsonl, "a") as f:
+            f.write('{"type": "user", "timest')
+        self.assertEqual(len(self.live_lines()), 4)
+
+    def test_malformed_records_do_not_crash(self):
+        bad = [
+            {"type": "assistant", "timestamp": 12345, "message": {"content": []}},
+            {"type": "user", "timestamp": "not a time", "message": {"content": "x"}},
+            {"type": "user", "timestamp": "2026-01-01T00:00:07", "message": {"content": 5}},
+            {"type": "assistant", "timestamp": "2026-01-01T00:00:08Z", "message": "str",},
+            {"type": "assistant", "timestamp": "2026-01-01T00:00:09Z",
+             "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": 3}},
+                                     {"type": "tool_use", "id": "r", "name": "Read", "input": {"file_path": None}},
+                                     {"type": "tool_use", "id": "r", "name": "Read", "input": {"file_path": None}},
+                                     {"type": "text", "text": 7}],
+                         "usage": {"input_tokens": "lots"}}},
+            {"type": "user", "timestamp": "2026-01-01T00:00:10Z",
+             "message": {"content": [{"type": "tool_result", "tool_use_id": "r", "content": 9}]}},
+        ]
+        with open(self.jsonl, "a") as f:
+            for r in bad:
+                f.write(json.dumps(r) + "\n")
+        lines = self.live_lines()
+        self.assertIn("#3 Read outside repo: file", lines[-1])
+        out = self.run_py(TOOL)
+        self.assertRegex(out, r"Read\s+calls\s+2\s+")
+        self.assertIn("'input_tokens': 31", out)
+        self.assertEqual(self.run_py(TOOL, "--since", "2026-01-01T00:00:04").count("USER"), 0)
 
     def test_toolwatch_totals(self):
         out = self.run_py(TOOL)

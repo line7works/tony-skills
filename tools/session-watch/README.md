@@ -22,7 +22,7 @@ never prints message text, addresses, ids or file contents.
 
 ```
 python3 toolwatch.py <session.jsonl> [--repo PATH] [--full] [--since 2026-01-01T09:00:00Z]
-python3 livewatch.py <session.jsonl> [--repo PATH] [--subcommands a,b] [--once]
+python3 livewatch.py <session.jsonl> [--repo PATH] [--subcommands a,b] [--show-skills] [--once]
 ```
 
 `--repo` is the repo the session works in; the default is the git root of the current
@@ -37,8 +37,11 @@ livewatch is stricter than toolwatch:
   `.claude/`, shows only as `outside repo: .<ext> file` (or `outside repo: file` when the
   extension is missing or odd). Folder names can carry private words, so they never print.
 - The word after a script prints only when it is listed in `--subcommands`.
-- Flags print by name only (`--to`, never its value), and the shell verbs it reports come
-  from a fixed list in the script (`VERBS`).
+- Flags print by name only (`--to`, never its value): at most ten, read before any heredoc and
+  outside quotes. The shell verbs it reports come from a fixed list in the
+  script (`VERBS`).
+- A Skill call prints as `skill` (its name only with `--show-skills`, when short and plain),
+  and a ToolSearch call as `select N tools` or `keyword search`, never the query.
 - `--once` reads to the end and exits instead of following.
 - `SKIP=n` suppresses the first n tool-call lines, for a restart that replays the file.
 

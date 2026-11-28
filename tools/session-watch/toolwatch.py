@@ -38,7 +38,14 @@ def default_repo():
 
 
 def ts(s):
-    return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
+    """Aware datetime for an ISO string (naive read as UTC), or None when it is not one."""
+    if not isinstance(s, str):
+        return None
+    try:
+        t = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)
 
 
 def short(v, n=160):
@@ -54,8 +61,8 @@ def result_text(c):
         out = []
         for b in c:
             if isinstance(b, dict):
-                if b.get("type") == "text":
-                    out.append(b.get("text", ""))
+                if b.get("type") == "text" and isinstance(b.get("text"), str):
+                    out.append(b["text"])
                 elif b.get("type") == "image":
                     out.append("[image]")
         return "\n".join(out)
@@ -94,22 +101,34 @@ def summarize(path, repo, full=False, since=None, out=None):
             if not isinstance(d, dict):
                 continue
             t = ts(d.get("timestamp"))
+            if t is None and "timestamp" in d:
+                continue  # present but not a valid time
             if since and t and t < since:
                 continue
             typ = d.get("type")
-            msg = d.get("message") or {}
+            msg = d.get("message")
+            msg = msg if isinstance(msg, dict) else {}
             if typ == "assistant":
-                u = msg.get("usage") or {}
+                u = msg.get("usage")
+                u = u if isinstance(u, dict) else {}
                 for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
-                    usage[k] += u.get(k, 0) or 0
-                for b in msg.get("content") or []:
+                    v = u.get(k)
+                    usage[k] += v if isinstance(v, int) else 0
+                content = msg.get("content")
+                for b in content if isinstance(content, list) else []:
                     if not isinstance(b, dict):
                         continue
                     if b.get("type") == "tool_use":
-                        calls[b["id"]] = {"name": b.get("name", "?"), "input": b.get("input") or {}, "t": t}
-                        order.append(b["id"])
-                        events.append(("call", t, b["id"]))
-                    elif b.get("type") == "text" and b.get("text", "").strip():
+                        cid = b.get("id")
+                        if not isinstance(cid, str) or cid in calls:
+                            continue  # no id, or a repeat of one already counted
+                        inp = b.get("input")
+                        name = b.get("name")
+                        calls[cid] = {"name": name if isinstance(name, str) else "?",
+                                      "input": inp if isinstance(inp, dict) else {}, "t": t}
+                        order.append(cid)
+                        events.append(("call", t, cid))
+                    elif b.get("type") == "text" and isinstance(b.get("text"), str) and b["text"].strip():
                         events.append(("say", t, b["text"]))
             elif typ == "user":
                 c = msg.get("content")
@@ -122,10 +141,10 @@ def summarize(path, repo, full=False, since=None, out=None):
                             continue
                         if b.get("type") == "tool_result":
                             cid = b.get("tool_use_id")
-                            if cid in calls:
+                            if isinstance(cid, str) and cid in calls:
                                 calls[cid].update(rt=t, err=bool(b.get("is_error")), out=result_text(b.get("content")))
-                        elif b.get("type") == "text" and not d.get("isMeta"):
-                            events.append(("user", t, b.get("text", "")))
+                        elif b.get("type") == "text" and isinstance(b.get("text"), str) and not d.get("isMeta"):
+                            events.append(("user", t, b["text"]))
     start = next((t for _, t, _ in events if t), None)
     for kind, t, x in events:
         rel = f"{(t - start).total_seconds() / 60:6.1f}m" if t and start else "     ?"
@@ -137,9 +156,9 @@ def summarize(path, repo, full=False, since=None, out=None):
             c = calls[x]
             inp = c["input"]
             if c["name"] == "Bash":
-                desc = inp.get("command", "")
+                desc = inp.get("command") if isinstance(inp.get("command"), str) else ""
             elif c["name"] in ("Read", "Write", "Edit"):
-                desc = inp.get("file_path", "")
+                desc = inp.get("file_path") if isinstance(inp.get("file_path"), str) else ""
             elif c["name"] == "Agent":
                 desc = f"[{inp.get('subagent_type', '')}/{inp.get('model', '')}] {inp.get('description', '')}"
             else:
@@ -163,7 +182,8 @@ def summarize(path, repo, full=False, since=None, out=None):
     rt = collections.Counter()
     for i in order:
         if calls[i]["name"] == "Bash":
-            for key in repo_scripts(calls[i]["input"].get("command", ""), repo):
+            cmd = calls[i]["input"].get("command")
+            for key in repo_scripts(cmd if isinstance(cmd, str) else "", repo):
                 rt[key] += 1
     for (p, sub), k in rt.most_common():
         emit(f"  {k:3}  {p} {sub}".rstrip())
@@ -185,8 +205,8 @@ def main(argv=None):
     ap.add_argument("--since", default=None)
     a = ap.parse_args(argv)
     since = ts(a.since)
-    if since and since.tzinfo is None:
-        since = since.replace(tzinfo=datetime.timezone.utc)
+    if a.since and since is None:
+        ap.error("--since needs an ISO time, such as 2026-01-01T09:00:00Z")
     summarize(a.transcript, a.repo or default_repo(), full=a.full, since=since)
 
 
