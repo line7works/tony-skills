@@ -30,6 +30,11 @@ README should say plainly that it is a spec and where the real code lives.
   `/arcade` skill and the terminal command share one copy; the ledger deliberately stayed
   behind as the single consolidated list. See `plugins/arcade/assets/README.md`.
 
+- `session-watch/` — two stdlib Python scripts that read a Claude Code session transcript:
+  `toolwatch.py` summarizes one after the fact (local use only: its output can hold private
+  data), and `livewatch.py` follows a live one and prints one sanitized line per tool call,
+  for a Monitor. Tests in `tests/test_session_watch.py`.
+
 - `mcp-obsidian-worker/` — implementation spec for the Cloudflare Worker serving the
   `Obsidian Vault` MCP server on claude.ai web. Spec only; the Worker source is not here
   and may not exist on disk anywhere.

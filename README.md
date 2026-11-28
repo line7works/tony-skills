@@ -92,6 +92,9 @@ Code:
 - **`antigravity-mcp/`** — an MCP server wrapping Google Antigravity's `agy`
   CLI so Claude Code can consult Gemini (real, installable), with documented
   workarounds for verified `agy` behaviors.
+- **`session-watch/`** — two stdlib scripts that read a Claude Code session
+  transcript: an after-the-fact summary (local use only) and a sanitized live
+  feed of tool calls for a Monitor.
 - **`mcp-obsidian-worker/`** — implementation spec for a Cloudflare Worker
   exposing an Obsidian vault over MCP (spec only; the source lives elsewhere).
 - **`arcade-publish/`** — the findings ledger from the arcade CLI's build; the
