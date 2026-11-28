@@ -131,6 +131,32 @@ class SessionWatchTest(unittest.TestCase):
         self.assertEqual(lab.label("Bash", {"command": f"echo 'unclosed --{SECRET}"}), "(no repo script)  []")
         self.assertNotIn("--Bad", lab.label("Bash", {"command": "x --Bad --caf\u00e9"}))
 
+    def test_flags_only_from_whole_unquoted_words(self):
+        fl = load_livewatch().flags
+        self.assertEqual(fl('echo \\" "foo --secret bar"'), [])
+        self.assertEqual(fl("echo \\' 'foo --secret bar'"), [])
+        self.assertEqual(fl("ls # --secret"), [])
+        self.assertEqual(fl('echo "--quoted"'), [])
+        self.assertEqual(fl("echo --q'x' \\--esc"), [])
+        self.assertEqual(fl("git log --oneline -- path"), ["--oneline"])
+        self.assertEqual(fl('cmd --a "x y" --b'), ["--a", "--b"])
+        self.assertEqual(fl("a # --secret\nb --c"), ["--c"])
+
+    def test_unhashable_tool_use_ids_do_not_crash(self):
+        bad = [
+            {"type": "assistant", "timestamp": "2026-01-01T00:00:07Z",
+             "message": {"content": [{"type": "tool_use", "id": ["x"], "name": "Read", "input": {}},
+                                     {"type": "tool_use", "id": {"k": 1}, "name": "Read", "input": {}}]}},
+            {"type": "user", "timestamp": "2026-01-01T00:00:08Z",
+             "message": {"content": [{"type": "tool_result", "tool_use_id": ["x"], "content": "a"},
+                                     {"type": "tool_result", "tool_use_id": {"k": 1}, "content": "b"}, "junk"]}},
+        ]
+        with open(self.jsonl, "a") as f:
+            for r in bad:
+                f.write(json.dumps(r) + "\n")
+        self.assertEqual(len(self.live_lines()), 4)
+        self.assertRegex(self.run_py(TOOL), r"Read\s+calls\s+1\s+")
+
     def test_flags_capped_at_ten(self):
         out = self.labeler().label("Bash", {"command": "x " + " ".join(f"--f{i}" for i in range(15))})
         self.assertEqual(out.count("--"), 10, out)

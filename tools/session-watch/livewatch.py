@@ -20,14 +20,12 @@ import datetime as dt
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 import time
 
 SCRIPT_TOKEN = re.compile(r"[\w./~+-]+\.(?:py|sh|js|ts|rb)(?![\w.])")
 FLAG_TOKEN = re.compile(r"^--([a-z][a-z0-9-]{0,30})(?:=.*)?$")
-QUOTED = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"")
 MAX_FLAGS = 10
 VERBS = ("git", "tee", "cat", "sed", "grep", "date", "python3 -", "jq", "ls", "find", "osascript")
 EXT = re.compile(r"^[A-Za-z0-9]{1,8}$")
@@ -60,18 +58,70 @@ def plain(v, pattern=WORD):
     return v if isinstance(v, str) and pattern.match(v) else "?"
 
 
+def plain_words(text):
+    """Shell words of text as (word, untouched) pairs; untouched is False for a word with any
+    quote or backslash in it. Comments are dropped. None when a quote is left open."""
+    words, cur, touched, quote, i = [], "", False, None, 0
+    started = False
+
+    def end():
+        nonlocal cur, touched, started
+        if started:
+            words.append((cur, not touched))
+        cur, touched, started = "", False, False
+
+    while i < len(text):
+        ch = text[i]
+        if quote == "'":
+            if ch == "'":
+                quote = None
+            else:
+                cur += ch
+        elif quote == '"':
+            if ch == "\\" and i + 1 < len(text):
+                i += 1
+                cur += text[i]
+            elif ch == '"':
+                quote = None
+            else:
+                cur += ch
+        elif ch == "\\":
+            started = touched = True
+            if i + 1 < len(text):
+                i += 1
+                cur += text[i]
+        elif ch in "'\"":
+            started = touched = True
+            quote = ch
+        elif ch == "#" and not started:
+            nl = text.find("\n", i)
+            if nl < 0:
+                break
+            i = nl
+            continue
+        elif ch.isspace() or ch in ";|&()":
+            end()
+        else:
+            started = True
+            cur += ch
+        i += 1
+    if quote:
+        return None
+    end()
+    return words
+
+
 def flags(cmd):
-    """Flag names from the command text before any heredoc, outside quotes, at most MAX_FLAGS."""
-    head = cmd.split("<<", 1)[0]
-    try:
-        shlex.split(head)
-    except ValueError:
+    """Flag names that are whole unquoted words of the command before any heredoc, outside
+    comments, stopping at a bare "--", at most MAX_FLAGS."""
+    words = plain_words(cmd.split("<<", 1)[0])
+    if words is None:
         return []
     found = []
-    for tok in re.split(r"[\s;|&()]+", QUOTED.sub(" ", head)):
-        if tok == "--":
+    for tok, untouched in words:
+        if tok == "--" and untouched:
             break
-        m = FLAG_TOKEN.match(tok)
+        m = FLAG_TOKEN.match(tok) if untouched else None
         if m and m.group(1) not in found:
             found.append(m.group(1))
             if len(found) == MAX_FLAGS:
@@ -198,8 +248,11 @@ def watch(f, labeler, out=sys.stdout, follow=True, skip=0, sleep=time.sleep):
         elif typ == "user" and isinstance(content, list):
             start = start or t
             for b in content:
-                if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in calls:
-                    name, lab, t0 = calls.pop(b["tool_use_id"])
+                if not isinstance(b, dict) or b.get("type") != "tool_result":
+                    continue
+                cid = b.get("tool_use_id")
+                if isinstance(cid, str) and cid in calls:
+                    name, lab, t0 = calls.pop(cid)
                     n += 1
                     if n <= skip:
                         continue

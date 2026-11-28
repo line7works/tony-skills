@@ -37,8 +37,8 @@ livewatch is stricter than toolwatch:
   `.claude/`, shows only as `outside repo: .<ext> file` (or `outside repo: file` when the
   extension is missing or odd). Folder names can carry private words, so they never print.
 - The word after a script prints only when it is listed in `--subcommands`.
-- Flags print by name only (`--to`, never its value): at most ten, read before any heredoc and
-  outside quotes. The shell verbs it reports come from a fixed list in the
+- Flags print by name only (`--to`, never its value): at most ten, whole unquoted words before any heredoc,
+  never from a comment. The shell verbs it reports come from a fixed list in the
   script (`VERBS`).
 - A Skill call prints as `skill` (its name only with `--show-skills`, when short and plain),
   and a ToolSearch call as `select N tools` or `keyword search`, never the query.
