@@ -76,7 +76,7 @@ class SessionWatchTest(unittest.TestCase):
         lines = self.live_lines()
         self.assertEqual(len(lines), 4, lines)
         self.assertRegex(lines[0], r"^\s+0s USER prompt \(\d+ chars\)$")
-        self.assertIn("#1 Bash scripts/build.py --to [grep] :: 2.0s, 8 chars", lines[1])
+        self.assertIn("#1 Bash scripts/build.py [grep] :: 2.0s, 8 chars", lines[1])
         self.assertNotIn("ERROR", lines[1])
         self.assertIn("#2 Read outside repo: .md file :: 1.0s,", lines[2])
         self.assertTrue(lines[2].endswith(" ERROR"), lines[2])
@@ -88,8 +88,8 @@ class SessionWatchTest(unittest.TestCase):
             self.assertNotIn(leak, out)
 
     def test_livewatch_subcommands_and_skip(self):
-        lines = self.live_lines("--subcommands", "all")
-        self.assertIn("scripts/build.py all --to", lines[1])
+        lines = self.live_lines("--subcommands", "all", "--flags", "to")
+        self.assertIn("scripts/build.py all --to [grep]", lines[1])
         skipped = self.live_lines(env={"SKIP": "1"})
         self.assertFalse(any("#1 " in x for x in skipped), skipped)
         self.assertTrue(any("#2 Read" in x for x in skipped), skipped)
@@ -103,7 +103,7 @@ class SessionWatchTest(unittest.TestCase):
         self.assertEqual(lab.label("Edit", {"file_path": os.path.join(self.repo, ".claude", "x.json")}),
                          "outside repo: .json file")
         self.assertEqual(lab.label("Write", {"file_path": os.path.join(self.repo, "a", "b.txt")}), "a/b.txt")
-        self.assertEqual(lab.label("Bash", {"command": f"bash {SECRET}.sh"}), "(no repo script)  []")
+        self.assertEqual(lab.label("Bash", {"command": f"bash {SECRET}.sh"}), "(no repo script) []")
 
     def test_toolsearch_and_skill_print_no_text(self):
         lab = self.labeler()
@@ -122,25 +122,42 @@ class SessionWatchTest(unittest.TestCase):
         self.assertEqual(lab.label("Read", {"file_path": None}), "outside repo: file")
         self.assertEqual(lab.label("Write", {}), "outside repo: file")
 
-    def test_quoted_and_heredoc_flags_do_not_print(self):
-        lab = self.labeler()
-        out = lab.label("Bash", {"command": f"echo '--{SECRET}' \"--{SECRET}2\" --real <<EOF\n--{SECRET}3\nEOF"})
-        self.assertNotIn(SECRET, out)
-        self.assertIn("--real", out)
-        self.assertNotIn(SECRET, lab.label("Bash", {"command": f"git log -- --{SECRET}"}))
-        self.assertEqual(lab.label("Bash", {"command": f"echo 'unclosed --{SECRET}"}), "(no repo script)  []")
-        self.assertNotIn("--Bad", lab.label("Bash", {"command": "x --Bad --caf\u00e9"}))
+    LEAKS = (
+        f"echo '--{SECRET}' \"--{SECRET}\" <<EOF\n--{SECRET}\nEOF",
+        f"git log -- --{SECRET}",
+        f"echo 'unclosed --{SECRET}",
+        f'echo \\" "foo --{SECRET} bar"',
+        f"echo \\' 'foo --{SECRET} bar'",
+        f"ls # --{SECRET}",
+        f'echo "$(echo "foo --{SECRET} bar")"',
+        f"echo $'a\\' --{SECRET} b' \\'",
+        f'echo `echo \\"foo --{SECRET} bar\\"`',
+        f"echo a\u00a0--{SECRET}\u00a0b",
+        "x --Bad --caf\u00e9 " + " ".join(f"--f{i}" for i in range(15)),
+    )
 
-    def test_flags_only_from_whole_unquoted_words(self):
-        fl = load_livewatch().flags
-        self.assertEqual(fl('echo \\" "foo --secret bar"'), [])
-        self.assertEqual(fl("echo \\' 'foo --secret bar'"), [])
-        self.assertEqual(fl("ls # --secret"), [])
-        self.assertEqual(fl('echo "--quoted"'), [])
-        self.assertEqual(fl("echo --q'x' \\--esc"), [])
-        self.assertEqual(fl("git log --oneline -- path"), ["--oneline"])
-        self.assertEqual(fl('cmd --a "x y" --b'), ["--a", "--b"])
-        self.assertEqual(fl("a # --secret\nb --c"), ["--c"])
+    def test_no_flags_print_without_an_allowlist(self):
+        lab = self.labeler()
+        for cmd in self.LEAKS:
+            self.assertNotIn("--", lab.label("Bash", {"command": cmd}), cmd)
+
+    def test_allowlisted_flags_print_as_whole_words(self):
+        lab = self.labeler(flags=["all", "full", "evidence"])
+        self.assertIn(" --all --evidence [", lab.label("Bash", {"command": 'uv run x.py --all --out "$S" --evidence'}))
+        self.assertNotIn("--", lab.label("Bash", {"command": 'echo "--secret"'}))
+        self.assertNotIn("--", lab.label("Bash", {"command": "x --fuller"}))
+        self.assertIn(" --full [", lab.label("Bash", {"command": "x --full=x"}))
+        self.assertNotIn("--", lab.label("Bash", {"command": "cat <<EOF\n--all\nEOF"}))
+        for cmd in self.LEAKS:
+            self.assertNotIn(SECRET, lab.label("Bash", {"command": cmd}), cmd)
+
+    def test_bad_flags_name_is_a_usage_error(self):
+        for bad in ("--all", "Caps", "a b", "x" * 40):
+            p = subprocess.run([sys.executable, LIVE, self.jsonl, "--once", "--flags=" + bad],
+                               capture_output=True, text=True, timeout=30)
+            self.assertEqual(p.returncode, 2, bad)
+            self.assertEqual(p.stdout, "")
+            self.assertIn("--flags names", p.stderr)
 
     def test_unhashable_tool_use_ids_do_not_crash(self):
         bad = [
@@ -156,10 +173,6 @@ class SessionWatchTest(unittest.TestCase):
                 f.write(json.dumps(r) + "\n")
         self.assertEqual(len(self.live_lines()), 4)
         self.assertRegex(self.run_py(TOOL), r"Read\s+calls\s+1\s+")
-
-    def test_flags_capped_at_ten(self):
-        out = self.labeler().label("Bash", {"command": "x " + " ".join(f"--f{i}" for i in range(15))})
-        self.assertEqual(out.count("--"), 10, out)
 
     def test_paths_escaping_the_repo_are_masked(self):
         lab = self.labeler()

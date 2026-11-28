@@ -15,14 +15,15 @@ never prints message text, addresses, ids or file contents.
   size, error flag), then totals per tool, the repo scripts run via Bash, identical calls
   repeated, and token totals.
 - `livewatch.py`: follows a live transcript and prints one sanitized line per finished tool
-  call (tool, repo scripts and flags, shell verbs, seconds, result size, `ERROR`) and one
+  call (tool, repo scripts, allowlisted flags, shell verbs, seconds, result size, `ERROR`) and one
   per turn end. Built to feed a Claude Code Monitor.
 
 ## Usage
 
 ```
 python3 toolwatch.py <session.jsonl> [--repo PATH] [--full] [--since 2026-01-01T09:00:00Z]
-python3 livewatch.py <session.jsonl> [--repo PATH] [--subcommands a,b] [--show-skills] [--once]
+python3 livewatch.py <session.jsonl> [--repo PATH] [--subcommands a,b] [--flags a,b]
+                   [--show-skills] [--once]
 ```
 
 `--repo` is the repo the session works in; the default is the git root of the current
@@ -37,15 +38,18 @@ livewatch is stricter than toolwatch:
   `.claude/`, shows only as `outside repo: .<ext> file` (or `outside repo: file` when the
   extension is missing or odd). Folder names can carry private words, so they never print.
 - The word after a script prints only when it is listed in `--subcommands`.
-- Flags print by name only (`--to`, never its value): at most ten, whole unquoted words before any heredoc,
-  never from a comment. The shell verbs it reports come from a fixed list in the
-  script (`VERBS`).
+- A flag prints only when its name is listed in `--flags` (names without the leading
+  `--`), the same model as `--subcommands`, and only by name (`--out`, never its value).
+  It prints when it appears as a whole word before any heredoc, quoted or not: an
+  allowlisted word reveals nothing private, and there is no shell parser to get wrong.
+  Shell quoting has too many forms for a parser to keep quoted text from leaking.
+- The shell verbs it reports come from a fixed list in the script (`VERBS`).
 - A Skill call prints as `skill` (its name only with `--show-skills`, when short and plain),
   and a ToolSearch call as `select N tools` or `keyword search`, never the query.
 - `--once` reads to the end and exits instead of following.
 - `SKIP=n` suppresses the first n tool-call lines, for a restart that replays the file.
 
-Sample lines:
+Sample lines (with `--flags dry-run`):
 
 ```
      0s USER prompt (212 chars)

@@ -2,15 +2,17 @@
 """Follow a Claude Code session transcript (.jsonl) and print one sanitized line per finished
 tool call and per turn end, for a Claude Code Monitor.
 
-Usage: livewatch.py <session.jsonl> [--repo PATH] [--subcommands a,b,c] [--show-skills] [--once]
+Usage: livewatch.py <session.jsonl> [--repo PATH] [--subcommands a,b,c] [--flags a,b,c]
+                    [--show-skills] [--once]
 
 Never prints message text, addresses, ids, queries or file contents: only the tool, the repo
-scripts a Bash command names (relative to the repo) with their flag names, the shell verbs it
+scripts a Bash command names (relative to the repo), allowlisted flag names, the shell verbs it
 uses, seconds, result size and an error flag. A Read/Write/Edit path shows relative to the
 repo; anything outside it, or under .claude/, shows only as "outside repo: .<ext> file".
 
 --repo         repo root (default: git root of the current directory, else the directory).
 --subcommands  words allowed to print after a script name (default: none print).
+--flags        flag names, without the leading --, allowed to print (default: none print).
 --show-skills  print a Skill call's name when it is short and plain (default: "skill").
 --once         read to the end of the file and exit instead of following it.
 SKIP=n         env var: suppress the first n tool-call lines (replayed after a restart).
@@ -25,8 +27,7 @@ import sys
 import time
 
 SCRIPT_TOKEN = re.compile(r"[\w./~+-]+\.(?:py|sh|js|ts|rb)(?![\w.])")
-FLAG_TOKEN = re.compile(r"^--([a-z][a-z0-9-]{0,30})(?:=.*)?$")
-MAX_FLAGS = 10
+FLAG_NAME = re.compile(r"^[a-z][a-z0-9-]{0,30}$")
 VERBS = ("git", "tee", "cat", "sed", "grep", "date", "python3 -", "jq", "ls", "find", "osascript")
 EXT = re.compile(r"^[A-Za-z0-9]{1,8}$")
 PLAIN = re.compile(r"^[a-z0-9:-]{1,40}$")
@@ -58,81 +59,19 @@ def plain(v, pattern=WORD):
     return v if isinstance(v, str) and pattern.match(v) else "?"
 
 
-def plain_words(text):
-    """Shell words of text as (word, untouched) pairs; untouched is False for a word with any
-    quote or backslash in it. Comments are dropped. None when a quote is left open."""
-    words, cur, touched, quote, i = [], "", False, None, 0
-    started = False
-
-    def end():
-        nonlocal cur, touched, started
-        if started:
-            words.append((cur, not touched))
-        cur, touched, started = "", False, False
-
-    while i < len(text):
-        ch = text[i]
-        if quote == "'":
-            if ch == "'":
-                quote = None
-            else:
-                cur += ch
-        elif quote == '"':
-            if ch == "\\" and i + 1 < len(text):
-                i += 1
-                cur += text[i]
-            elif ch == '"':
-                quote = None
-            else:
-                cur += ch
-        elif ch == "\\":
-            started = touched = True
-            if i + 1 < len(text):
-                i += 1
-                cur += text[i]
-        elif ch in "'\"":
-            started = touched = True
-            quote = ch
-        elif ch == "#" and not started:
-            nl = text.find("\n", i)
-            if nl < 0:
-                break
-            i = nl
-            continue
-        elif ch.isspace() or ch in ";|&()":
-            end()
-        else:
-            started = True
-            cur += ch
-        i += 1
-    if quote:
-        return None
-    end()
-    return words
-
-
-def flags(cmd):
-    """Flag names that are whole unquoted words of the command before any heredoc, outside
-    comments, stopping at a bare "--", at most MAX_FLAGS."""
-    words = plain_words(cmd.split("<<", 1)[0])
-    if words is None:
-        return []
-    found = []
-    for tok, untouched in words:
-        if tok == "--" and untouched:
-            break
-        m = FLAG_TOKEN.match(tok) if untouched else None
-        if m and m.group(1) not in found:
-            found.append(m.group(1))
-            if len(found) == MAX_FLAGS:
-                break
-    return sorted("--" + f for f in found)
+def flags(cmd, allowed):
+    """--name for each allowed name that is a whole word of the command before any heredoc.
+    Allowlist only: no shell parser to get wrong, and an allowed word reveals nothing private."""
+    head = cmd.split("<<", 1)[0]
+    return sorted("--" + n for n in set(allowed)
+                  if re.search(r"(?:^|[ \t\n\r\f\v;|&(])--" + re.escape(n) + r"(?=$|[ \t\n\r\f\v=;|&)])", head))
 
 
 class Labeler:
-    def __init__(self, repo, subcommands=(), show_skills=False):
+    def __init__(self, repo, subcommands=(), show_skills=False, flags=()):
         self.repo = os.path.realpath(repo)
         self.subcommands = set(subcommands)
+        self.flags = tuple(flags)
         self.show_skills = show_skills
 
     def inside(self, path):
@@ -178,7 +117,8 @@ class Labeler:
             c = c if isinstance(c, str) else ""
             head = c.split("<<", 1)[0]
             verbs = [w for w in VERBS if re.search(r"(^|[\s|;&(])" + re.escape(w) + r"(\s|$)", c)]
-            return f"{'; '.join(self.scripts(head)) or '(no repo script)'} {' '.join(flags(c))} [{','.join(verbs)}]"
+            shown = ["; ".join(self.scripts(head)) or "(no repo script)"] + flags(c, self.flags)
+            return f"{' '.join(shown)} [{','.join(verbs)}]"
         if name in ("Read", "Write", "Edit"):
             p = inp.get("file_path")
             return self.inside(p) or self.outside(p)
@@ -266,10 +206,15 @@ def main(argv=None):
     ap.add_argument("transcript")
     ap.add_argument("--repo", default=None)
     ap.add_argument("--subcommands", default="")
+    ap.add_argument("--flags", default="")
     ap.add_argument("--show-skills", action="store_true")
     ap.add_argument("--once", action="store_true")
     a = ap.parse_args(argv)
-    labeler = Labeler(a.repo or default_repo(), [s for s in a.subcommands.split(",") if s], a.show_skills)
+    allowed = [x for x in a.flags.split(",") if x]
+    bad = [x for x in allowed if not FLAG_NAME.match(x)]
+    if bad:
+        ap.error(f"--flags names must match [a-z][a-z0-9-]{{0,30}} (no leading --): {len(bad)} do not")
+    labeler = Labeler(a.repo or default_repo(), [s for s in a.subcommands.split(",") if s], a.show_skills, allowed)
     skip = int(os.environ.get("SKIP", "0") or 0)
     with open(a.transcript, encoding="utf-8", errors="replace") as f:
         watch(f, labeler, follow=not a.once, skip=skip)
